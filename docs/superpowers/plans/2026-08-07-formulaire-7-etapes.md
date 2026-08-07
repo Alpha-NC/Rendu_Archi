@@ -1702,6 +1702,9 @@ describe('construirePayloadGenerate', () => {
     expect(payload.environnement.eclairages).toBeNull()
   })
 
+  // Deux motifs complementaires : avec quatre booleens, un seul motif laisse
+  // toujours une paire de cles indiscernable, donc une inversion de mapping
+  // passerait inapercue.
   it('transporte les eclairages en fin de journee', () => {
     const etat: EtatFormulaire = {
       ...base,
@@ -1709,15 +1712,35 @@ describe('construirePayloadGenerate', () => {
       eclairages: {
         margelles: true,
         sousMarin: false,
-        appliquesFacade: true,
-        interieurVisible: false,
+        appliquesFacade: false,
+        interieurVisible: true,
       },
     }
     const payload = construirePayloadGenerate(etat)
     expect(payload.environnement.eclairages).toEqual({
       margelles: true,
       sous_marin: false,
-      appliques_facade: true,
+      appliques_facade: false,
+      interieur_visible: true,
+    })
+  })
+
+  it('transporte les eclairages au crepuscule sans confondre deux cles', () => {
+    const etat: EtatFormulaire = {
+      ...base,
+      ciel: 'crepuscule',
+      eclairages: {
+        margelles: true,
+        sousMarin: true,
+        appliquesFacade: false,
+        interieurVisible: false,
+      },
+    }
+    const payload = construirePayloadGenerate(etat)
+    expect(payload.environnement.eclairages).toEqual({
+      margelles: true,
+      sous_marin: true,
+      appliques_facade: false,
       interieur_visible: false,
     })
   })
@@ -1827,7 +1850,7 @@ export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- payload`
-Expected: PASS, 7 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -2144,7 +2167,7 @@ Expected: PASS, 4 tests.
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 78 tests.
+Expected: PASS, 79 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -4063,7 +4086,7 @@ git commit -m "docs: contrat du webhook n8n et exemple d environnement"
 - [ ] **Step 1: Lancer toute la suite de tests**
 
 Run: `npm test`
-Expected: PASS, 78 tests, aucun échec.
+Expected: PASS, 79 tests, aucun échec.
 
 - [ ] **Step 2: Vérifier le lint et les types**
 
