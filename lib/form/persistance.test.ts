@@ -52,12 +52,40 @@ describe('persistance', () => {
     expect(await chargerEtat()).toBeNull()
   })
 
-  it('restitue un etat sans image', async () => {
+  it('restitue un etat sans image en ramenant l etape a 2', async () => {
     const sansImage: EtatFormulaire = {
       ...etat,
       images: { cadrage: null, complementaire: null, site: null },
     }
     await sauvegarderEtat(sansImage)
-    expect(await chargerEtat()).toEqual(sansImage)
+    expect(await chargerEtat()).toEqual({ ...sansImage, etape: 2, etapeMax: 2 })
+  })
+
+  it('n ecrit pas les images quand seul un champ change', async () => {
+    await sauvegarderEtat(etat)
+    // Meme reference d'images, champ modifie : l'ecriture lourde est evitee
+    // mais la restitution reste complete.
+    await sauvegarderEtat({ ...etat, precisions: 'ajout tardif' })
+    const restaure = await chargerEtat()
+    expect(restaure?.precisions).toBe('ajout tardif')
+    expect(restaure?.images).toEqual(etat.images)
+  })
+
+  it('efface les images orphelines quand les champs ont disparu', async () => {
+    await sauvegarderEtat(etat)
+    const champs = sessionStorage.getItem('rendu-architectural:formulaire')
+    sessionStorage.clear()
+
+    expect(await chargerEtat()).toBeNull()
+
+    // On remet les champs tels quels : les images doivent avoir ete nettoyees
+    // par le chargement precedent, qui a constate leur orphelinage.
+    sessionStorage.setItem('rendu-architectural:formulaire', champs as string)
+    const restaure = await chargerEtat()
+    expect(restaure?.images).toEqual({
+      cadrage: null,
+      complementaire: null,
+      site: null,
+    })
   })
 })

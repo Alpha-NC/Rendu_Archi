@@ -73,6 +73,49 @@ export type ReponseGenerate = {
   prompt: string
 }
 
+/**
+ * Une reponse 2xx sans cle `erreur` n'est pas pour autant un succes.
+ * Le node « Respond to Webhook » de n8n renvoie par defaut ses items sous
+ * forme de tableau : `[{ cycle_id, image_url }]` traverserait `estErreur`
+ * sans encombre et donnerait un `<img>` casse apres quatre-vingt-dix
+ * secondes d'attente, sans le moindre message.
+ */
+export function estReponseGenerate(valeur: unknown): valeur is ReponseGenerate {
+  if (typeof valeur !== 'object' || valeur === null || Array.isArray(valeur)) {
+    return false
+  }
+  const { cycle_id, image_url } = valeur as Record<string, unknown>
+  return (
+    typeof cycle_id === 'string' &&
+    typeof image_url === 'string' &&
+    image_url.length > 0
+  )
+}
+
+/** Erreur metier renvoyee par n8n : la requete a abouti, le traitement a refuse. */
+export class ErreurMetier extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'ErreurMetier'
+  }
+}
+
+/**
+ * Echec de transport : coupure, timeout de proxy, statut non-2xx, reponse
+ * inexploitable. Distinct d'une erreur metier parce que la generation a pu
+ * aboutir cote serveur malgre la coupure — derriere un proxy coupant a
+ * 100 s, une generation reussie arrive en 524.
+ */
+export class ErreurReseau extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ErreurReseau'
+  }
+}
+
 export type ReponseErreur = { erreur: { code: string; message: string } }
 
 /**

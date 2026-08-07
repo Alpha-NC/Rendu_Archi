@@ -1,3 +1,4 @@
+import { ErreurMetier, ErreurReseau } from './contrat'
 import type {
   ReponseGenerate,
   ReponseGetMateriaux,
@@ -70,11 +71,28 @@ const IMAGE_TEST =
   )
 
 export async function mockGetMateriaux(): Promise<ReponseGetMateriaux> {
-  return { materiaux: CATALOGUE }
+  return { materiaux: structuredClone(CATALOGUE) }
 }
 
+/**
+ * Sans ces sentinelles, le mock ne saurait que reussir : les deux branches
+ * d'erreur de l'ecran de generation ne seraient jamais exercees avant le
+ * premier essai reel contre n8n. Saisir une reference commencant par `ERR-`
+ * ou `NET-` declenche l'issue correspondante.
+ */
 export async function mockGenerate(requete: RequeteGenerate): Promise<ReponseGenerate> {
   await new Promise((resoudre) => setTimeout(resoudre, DELAI_GENERATION_MS))
+
+  if (requete.reference.startsWith('ERR-')) {
+    throw new ErreurMetier(
+      'materiau_inconnu',
+      'Le matériau demandé pour la toiture n’est pas calibré.',
+    )
+  }
+  if (requete.reference.startsWith('NET-')) {
+    throw new ErreurReseau('La connexion au service a été interrompue.')
+  }
+
   return {
     cycle_id: `mock-${Date.now()}`,
     reference: requete.reference,

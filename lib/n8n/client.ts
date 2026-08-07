@@ -1,5 +1,10 @@
 import { mockGenerate, mockGetMateriaux } from './mock'
-import { estErreur } from './contrat'
+import {
+  ErreurMetier,
+  ErreurReseau,
+  estErreur,
+  estReponseGenerate,
+} from './contrat'
 import { CATEGORIES } from '@/lib/form/types'
 import type {
   ReponseGenerate,
@@ -7,28 +12,31 @@ import type {
   RequeteGenerate,
 } from './contrat'
 
-/** Erreur metier renvoyee par n8n : la requete a abouti, le traitement a refuse. */
-export class ErreurMetier extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'ErreurMetier'
-  }
-}
+export { ErreurMetier, ErreurReseau } from './contrat'
 
 /**
- * Echec de transport : coupure, timeout de proxy, statut non-2xx.
- * Distinct d'une erreur metier parce que la generation a pu aboutir cote
- * serveur malgre la coupure — derriere un proxy coupant a 100 s, une
- * generation reussie arrive en 524.
+ * Traduit une reponse deja lue en issue du domaine. Aucun acces reseau, donc
+ * testable sur des objets nus.
+ *
+ * C'est la seule fonction du projet dont la sortie n'est pas une valeur mais
+ * un choix parmi trois issues, et ce choix determine mot pour mot ce que
+ * l'utilisateur lit apres quatre-vingt-dix secondes d'attente.
  */
-export class ErreurReseau extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ErreurReseau'
+export function interpreter<T>(
+  statut: number,
+  charge: unknown,
+  estAttendue: (valeur: unknown) => valeur is T,
+): T {
+  if (statut < 200 || statut >= 300) {
+    throw new ErreurReseau(`Le service a répondu avec le statut ${statut}.`)
   }
+  if (estErreur(charge)) {
+    throw new ErreurMetier(charge.erreur.code, charge.erreur.message)
+  }
+  if (!estAttendue(charge)) {
+    throw new ErreurReseau("La réponse du service n'est pas exploitable.")
+  }
+  return charge
 }
 
 function urlWebhook(): string | null {
@@ -41,12 +49,19 @@ export function enModeMock(): boolean {
   return urlWebhook() === null
 }
 
-async function appeler<T>(corps: object): Promise<T> {
+/** En deca de ce delai, la requete n'a pas pu atteindre le moteur. */
+const DELAI_ECHEC_IMMEDIAT_MS = 5000
+
+async function appeler<T>(
+  corps: object,
+  estAttendue: (valeur: unknown) => valeur is T,
+): Promise<T> {
   const url = urlWebhook()
   if (url === null) {
     throw new ErreurReseau("Aucune URL de webhook n'est configurée.")
   }
 
+  const depart = Date.now()
   let reponse: Response
   try {
     reponse = await fetch(url, {
@@ -55,25 +70,24 @@ async function appeler<T>(corps: object): Promise<T> {
       body: JSON.stringify(corps),
     })
   } catch {
-    throw new ErreurReseau('La connexion au service a échoué.')
-  }
-
-  if (!reponse.ok) {
-    throw new ErreurReseau(`Le service a répondu avec le statut ${reponse.status}.`)
+    // Un rejet quasi immediat n'a pas atteint le service : refus CORS,
+    // DNS, hors ligne. Le distinguer d'une coupure tardive evite d'annoncer
+    // « la generation a peut-etre abouti » alors que rien n'est parti.
+    throw new ErreurReseau(
+      Date.now() - depart < DELAI_ECHEC_IMMEDIAT_MS
+        ? "Le service n'a pas pu être contacté. Vérifiez l'adresse du webhook et votre connexion."
+        : 'La connexion au service a été interrompue.',
+    )
   }
 
   let charge: unknown
   try {
     charge = await reponse.json()
   } catch {
-    throw new ErreurReseau('La réponse du service est illisible.')
+    charge = null
   }
 
-  if (estErreur(charge)) {
-    throw new ErreurMetier(charge.erreur.code, charge.erreur.message)
-  }
-
-  return charge as T
+  return interpreter(reponse.status, charge, estAttendue)
 }
 
 /**
@@ -93,15 +107,18 @@ function normaliserCatalogue(
   return catalogue
 }
 
+/** Le catalogue est normalise ensuite : toute forme d'objet est acceptable ici. */
+function estObjet(valeur: unknown): valeur is Partial<ReponseGetMateriaux> {
+  return typeof valeur === 'object' && valeur !== null && !Array.isArray(valeur)
+}
+
 export async function getMateriaux(): Promise<ReponseGetMateriaux> {
   if (enModeMock()) return mockGetMateriaux()
-  const reponse = await appeler<Partial<ReponseGetMateriaux>>({
-    action: 'get_materiaux',
-  })
+  const reponse = await appeler({ action: 'get_materiaux' }, estObjet)
   return { materiaux: normaliserCatalogue(reponse.materiaux) }
 }
 
 export async function generate(requete: RequeteGenerate): Promise<ReponseGenerate> {
   if (enModeMock()) return mockGenerate(requete)
-  return appeler<ReponseGenerate>(requete)
+  return appeler(requete, estReponseGenerate)
 }
