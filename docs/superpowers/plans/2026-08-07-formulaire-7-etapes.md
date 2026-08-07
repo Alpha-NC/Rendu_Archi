@@ -1507,9 +1507,22 @@ Spec §8. Types partagés entre le client réseau, le mock et la construction du
 
 - [ ] **Step 1: Écrire les types**
 
+Un test accompagne malgré tout ce fichier : `estErreur` est son seul code exécutable, et il garde le chemin d'erreur — celui où une seconde panne est le moins pardonnable.
+
 Créer `lib/n8n/contrat.ts` :
 
 ```ts
+/**
+ * Le contrat externe emploie volontairement le vocabulaire du domaine
+ * interne : les valeurs du webhook et celles du formulaire sont les memes par
+ * conception, et dupliquer les six unions creerait deux listes a synchroniser
+ * a la main dont la divergence ne se verrait qu'a l'execution, cote n8n.
+ * Consequence a garder en tete : renommer une valeur dans
+ * `lib/form/types.ts` modifie le contrat externe et exige une modification
+ * du workflow n8n. Si les deux vocabulaires doivent un jour diverger, la
+ * couture est une fonction de traduction dans `payload.ts`, pas une copie
+ * des types ici.
+ */
 import type {
   AspectPelouse,
   Categorie,
@@ -1576,8 +1589,20 @@ export type ReponseGenerate = {
 
 export type ReponseErreur = { erreur: { code: string; message: string } }
 
+/**
+ * Verifie la forme imbriquee, pas seulement la presence de la cle.
+ * C'est le chemin le moins pardonnable : une reponse `{ erreur: null }` ferait
+ * lever un TypeError brut au moment precis ou l'on veut afficher a
+ * l'utilisateur le message metier renvoye par n8n.
+ */
 export function estErreur(valeur: unknown): valeur is ReponseErreur {
-  return typeof valeur === 'object' && valeur !== null && 'erreur' in valeur
+  if (typeof valeur !== 'object' || valeur === null || !('erreur' in valeur)) {
+    return false
+  }
+  const { erreur } = valeur as { erreur: unknown }
+  if (typeof erreur !== 'object' || erreur === null) return false
+  const { code, message } = erreur as { code?: unknown; message?: unknown }
+  return typeof code === 'string' && typeof message === 'string'
 }
 ```
 
@@ -1586,10 +1611,50 @@ export function estErreur(valeur: unknown): valeur is ReponseErreur {
 Run: `npx tsc --noEmit`
 Expected: aucune erreur.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Tester `estErreur`**
+
+Créer `lib/n8n/contrat.test.ts` :
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { estErreur } from './contrat'
+
+describe('estErreur', () => {
+  it('reconnait une erreur metier bien formee', () => {
+    expect(estErreur({ erreur: { code: 'materiau_inconnu', message: 'Détail.' } })).toBe(
+      true,
+    )
+  })
+
+  it('refuse une reponse de succes', () => {
+    expect(
+      estErreur({ cycle_id: 'a', reference: 'b', image_url: 'c', prompt: 'd' }),
+    ).toBe(false)
+  })
+
+  it('refuse une cle erreur mal formee', () => {
+    expect(estErreur({ erreur: null })).toBe(false)
+    expect(estErreur({ erreur: 'quelque chose' })).toBe(false)
+    expect(estErreur({ erreur: { code: 'a' } })).toBe(false)
+    expect(estErreur({ erreur: { message: 'a' } })).toBe(false)
+    expect(estErreur({ erreur: { code: 1, message: 'a' } })).toBe(false)
+  })
+
+  it('refuse ce qui n est pas un objet', () => {
+    for (const valeur of [null, undefined, 'erreur', 42, []]) {
+      expect(estErreur(valeur)).toBe(false)
+    }
+  })
+})
+```
+
+Run: `npm test -- contrat`
+Expected: PASS, 4 tests.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add lib/n8n/contrat.ts
+git add lib/n8n/contrat.ts lib/n8n/contrat.test.ts
 git commit -m "feat: types du contrat webhook n8n"
 ```
 
@@ -1745,9 +1810,30 @@ describe('construirePayloadGenerate', () => {
     })
   })
 
-  it('leve une erreur si l etat n autorise pas l envoi', () => {
-    const incomplet: EtatFormulaire = { ...base, images: { ...base.images, cadrage: null } }
-    expect(() => construirePayloadGenerate(incomplet)).toThrow()
+  it('ignore une saisie libre restee vide', () => {
+    for (const terme of ['', '   ']) {
+      const etat: EtatFormulaire = {
+        ...base,
+        materiaux: { ...base.materiaux, volets: { origine: 'libre', terme } },
+      }
+      const payload = construirePayloadGenerate(etat)
+      expect(payload.materiaux.volets).toBeNull()
+      expect(payload.materiaux_libres).toEqual([])
+    }
+  })
+
+  it('refuse de construire un payload amputé d un champ obligatoire', () => {
+    const amputations: Partial<EtatFormulaire>[] = [
+      { images: { ...base.images, cadrage: null } },
+      { typeProjet: null },
+      { typeCadrage: null },
+      { style: null },
+    ]
+    for (const amputation of amputations) {
+      expect(() =>
+        construirePayloadGenerate({ ...base, ...amputation }),
+      ).toThrow()
+    }
   })
 })
 ```
@@ -1786,15 +1872,32 @@ import type {
  * dans `materiaux_libres`, que n8n utilise pour creer des lignes a calibrer
  * et jamais pour construire un prompt.
  */
-export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate {
-  if (!peutEnvoyer(etat)) {
-    throw new Error('Le formulaire est incomplet : payload non constructible.')
+/**
+ * Extrait les quatre champs sans lesquels aucune requete n'a de sens.
+ * Les tests de nullite sont faits ici plutot que confies a `peutEnvoyer` :
+ * une assertion non-nulle adossee a une garantie que le compilateur ne voit
+ * pas produirait, le jour ou cette garantie tomberait, une cle absente du
+ * JSON et donc un prompt construit sur du vide. Trois des quatre champs
+ * echoueraient en silence, et `typeCadrage` manquant ferait en plus deduire
+ * le mauvais mode de production.
+ */
+function champsObligatoires(etat: EtatFormulaire) {
+  const { typeProjet, typeCadrage, style } = etat
+  const cadrage = etat.images.cadrage
+  if (typeProjet === null || typeCadrage === null || style === null || cadrage === null) {
+    return null
   }
-  // peutEnvoyer garantit ces trois valeurs.
-  const cadrage = etat.images.cadrage!
-  const typeCadrage = etat.typeCadrage!
-  const style = etat.style!
-  const typeProjet = etat.typeProjet!
+  return { typeProjet, typeCadrage, style, cadrage }
+}
+
+export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate {
+  const obligatoires = champsObligatoires(etat)
+  if (obligatoires === null || !peutEnvoyer(etat)) {
+    throw new Error(
+      'La fiche projet est incomplète : la génération ne peut pas être lancée.',
+    )
+  }
+  const { typeProjet, typeCadrage, style, cadrage } = obligatoires
 
   const materiaux = {} as Record<Categorie, MateriauEnvoye | null>
   const materiauxLibres: MateriauLibre[] = []
@@ -1807,7 +1910,10 @@ export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate
     }
     if (selection.origine === 'libre') {
       materiaux[categorie] = null
-      materiauxLibres.push({ categorie, terme: selection.terme.trim() })
+      // Ouvrir le champ « Autre texture » sans rien y ecrire est un etat
+      // atteignable : ne pas creer de ligne a calibrer vide dans Supabase.
+      const terme = selection.terme.trim()
+      if (terme.length > 0) materiauxLibres.push({ categorie, terme })
       continue
     }
     materiaux[categorie] = selection
@@ -1850,7 +1956,7 @@ export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- payload`
-Expected: PASS, 8 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1875,7 +1981,7 @@ Créer `lib/images/redimensionner.test.ts` :
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { LARGEUR_MAX, dimensionsCibles } from './redimensionner'
+import { LARGEUR_MAX, dimensionsCibles, poidsDataUri } from './redimensionner'
 
 describe('dimensionsCibles', () => {
   it('plafonne la largeur a 2048 px', () => {
@@ -1913,6 +2019,23 @@ describe('dimensionsCibles', () => {
 
   it('plafonne aussi une image en portrait par sa largeur', () => {
     expect(dimensionsCibles(3000, 4000)).toEqual({ largeur: 2048, hauteur: 2731 })
+  })
+})
+
+describe('poidsDataUri', () => {
+  it('deduit le poids de la longueur base64', () => {
+    // 8 caracteres base64 apres la virgule, soit 6 octets.
+    expect(poidsDataUri('data:image/jpeg;base64,AAAAAAAA')).toBe(6)
+  })
+
+  it('ignore l en-tete quelle que soit sa longueur', () => {
+    const court = poidsDataUri('data:image/jpeg;base64,AAAAAAAA')
+    const long = poidsDataUri('data:image/jpeg;charset=utf-8;base64,AAAAAAAA')
+    expect(long).toBe(court)
+  })
+
+  it('rend zero sur une chaine sans separateur', () => {
+    expect(poidsDataUri('pas-un-data-uri')).toBe(0)
   })
 })
 ```
@@ -1953,29 +2076,50 @@ export function dimensionsCibles(
  * Effectue a la selection du fichier, pas a l'envoi : l'apercu affiche est
  * donc exactement l'image qui partira, et son poids est connu tout de suite.
  */
+/**
+ * Poids du JPEG decode, deduit de la longueur base64.
+ * Surestime de 0 a 2 octets a cause du remplissage, negligeable pour un
+ * affichage. Attention : c'est le poids de l'image, pas celui transmis —
+ * le corps de la requete transporte la forme base64, environ 1,33 fois plus
+ * lourde. Ne pas s'en servir pour un garde-fou de taille de requete.
+ */
+export function poidsDataUri(dataUri: string): number {
+  const debut = dataUri.indexOf(',')
+  if (debut === -1) return 0
+  return Math.round((dataUri.length - debut - 1) * 0.75)
+}
+
 export async function chargerImage(fichier: File): Promise<ImageChargee> {
   const bitmap = await createImageBitmap(fichier)
   const { largeur, hauteur } = dimensionsCibles(bitmap.width, bitmap.height)
 
-  const canvas = document.createElement('canvas')
-  canvas.width = largeur
-  canvas.height = hauteur
-  const contexte = canvas.getContext('2d')
-  if (!contexte) {
+  let dataUri: string
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = largeur
+    canvas.height = hauteur
+    const contexte = canvas.getContext('2d')
+    if (!contexte) {
+      throw new Error("Impossible de preparer l'image : contexte canvas indisponible.")
+    }
+    contexte.drawImage(bitmap, 0, 0, largeur, hauteur)
+    dataUri = canvas.toDataURL('image/jpeg', QUALITE_JPEG)
+  } finally {
     bitmap.close()
-    throw new Error("Impossible de preparer l'image : contexte canvas indisponible.")
   }
-  contexte.drawImage(bitmap, 0, 0, largeur, hauteur)
-  bitmap.close()
 
-  const dataUri = canvas.toDataURL('image/jpeg', QUALITE_JPEG)
+  // Un canvas trop grand fait rendre « data:, » sans lever : sans ce garde,
+  // une image vide partirait vers le moteur de generation.
+  if (!dataUri.startsWith('data:image/jpeg')) {
+    throw new Error("Cette image est trop grande pour etre preparee.")
+  }
 
   return {
     dataUri,
     nomOrigine: fichier.name,
     largeur,
     hauteur,
-    poidsOctets: Math.round((dataUri.length - dataUri.indexOf(',') - 1) * 0.75),
+    poidsOctets: poidsDataUri(dataUri),
   }
 }
 ```
@@ -1983,7 +2127,7 @@ export async function chargerImage(fichier: File): Promise<ImageChargee> {
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- redimensionner`
-Expected: PASS, 6 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -2167,7 +2311,7 @@ Expected: PASS, 4 tests.
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 79 tests.
+Expected: PASS, 87 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -2304,6 +2448,7 @@ Créer `lib/n8n/client.ts` :
 ```ts
 import { mockGenerate, mockGetMateriaux } from './mock'
 import { estErreur } from './contrat'
+import { CATEGORIES } from '@/lib/form/types'
 import type {
   ReponseGenerate,
   ReponseGetMateriaux,
@@ -2379,9 +2524,29 @@ async function appeler<T>(corps: object): Promise<T> {
   return charge as T
 }
 
+/**
+ * Reconstruit les six categories a partir de CATEGORIES, en defaussant sur
+ * un tableau vide. Le contrat impose que n8n les renvoie toutes, mais c'est
+ * ici la frontiere entre « ce que le fil a donne » et « ce que le domaine
+ * promet » : une cle manquante doit produire une liste vide, pas un ecran
+ * blanc a l'etape 3.
+ */
+function normaliserCatalogue(
+  brut: Partial<ReponseGetMateriaux['materiaux']> | undefined,
+): ReponseGetMateriaux['materiaux'] {
+  const catalogue = {} as ReponseGetMateriaux['materiaux']
+  for (const categorie of CATEGORIES) {
+    catalogue[categorie] = brut?.[categorie] ?? []
+  }
+  return catalogue
+}
+
 export async function getMateriaux(): Promise<ReponseGetMateriaux> {
   if (enModeMock()) return mockGetMateriaux()
-  return appeler<ReponseGetMateriaux>({ action: 'get_materiaux' })
+  const reponse = await appeler<Partial<ReponseGetMateriaux>>({
+    action: 'get_materiaux',
+  })
+  return { materiaux: normaliserCatalogue(reponse.materiaux) }
 }
 
 export async function generate(requete: RequeteGenerate): Promise<ReponseGenerate> {
@@ -4086,7 +4251,7 @@ git commit -m "docs: contrat du webhook n8n et exemple d environnement"
 - [ ] **Step 1: Lancer toute la suite de tests**
 
 Run: `npm test`
-Expected: PASS, 79 tests, aucun échec.
+Expected: PASS, 87 tests, aucun échec.
 
 - [ ] **Step 2: Vérifier le lint et les types**
 
