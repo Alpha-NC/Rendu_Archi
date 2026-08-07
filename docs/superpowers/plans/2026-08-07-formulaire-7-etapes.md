@@ -1860,9 +1860,18 @@ describe('dimensionsCibles', () => {
     expect(dimensionsCibles(4096, 3072)).toEqual({ largeur: 2048, hauteur: 1536 })
   })
 
-  it('conserve le rapport d aspect', () => {
-    const { largeur, hauteur } = dimensionsCibles(3000, 1000)
-    expect(largeur / hauteur).toBeCloseTo(3, 5)
+  it('conserve le rapport d aspect a un demi pixel pres', () => {
+    // Un arrondi au pixel entier ne peut pas faire mieux qu'un demi-pixel :
+    // c'est la borne exacte, pas une tolerance choisie au jugé.
+    for (const [largeurSource, hauteurSource] of [
+      [3000, 1000],
+      [4096, 3072],
+      [5000, 2813],
+    ] as const) {
+      const { largeur, hauteur } = dimensionsCibles(largeurSource, hauteurSource)
+      const attendue = (largeur * hauteurSource) / largeurSource
+      expect(Math.abs(hauteur - attendue)).toBeLessThanOrEqual(0.5)
+    }
   })
 
   it('ne monte jamais en resolution', () => {
