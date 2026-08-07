@@ -1587,6 +1587,49 @@ export type ReponseGenerate = {
   prompt: string
 }
 
+/**
+ * Une reponse 2xx sans cle `erreur` n'est pas pour autant un succes.
+ * Le node « Respond to Webhook » de n8n renvoie par defaut ses items sous
+ * forme de tableau : `[{ cycle_id, image_url }]` traverserait `estErreur`
+ * sans encombre et donnerait un `<img>` casse apres quatre-vingt-dix
+ * secondes d'attente, sans le moindre message.
+ */
+export function estReponseGenerate(valeur: unknown): valeur is ReponseGenerate {
+  if (typeof valeur !== 'object' || valeur === null || Array.isArray(valeur)) {
+    return false
+  }
+  const { cycle_id, image_url } = valeur as Record<string, unknown>
+  return (
+    typeof cycle_id === 'string' &&
+    typeof image_url === 'string' &&
+    image_url.length > 0
+  )
+}
+
+/** Erreur metier renvoyee par n8n : la requete a abouti, le traitement a refuse. */
+export class ErreurMetier extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'ErreurMetier'
+  }
+}
+
+/**
+ * Echec de transport : coupure, timeout de proxy, statut non-2xx, reponse
+ * inexploitable. Distinct d'une erreur metier parce que la generation a pu
+ * aboutir cote serveur malgre la coupure — derriere un proxy coupant a
+ * 100 s, une generation reussie arrive en 524.
+ */
+export class ErreurReseau extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ErreurReseau'
+  }
+}
+
 export type ReponseErreur = { erreur: { code: string; message: string } }
 
 /**
@@ -1617,7 +1660,7 @@ Créer `lib/n8n/contrat.test.ts` :
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { estErreur } from './contrat'
+import { estErreur, estReponseGenerate } from './contrat'
 
 describe('estErreur', () => {
   it('reconnait une erreur metier bien formee', () => {
@@ -1646,10 +1689,36 @@ describe('estErreur', () => {
     }
   })
 })
+
+describe('estReponseGenerate', () => {
+  it('reconnait une reponse de generation complete', () => {
+    expect(
+      estReponseGenerate({
+        cycle_id: 'c1',
+        reference: 'r',
+        image_url: 'https://exemple/x.jpg',
+        prompt: 'p',
+      }),
+    ).toBe(true)
+  })
+
+  it('refuse un tableau, forme par defaut du node Respond to Webhook', () => {
+    expect(
+      estReponseGenerate([{ cycle_id: 'c1', image_url: 'https://exemple/x.jpg' }]),
+    ).toBe(false)
+  })
+
+  it('refuse une reponse sans image exploitable', () => {
+    expect(estReponseGenerate({ cycle_id: 'c1', image_url: '' })).toBe(false)
+    expect(estReponseGenerate({ cycle_id: 'c1' })).toBe(false)
+    expect(estReponseGenerate({ image_url: 'https://exemple/x.jpg' })).toBe(false)
+    expect(estReponseGenerate(null)).toBe(false)
+  })
+})
 ```
 
 Run: `npm test -- contrat`
-Expected: PASS, 4 tests.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 4: Commit**
 
@@ -2205,13 +2274,41 @@ describe('persistance', () => {
     expect(await chargerEtat()).toBeNull()
   })
 
-  it('restitue un etat sans image', async () => {
+  it('restitue un etat sans image en ramenant l etape a 2', async () => {
     const sansImage: EtatFormulaire = {
       ...etat,
       images: { cadrage: null, complementaire: null, site: null },
     }
     await sauvegarderEtat(sansImage)
-    expect(await chargerEtat()).toEqual(sansImage)
+    expect(await chargerEtat()).toEqual({ ...sansImage, etape: 2, etapeMax: 2 })
+  })
+
+  it('n ecrit pas les images quand seul un champ change', async () => {
+    await sauvegarderEtat(etat)
+    // Meme reference d'images, champ modifie : l'ecriture lourde est evitee
+    // mais la restitution reste complete.
+    await sauvegarderEtat({ ...etat, precisions: 'ajout tardif' })
+    const restaure = await chargerEtat()
+    expect(restaure?.precisions).toBe('ajout tardif')
+    expect(restaure?.images).toEqual(etat.images)
+  })
+
+  it('efface les images orphelines quand les champs ont disparu', async () => {
+    await sauvegarderEtat(etat)
+    const champs = sessionStorage.getItem('rendu-architectural:formulaire')
+    sessionStorage.clear()
+
+    expect(await chargerEtat()).toBeNull()
+
+    // On remet les champs tels quels : les images doivent avoir ete nettoyees
+    // par le chargement precedent, qui a constate leur orphelinage.
+    sessionStorage.setItem('rendu-architectural:formulaire', champs as string)
+    const restaure = await chargerEtat()
+    expect(restaure?.images).toEqual({
+      cadrage: null,
+      complementaire: null,
+      site: null,
+    })
   })
 })
 ```
@@ -2233,23 +2330,94 @@ const BASE_IDB = 'rendu-architectural'
 const MAGASIN = 'images'
 const CLE_IMAGES = 'formulaire'
 
-type EtatSansImages = Omit<EtatFormulaire, 'images'>
+const IMAGES_VIDES: ImagesFormulaire = {
+  cadrage: null,
+  complementaire: null,
+  site: null,
+}
+
+/**
+ * Champs persistes, enumeres explicitement plutot que derives par
+ * `Omit<EtatFormulaire, 'images'>`. Un futur champ lourd — l'image generee,
+ * un calque d'annotation — atterrirait sinon en silence dans sessionStorage,
+ * depasserait le plafond, et `setItem` echouerait en perdant l'ecriture
+ * entiere. Ici, tout nouveau champ est exclu par defaut : l'inclure est une
+ * decision.
+ */
+const CHAMPS_PERSISTES = [
+  'etape',
+  'etapeMax',
+  'reference',
+  'typeProjet',
+  'usage',
+  'typeCadrage',
+  'elementsAPreserver',
+  'materiaux',
+  'conserverVegetation',
+  'aspectPelouse',
+  'elementsARetirer',
+  'ciel',
+  'cielChoisiManuellement',
+  'eclairages',
+  'style',
+  'styleChoisiManuellement',
+  'precisions',
+] as const
+
+type ChampPersiste = (typeof CHAMPS_PERSISTES)[number]
+type EtatSansImages = Pick<EtatFormulaire, ChampPersiste>
+
+/** Derniere reference d'images ecrite, pour ne pas les reecrire pour rien. */
+let dernieresImages: ImagesFormulaire | null = null
 
 /**
  * Les champs tiennent largement dans sessionStorage. Les images non :
  * trois vues redimensionnees pesent environ 4 Mo en base64, au-dessus du
  * plafond pratique de 5 Mo, qui echoue en perdant l'ecriture entiere.
  * D'ou le partage entre les deux stockages.
+ *
+ * Les images sont ecrites en premier, et seulement si leur reference a
+ * change. L'ordre importe : sessionStorage commite des l'appel alors que
+ * l'ecriture IndexedDB dure. Une interruption dans cette fenetre laisserait
+ * sinon des champs en avance sur les images — un etat qui pretend etre a
+ * l'etape 5 sans vue de cadrage, que `normaliser` « reparerait » en changeant
+ * silencieusement le style de l'utilisateur. Un etat en retard est inoffensif,
+ * un etat incoherent ne l'est pas.
+ *
+ * `normaliser` preserve l'identite de `etat.images` pour toute action autre
+ * qu'un changement d'image : la comparaison par reference evite donc de
+ * reecrire 3 Mo a chaque frappe dans un champ texte.
  */
 export async function sauvegarderEtat(etat: EtatFormulaire): Promise<void> {
-  const { images, ...champs } = etat
+  const { images } = etat
+  if (images !== dernieresImages) {
+    await ecrireImages(images)
+    dernieresImages = images
+  }
+  const champs = {} as Record<string, unknown>
+  for (const champ of CHAMPS_PERSISTES) champs[champ] = etat[champ]
   sessionStorage.setItem(CLE_SESSION, JSON.stringify(champs))
-  await ecrireImages(images)
 }
 
+/**
+ * Un echec de restauration n'est jamais bloquant : on repart d'un etat
+ * vierge. Le stockage peut etre indisponible — navigation privee, politique
+ * d'entreprise, quota sature — et l'application doit demarrer quand meme.
+ */
 export async function chargerEtat(): Promise<EtatFormulaire | null> {
-  const brut = sessionStorage.getItem(CLE_SESSION)
-  if (!brut) return null
+  let brut: string | null
+  try {
+    brut = sessionStorage.getItem(CLE_SESSION)
+  } catch {
+    return null
+  }
+  if (!brut) {
+    // Les images survivent a la fermeture de l'onglet, pas les champs.
+    // Sans ce nettoyage, jusqu'a 3 Mo de photos du site resteraient sur le
+    // poste indefiniment, sans aucun ecran pour les effacer.
+    await effacerEtat().catch(() => undefined)
+    return null
+  }
 
   let champs: EtatSansImages
   try {
@@ -2258,13 +2426,28 @@ export async function chargerEtat(): Promise<EtatFormulaire | null> {
     return null
   }
 
-  const images = await lireImages()
-  return { ...champs, images }
+  let images: ImagesFormulaire
+  try {
+    images = await lireImages()
+  } catch {
+    images = { ...IMAGES_VIDES }
+  }
+
+  // Garde-fou contre un etat malgre tout dechire : pretendre avoir depasse
+  // l'etape 2 sans vue de cadrage n'est pas atteignable normalement.
+  const sansCadrage = images.cadrage === null
+  return {
+    ...champs,
+    images,
+    etape: sansCadrage && champs.etape > 2 ? 2 : champs.etape,
+    etapeMax: sansCadrage && champs.etapeMax > 2 ? 2 : champs.etapeMax,
+  }
 }
 
 export async function effacerEtat(): Promise<void> {
   sessionStorage.removeItem(CLE_SESSION)
-  await ecrireImages({ cadrage: null, complementaire: null, site: null })
+  await ecrireImages({ ...IMAGES_VIDES })
+  dernieresImages = null
 }
 
 function ouvrirBase(): Promise<IDBDatabase> {
@@ -2275,43 +2458,53 @@ function ouvrirBase(): Promise<IDBDatabase> {
     }
     requete.onsuccess = () => resoudre(requete.result)
     requete.onerror = () => rejeter(requete.error)
+    // Sans ce gestionnaire, un futur changement de version bloque par une
+    // connexion restee ouverte ne resoudrait ni ne rejetterait jamais :
+    // l'application se figerait au montage, sans erreur.
+    requete.onblocked = () =>
+      rejeter(new Error('Le stockage local est occupé par un autre onglet.'))
   })
 }
 
 async function ecrireImages(images: ImagesFormulaire): Promise<void> {
   const base = await ouvrirBase()
-  await new Promise<void>((resoudre, rejeter) => {
-    const transaction = base.transaction(MAGASIN, 'readwrite')
-    transaction.objectStore(MAGASIN).put(images, CLE_IMAGES)
-    transaction.oncomplete = () => resoudre()
-    transaction.onerror = () => rejeter(transaction.error)
-  })
-  base.close()
+  try {
+    await new Promise<void>((resoudre, rejeter) => {
+      const transaction = base.transaction(MAGASIN, 'readwrite')
+      transaction.objectStore(MAGASIN).put(images, CLE_IMAGES)
+      transaction.oncomplete = () => resoudre()
+      transaction.onerror = () => rejeter(transaction.error)
+    })
+  } finally {
+    base.close()
+  }
 }
 
 async function lireImages(): Promise<ImagesFormulaire> {
-  const vide: ImagesFormulaire = { cadrage: null, complementaire: null, site: null }
   const base = await ouvrirBase()
-  const images = await new Promise<ImagesFormulaire>((resoudre) => {
-    const transaction = base.transaction(MAGASIN, 'readonly')
-    const requete = transaction.objectStore(MAGASIN).get(CLE_IMAGES)
-    requete.onsuccess = () => resoudre((requete.result as ImagesFormulaire) ?? vide)
-    requete.onerror = () => resoudre(vide)
-  })
-  base.close()
-  return images
+  try {
+    return await new Promise<ImagesFormulaire>((resoudre) => {
+      const transaction = base.transaction(MAGASIN, 'readonly')
+      const requete = transaction.objectStore(MAGASIN).get(CLE_IMAGES)
+      requete.onsuccess = () =>
+        resoudre((requete.result as ImagesFormulaire) ?? { ...IMAGES_VIDES })
+      requete.onerror = () => resoudre({ ...IMAGES_VIDES })
+    })
+  } finally {
+    base.close()
+  }
 }
 ```
 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- persistance`
-Expected: PASS, 4 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 87 tests.
+Expected: PASS, 99 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -2334,6 +2527,7 @@ Spec §9. Les termes du catalogue sont repris du node `Construction Prompt` du w
 Créer `lib/n8n/mock.ts` :
 
 ```ts
+import { ErreurMetier, ErreurReseau } from './contrat'
 import type {
   ReponseGenerate,
   ReponseGetMateriaux,
@@ -2406,11 +2600,28 @@ const IMAGE_TEST =
   )
 
 export async function mockGetMateriaux(): Promise<ReponseGetMateriaux> {
-  return { materiaux: CATALOGUE }
+  return { materiaux: structuredClone(CATALOGUE) }
 }
 
+/**
+ * Sans ces sentinelles, le mock ne saurait que reussir : les deux branches
+ * d'erreur de l'ecran de generation ne seraient jamais exercees avant le
+ * premier essai reel contre n8n. Saisir une reference commencant par `ERR-`
+ * ou `NET-` declenche l'issue correspondante.
+ */
 export async function mockGenerate(requete: RequeteGenerate): Promise<ReponseGenerate> {
   await new Promise((resoudre) => setTimeout(resoudre, DELAI_GENERATION_MS))
+
+  if (requete.reference.startsWith('ERR-')) {
+    throw new ErreurMetier(
+      'materiau_inconnu',
+      'Le matériau demandé pour la toiture n’est pas calibré.',
+    )
+  }
+  if (requete.reference.startsWith('NET-')) {
+    throw new ErreurReseau('La connexion au service a été interrompue.')
+  }
+
   return {
     cycle_id: `mock-${Date.now()}`,
     reference: requete.reference,
@@ -2447,7 +2658,12 @@ Créer `lib/n8n/client.ts` :
 
 ```ts
 import { mockGenerate, mockGetMateriaux } from './mock'
-import { estErreur } from './contrat'
+import {
+  ErreurMetier,
+  ErreurReseau,
+  estErreur,
+  estReponseGenerate,
+} from './contrat'
 import { CATEGORIES } from '@/lib/form/types'
 import type {
   ReponseGenerate,
@@ -2455,28 +2671,31 @@ import type {
   RequeteGenerate,
 } from './contrat'
 
-/** Erreur metier renvoyee par n8n : la requete a abouti, le traitement a refuse. */
-export class ErreurMetier extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'ErreurMetier'
-  }
-}
+export { ErreurMetier, ErreurReseau } from './contrat'
 
 /**
- * Echec de transport : coupure, timeout de proxy, statut non-2xx.
- * Distinct d'une erreur metier parce que la generation a pu aboutir cote
- * serveur malgre la coupure — derriere un proxy coupant a 100 s, une
- * generation reussie arrive en 524.
+ * Traduit une reponse deja lue en issue du domaine. Aucun acces reseau, donc
+ * testable sur des objets nus.
+ *
+ * C'est la seule fonction du projet dont la sortie n'est pas une valeur mais
+ * un choix parmi trois issues, et ce choix determine mot pour mot ce que
+ * l'utilisateur lit apres quatre-vingt-dix secondes d'attente.
  */
-export class ErreurReseau extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ErreurReseau'
+export function interpreter<T>(
+  statut: number,
+  charge: unknown,
+  estAttendue: (valeur: unknown) => valeur is T,
+): T {
+  if (statut < 200 || statut >= 300) {
+    throw new ErreurReseau(`Le service a répondu avec le statut ${statut}.`)
   }
+  if (estErreur(charge)) {
+    throw new ErreurMetier(charge.erreur.code, charge.erreur.message)
+  }
+  if (!estAttendue(charge)) {
+    throw new ErreurReseau("La réponse du service n'est pas exploitable.")
+  }
+  return charge
 }
 
 function urlWebhook(): string | null {
@@ -2489,12 +2708,19 @@ export function enModeMock(): boolean {
   return urlWebhook() === null
 }
 
-async function appeler<T>(corps: object): Promise<T> {
+/** En deca de ce delai, la requete n'a pas pu atteindre le moteur. */
+const DELAI_ECHEC_IMMEDIAT_MS = 5000
+
+async function appeler<T>(
+  corps: object,
+  estAttendue: (valeur: unknown) => valeur is T,
+): Promise<T> {
   const url = urlWebhook()
   if (url === null) {
     throw new ErreurReseau("Aucune URL de webhook n'est configurée.")
   }
 
+  const depart = Date.now()
   let reponse: Response
   try {
     reponse = await fetch(url, {
@@ -2503,25 +2729,24 @@ async function appeler<T>(corps: object): Promise<T> {
       body: JSON.stringify(corps),
     })
   } catch {
-    throw new ErreurReseau('La connexion au service a échoué.')
-  }
-
-  if (!reponse.ok) {
-    throw new ErreurReseau(`Le service a répondu avec le statut ${reponse.status}.`)
+    // Un rejet quasi immediat n'a pas atteint le service : refus CORS,
+    // DNS, hors ligne. Le distinguer d'une coupure tardive evite d'annoncer
+    // « la generation a peut-etre abouti » alors que rien n'est parti.
+    throw new ErreurReseau(
+      Date.now() - depart < DELAI_ECHEC_IMMEDIAT_MS
+        ? "Le service n'a pas pu être contacté. Vérifiez l'adresse du webhook et votre connexion."
+        : 'La connexion au service a été interrompue.',
+    )
   }
 
   let charge: unknown
   try {
     charge = await reponse.json()
   } catch {
-    throw new ErreurReseau('La réponse du service est illisible.')
+    charge = null
   }
 
-  if (estErreur(charge)) {
-    throw new ErreurMetier(charge.erreur.code, charge.erreur.message)
-  }
-
-  return charge as T
+  return interpreter(reponse.status, charge, estAttendue)
 }
 
 /**
@@ -2541,17 +2766,20 @@ function normaliserCatalogue(
   return catalogue
 }
 
+/** Le catalogue est normalise ensuite : toute forme d'objet est acceptable ici. */
+function estObjet(valeur: unknown): valeur is Partial<ReponseGetMateriaux> {
+  return typeof valeur === 'object' && valeur !== null && !Array.isArray(valeur)
+}
+
 export async function getMateriaux(): Promise<ReponseGetMateriaux> {
   if (enModeMock()) return mockGetMateriaux()
-  const reponse = await appeler<Partial<ReponseGetMateriaux>>({
-    action: 'get_materiaux',
-  })
+  const reponse = await appeler({ action: 'get_materiaux' }, estObjet)
   return { materiaux: normaliserCatalogue(reponse.materiaux) }
 }
 
 export async function generate(requete: RequeteGenerate): Promise<ReponseGenerate> {
   if (enModeMock()) return mockGenerate(requete)
-  return appeler<ReponseGenerate>(requete)
+  return appeler(requete, estReponseGenerate)
 }
 ```
 
@@ -2560,10 +2788,74 @@ export async function generate(requete: RequeteGenerate): Promise<ReponseGenerat
 Run: `npx tsc --noEmit`
 Expected: aucune erreur.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Tester la logique de décision**
+
+Créer `lib/n8n/client.test.ts` :
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { ErreurMetier, ErreurReseau, interpreter } from './client'
+import { estReponseGenerate } from './contrat'
+
+const succes = {
+  cycle_id: 'c1',
+  reference: '2026-042',
+  image_url: 'https://exemple/rendu.jpg',
+  prompt: 'texte',
+}
+
+describe('interpreter', () => {
+  it('rend la charge quand elle a la forme attendue', () => {
+    expect(interpreter(200, succes, estReponseGenerate)).toEqual(succes)
+  })
+
+  it('leve une erreur metier sur une reponse d erreur', () => {
+    const charge = { erreur: { code: 'materiau_inconnu', message: 'Détail.' } }
+    try {
+      interpreter(200, charge, estReponseGenerate)
+      throw new Error('aurait du lever')
+    } catch (erreur) {
+      expect(erreur).toBeInstanceOf(ErreurMetier)
+      expect((erreur as ErreurMetier).code).toBe('materiau_inconnu')
+      expect((erreur as ErreurMetier).message).toBe('Détail.')
+    }
+  })
+
+  it('leve une erreur reseau sur un statut non-2xx', () => {
+    expect(() => interpreter(524, succes, estReponseGenerate)).toThrow(ErreurReseau)
+    expect(() => interpreter(500, null, estReponseGenerate)).toThrow(ErreurReseau)
+  })
+
+  it('prefere l erreur reseau au contenu quand le statut est mauvais', () => {
+    const charge = { erreur: { code: 'x', message: 'y' } }
+    expect(() => interpreter(500, charge, estReponseGenerate)).toThrow(ErreurReseau)
+  })
+
+  it('leve une erreur reseau sur une reponse inexploitable', () => {
+    for (const charge of [null, undefined, 'texte', 42, {}, { image_url: '' }]) {
+      expect(() => interpreter(200, charge, estReponseGenerate)).toThrow(ErreurReseau)
+    }
+  })
+
+  it('refuse un tableau, forme par defaut du node Respond to Webhook', () => {
+    expect(() => interpreter(200, [succes], estReponseGenerate)).toThrow(ErreurReseau)
+  })
+
+  it('ne confond jamais les deux familles d erreur', () => {
+    const metier = { erreur: { code: 'a', message: 'b' } }
+    expect(() => interpreter(200, metier, estReponseGenerate)).not.toThrow(ErreurReseau)
+    expect(() => interpreter(200, {}, estReponseGenerate)).not.toThrow(ErreurMetier)
+  })
+})
+```
+
+Run: `npm test -- client`
+Expected: PASS, 7 tests.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add lib/n8n/client.ts
+git add lib/n8n/client.ts lib/n8n/client.test.ts
 git commit -m "feat: client webhook avec bascule automatique vers le mock"
 ```
 
@@ -4251,7 +4543,7 @@ git commit -m "docs: contrat du webhook n8n et exemple d environnement"
 - [ ] **Step 1: Lancer toute la suite de tests**
 
 Run: `npm test`
-Expected: PASS, 87 tests, aucun échec.
+Expected: PASS, 99 tests, aucun échec.
 
 - [ ] **Step 2: Vérifier le lint et les types**
 
