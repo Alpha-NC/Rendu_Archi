@@ -121,7 +121,7 @@ git commit -m "test: mise en place de Vitest avec jsdom et fake-indexeddb"
 **Files:**
 - Create: `lib/form/types.ts`
 
-Aucun test : ce fichier ne contient que des déclarations de types, vérifiées par le compilateur.
+Aucun test : ce fichier porte le vocabulaire du domaine — des types vérifiés par le compilateur, plus la liste des catégories dont l'union est dérivée.
 
 - [ ] **Step 1: Écrire les types**
 
@@ -141,13 +141,22 @@ export type Usage = 'permis_de_construire' | 'presentation_client' | 'les_deux'
 
 export type TypeCadrage = 'perspective' | 'axonometrie'
 
-export type Categorie =
-  | 'toiture'
-  | 'facade'
-  | 'volets'
-  | 'menuiseries'
-  | 'margelles'
-  | 'plage'
+/**
+ * L'union est derivee du tableau, et non l'inverse : une annotation
+ * `readonly Categorie[]` verifierait que chaque element est une categorie,
+ * jamais que les six y sont. Un tableau incomplet compilerait en silence et
+ * `payload.ts` enverrait une cle absente la ou le contrat exige `null`.
+ */
+export const CATEGORIES = [
+  'toiture',
+  'facade',
+  'volets',
+  'menuiseries',
+  'margelles',
+  'plage',
+] as const
+
+export type Categorie = (typeof CATEGORIES)[number]
 
 export type Style =
   | 'photomontage_administratif'
@@ -220,15 +229,6 @@ export type EtatFormulaire = {
 
   precisions: string
 }
-
-export const CATEGORIES: readonly Categorie[] = [
-  'toiture',
-  'facade',
-  'volets',
-  'menuiseries',
-  'margelles',
-  'plage',
-]
 ```
 
 - [ ] **Step 2: Vérifier la compilation**
@@ -986,7 +986,7 @@ Créer `lib/form/reducer.test.ts` :
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { reduire } from './reducer'
+import { etapeVoisine, reduire } from './reducer'
 import { etatInitial } from './etat-initial'
 import type { EtatFormulaire, ImageChargee } from './types'
 
@@ -1091,6 +1091,13 @@ describe('navigation', () => {
     expect(e.etapeMax).toBe(3)
   })
 
+  it('borne l etape voisine aux extremites', () => {
+    expect(etapeVoisine(1, -1)).toBe(1)
+    expect(etapeVoisine(7, 1)).toBe(7)
+    expect(etapeVoisine(3, 1)).toBe(4)
+    expect(etapeVoisine(3, -1)).toBe(2)
+  })
+
   it('ne perd aucune donnee lors d un retour en arriere', () => {
     let e = reduire(etat(), { type: 'reference', valeur: '2026-042' })
     e = reduire(e, { type: 'allerEtape', etape: 4 })
@@ -1162,6 +1169,18 @@ export function reduire(
   return normaliser(appliquer(etat, action))
 }
 
+/**
+ * Etape voisine, bornee a l'intervalle 1..7.
+ * `etape + 1` ne compile pas contre une union litterale : l'assertion est
+ * isolee ici, une fois, plutot que dispersee dans les composants.
+ */
+export function etapeVoisine(etape: Etape, pas: 1 | -1): Etape {
+  const cible = etape + pas
+  if (cible < 1) return 1
+  if (cible > 7) return 7
+  return cible as Etape
+}
+
 function appliquer(
   etat: EtatFormulaire,
   action: ActionFormulaire,
@@ -1205,7 +1224,7 @@ function appliquer(
       return {
         ...etat,
         etape: action.etape,
-        etapeMax: (action.etape > etat.etapeMax ? action.etape : etat.etapeMax) as Etape,
+        etapeMax: action.etape > etat.etapeMax ? action.etape : etat.etapeMax,
       }
     case 'restaurer':
       return action.etat
@@ -1255,12 +1274,12 @@ function normaliser(etat: EtatFormulaire): EtatFormulaire {
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- reducer`
-Expected: PASS, 9 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 50 tests.
+Expected: PASS, 51 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1908,7 +1927,7 @@ Expected: PASS, 4 tests.
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 67 tests.
+Expected: PASS, 68 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -3370,7 +3389,7 @@ import { Etape4Environnement } from './etapes/Etape4Environnement'
 import { Etape5Style } from './etapes/Etape5Style'
 import { Etape6Precisions } from './etapes/Etape6Precisions'
 import { Etape7FicheProjet } from './etapes/Etape7FicheProjet'
-import { reduire } from '@/lib/form/reducer'
+import { etapeVoisine, reduire } from '@/lib/form/reducer'
 import { etatInitial } from '@/lib/form/etat-initial'
 import { chargerEtat, sauvegarderEtat } from '@/lib/form/persistance'
 import { etapeFranchissable, peutEnvoyer } from '@/lib/form/validation'
@@ -3546,7 +3565,7 @@ export function FormulaireRendu() {
             type="button"
             disabled={etat.etape === 1}
             onClick={() =>
-              envoyer({ type: 'allerEtape', etape: (etat.etape - 1) as Etape })
+              envoyer({ type: 'allerEtape', etape: etapeVoisine(etat.etape, -1) })
             }
             className="rounded-lg px-4 py-2 text-sm text-slate-600 disabled:text-slate-300"
           >
@@ -3567,7 +3586,7 @@ export function FormulaireRendu() {
               type="button"
               disabled={!franchissable}
               onClick={() =>
-                envoyer({ type: 'allerEtape', etape: (etat.etape + 1) as Etape })
+                envoyer({ type: 'allerEtape', etape: etapeVoisine(etat.etape, 1) })
               }
               className="rounded-lg bg-slate-900 px-5 py-2 text-sm text-white disabled:bg-slate-300"
             >
@@ -3834,7 +3853,7 @@ git commit -m "docs: contrat du webhook n8n et exemple d environnement"
 - [ ] **Step 1: Lancer toute la suite de tests**
 
 Run: `npm test`
-Expected: PASS, 67 tests, aucun échec.
+Expected: PASS, 68 tests, aucun échec.
 
 - [ ] **Step 2: Vérifier le lint et les types**
 
