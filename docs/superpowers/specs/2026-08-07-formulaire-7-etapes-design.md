@@ -2,7 +2,7 @@
 
 Date : 2026-08-07
 Statut : validé, à planifier
-Référence : `docs/prd-generateur-rendu-v2.md` (PRD V2)
+Sources : `docs/prd-generateur-rendu-v2.md` (PRD V2), documentation RIF (voir §16), workflow n8n `rendu-formulaire-n8n-v1`
 
 ---
 
@@ -18,6 +18,20 @@ Le dépôt contient le scaffold Next.js par défaut : `app/layout.tsx`, `app/pag
 
 Côté n8n, le workflow `rendu-formulaire-n8n-v1` existe et fonctionne, mais avec une architecture V1 : déclencheur Form Trigger natif, matériaux codés en dur dans un node Code, sortie par email, aucune persistance. Il n'expose aucun webhook routé par `action`. Le front est donc développé contre un adaptateur mocké, et ce document fige le contrat que le webhook devra respecter.
 
+### 1.2 Rapport au PRD et au RIF
+
+Le PRD reste la spécification du produit. Sur trois points il est en retard sur la documentation RIF, qui fait autorité et que ce document suit :
+
+| Point | PRD | RIF | Retenu |
+|---|---|---|---|
+| Styles de rendu | cinq | trois (LIB-005 V1.2) | trois |
+| Mode de production | absent | structurant, précède le style (ARCH-001 §6, LIB-006) | déduit automatiquement |
+| Matériau existant conservé | absent | LIB-001 §2, ENG-004 ④ | option dédiée |
+
+La documentation RIF est également muette sur des points que le PRD tranche — les six catégories de matériaux, la référence de dossier, la persistance. Les deux sources se complètent plus qu'elles ne se contredisent.
+
+Aucune terminologie interne du RIF n'apparaît dans l'interface : ni le sigle, ni les identifiants de modules, ni les codes ADR ou TEST (PRD §9). Le mode de production n'est jamais affiché.
+
 ---
 
 ## 2. Décisions
@@ -28,6 +42,8 @@ Côté n8n, le workflow `rendu-formulaire-n8n-v1` existe et fonctionne, mais ave
 | Dépendances ajoutées | Vitest uniquement (dev) — aucune dépendance de production |
 | Transport des images | JSON, data URI base64, redimensionnées à 2048 px côté front |
 | Référence de dossier | Champ texte obligatoire saisi à l'étape 1 |
+| Styles | Les trois styles actifs du RIF |
+| Mode de production | Déduit des réponses, jamais affiché, transmis à n8n |
 | Tests | Vitest sur la logique pure, pas de test de composant ni de parcours |
 | Interface | Sobre et fonctionnelle, Tailwind, une colonne centrée |
 | Nommage | Vocabulaire métier en français dans le code |
@@ -35,7 +51,9 @@ Côté n8n, le workflow `rendu-formulaire-n8n-v1` existe et fonctionne, mais ave
 
 ### 2.1 Nommage
 
-Le domaine est français et le restera : `materiaux`, `cadrage`, `margelles`, `plage`, `volets`. Traduire ce vocabulaire créerait un décalage permanent entre le code, le PRD et la table Supabase. Les identifiants du domaine sont donc en français ; les API React et les conventions du framework restent en anglais.
+Le domaine est français et le restera : `materiaux`, `cadrage`, `margelles`, `plage`, `volets`. Traduire ce vocabulaire créerait un décalage permanent entre le code, le PRD, la documentation RIF et la table Supabase. Les identifiants du domaine sont donc en français ; les API React et les conventions du framework restent en anglais.
+
+Le vocabulaire architectural suit `01B_VOCABULAIRE_ARCHITECTURAL.md` : margelle, plage de piscine, volet, pool house.
 
 ---
 
@@ -49,7 +67,7 @@ app/page.tsx                              monte <FormulaireRendu />
 lib/form/types.ts                         types de l'état et du domaine
 lib/form/etat-initial.ts
 lib/form/reducer.ts                       transitions pures
-lib/form/regles.ts                        logique conditionnelle du PRD
+lib/form/regles.ts                        logique conditionnelle
 lib/form/validation.ts                    franchissabilité des étapes
 lib/form/payload.ts                       construction du corps de `generate`
 lib/form/persistance.ts                   sauvegarde et restauration de session
@@ -96,6 +114,7 @@ type EtatFormulaire = {
     complementaire: ImageChargee | null
     site: ImageChargee | null
   }
+  elementsAPreserver: string
 
   materiaux: Record<Categorie, SelectionMateriau | null>
 
@@ -120,20 +139,23 @@ type ImageChargee = {
 type SelectionMateriau =
   | { origine: 'catalogue'; id: string; terme: string }
   | { origine: 'libre'; terme: string }
+  | { origine: 'existant' }
 
 type TypeProjet   = 'piscine' | 'extension' | 'restructuration' | 'terrasse' | 'pool_house'
 type Usage        = 'permis_de_construire' | 'presentation_client' | 'les_deux'
 type TypeCadrage  = 'perspective' | 'axonometrie'
 type Ciel         = 'degage' | 'legerement_voile' | 'neutre'
 type Categorie    = 'toiture' | 'facade' | 'volets' | 'menuiseries' | 'margelles' | 'plage'
-type Style        = 'administratif_simple' | 'administratif_soigne' | 'presentation_client'
-                  | 'concours_communication' | 'photomontage_administratif'
+type Style        = 'photomontage_administratif' | 'presentation_client' | 'commercial'
+type ModeProduction = 'photomontage_controle' | 'presentation_generative' | 'retexturation_revit'
 ```
 
-Deux champs existent uniquement pour satisfaire une règle du PRD :
+`ModeProduction` n'est pas un champ de l'état : c'est une valeur dérivée, recalculée à la demande par `regles.ts`. La stocker créerait une seconde source de vérité à synchroniser.
+
+Deux champs existent uniquement pour satisfaire une règle :
 
 - `etapeMax` : le PRD exige que les étapes déjà atteintes restent accessibles en arrière. Sans mémoire de la progression, l'indicateur d'étapes ne peut pas distinguer une étape franchie d'une étape à venir.
-- `styleChoisiManuellement` : le PRD veut que l'usage pré-sélectionne un style, et que cette pré-sélection soit écrasée dès que l'utilisateur choisit un style à la main. La règle est inexprimable sans mémoriser l'origine de la valeur courante.
+- `styleChoisiManuellement` : la pré-sélection automatique du style doit être écrasée dès que l'utilisateur choisit à la main. La règle est inexprimable sans mémoriser l'origine de la valeur courante.
 
 ---
 
@@ -141,9 +163,63 @@ Deux champs existent uniquement pour satisfaire une règle du PRD :
 
 Toutes dans `lib/form/regles.ts`, toutes pures.
 
-### 5.1 Champs matériaux affichés
+### 5.1 Mode de production déduit
 
-`champsMateriauxPour(typeProjet): Categorie[]`, transcription directe de la table du PRD §5 étape 3 :
+`modeProduction(etat): ModeProduction`, transcription de la matrice `LIB-006 §5` :
+
+| Photo du site | Cadrage | Mode |
+|---|---|---|
+| fournie | perspective | `photomontage_controle` |
+| fournie | axonometrie | `presentation_generative` |
+| absente | quel qu'il soit | `retexturation_revit` |
+
+Le mode n'est jamais affiché ni proposé au choix. Il commande trois choses : les styles disponibles, l'affichage du bloc environnement, et la clause que n8n ajoutera au prompt (`ENG-002 §3`).
+
+Justification du deuxième cas : un photomontage exige une correspondance de point de vue entre la photographie et la vue géométrique, impossible avec une axonométrie. La photo reste utile comme référence d'ambiance et de matériaux, ce qui correspond exactement à la présentation générative.
+
+### 5.2 Styles disponibles
+
+`stylesDisponibles(mode): Style[]`, transcription de `LIB-006` section « Styles compatibles » :
+
+| Mode | Styles proposables |
+|---|---|
+| `photomontage_controle` | photomontage administratif, présentation client, commercial |
+| `presentation_generative` | présentation client, commercial |
+| `retexturation_revit` | présentation client, commercial |
+
+En pratique : **le style photomontage administratif exige une photo du site et un cadrage en perspective.**
+
+Les deux exclusions ont des fondements distincts, et les deux sources convergent :
+
+- En retexturation Revit, `ADR-013` exclut structurellement le style : son objet est l'intégration à une photographie réelle, absente de ce mode par construction.
+- En présentation générative, le PRD §5 étape 5 l'exclut parce qu'aucun alignement de point de vue n'est possible avec une axonométrie — revendiquer un photomontage y serait faux. `LIB-006` ne l'exclut pas formellement dans ce mode mais le qualifie de rare et mal accordé à sa liberté visuelle. Le PRD étant le plus restrictif des deux et son critère d'acceptation §9 étant explicite, c'est lui qui s'applique.
+
+### 5.3 Correction automatique du style
+
+Traitée dans le reducer, sur toute action modifiant la photo du site ou le type de cadrage : si le style courant ne figure plus dans `stylesDisponibles(mode)`, il bascule sur le résultat de `stylePreselectionne`. La règle s'applique quel que soit l'ordre des saisies, y compris après un retour en arrière et y compris si le style avait été choisi manuellement.
+
+Ce basculement est signalé visiblement à l'étape 5 : un style change sous les yeux de l'utilisateur seulement s'il comprend pourquoi.
+
+### 5.4 Pré-sélection du style
+
+`stylePreselectionne(mode, usage): Style`, transcription de la section « Sélection automatique » de `LIB-005` :
+
+| Mode | Usage | Style |
+|---|---|---|
+| `photomontage_controle` | `permis_de_construire` | photomontage administratif |
+| `photomontage_controle` | `les_deux` | photomontage administratif |
+| `photomontage_controle` | `presentation_client` | présentation client |
+| autres modes | quel qu'il soit | présentation client |
+
+`commercial` n'est jamais pré-sélectionné : `LIB-005 §3` le réserve à une demande explicite et l'exclut de la sélection automatique en toute circonstance.
+
+Le cas `les_deux` suit `LIB-006 §6` : quand plusieurs usages coexistent, le plus exigeant en fidélité prévaut.
+
+La pré-sélection se recalcule à chaque changement de mode ou d'usage tant que `styleChoisiManuellement` est faux. Tout choix de style par l'utilisateur pose ce drapeau à vrai, définitivement pour la session.
+
+### 5.5 Champs matériaux affichés
+
+`champsMateriauxPour(typeProjet): Categorie[]`, transcription de la table du PRD §5 étape 3 :
 
 | Type de projet | Catégories affichées |
 |---|---|
@@ -153,26 +229,17 @@ Toutes dans `lib/form/regles.ts`, toutes pures.
 | Terrasse | aucune |
 | Pool house | toiture, facade, volets, menuiseries, margelles, plage |
 
-Margelles et plage restent deux champs distincts, jamais fusionnés.
+Margelles et plage restent deux champs distincts, jamais fusionnés — ce sont deux ouvrages différents (`01B` §6).
 
-### 5.2 Styles disponibles
+### 5.6 Option « conserver l'existant »
 
-`stylesDisponibles(typeCadrage): Style[]` — `photomontage_administratif` est retiré dès que le cadrage vaut `axonometrie`.
+`conservationExistantProposee(typeProjet, images): boolean` — vraie pour `extension` et `restructuration` lorsqu'une photo du site est fournie.
 
-### 5.3 Correction automatique du style
+Quand elle est vraie, chaque champ matériau affiché propose en tête une option « conserver l'existant visible sur la photo », produisant une `SelectionMateriau` d'origine `existant`.
 
-Traité dans le reducer, sur l'action de changement de cadrage : si le cadrage passe à `axonometrie` alors que le style courant est `photomontage_administratif`, le style bascule sur `administratif_soigne`. La règle s'applique quel que soit l'ordre des saisies, y compris si le style avait été choisi manuellement avant le retour en arrière.
+Fondement : `LIB-001 §2`. Lorsque la photographie montre un bâtiment existant, son aspect matériel réel fait référence pour tout élément visible à la fois sur la photo et sur la vue géométrique. Le matériau n'est alors ni deviné ni choisi dans un catalogue : il est repris tel qu'il apparaît. Sans cette option, le formulaire force un choix de catalogue sur une façade que l'utilisateur veut précisément laisser intacte, et le prompt reçoit une instruction qui contredit la photo.
 
-### 5.4 Pré-sélection du style
-
-Sur changement d'usage, si `styleChoisiManuellement` est faux :
-
-- usage `presentation_client` → style `presentation_client`
-- tout autre usage → style `administratif_soigne`
-
-Tout choix de style par l'utilisateur pose `styleChoisiManuellement` à vrai, définitivement pour la session.
-
-### 5.5 Matériau en saisie libre
+### 5.7 Matériau en saisie libre
 
 Chaque champ matériau propose, en plus des termes du catalogue, une entrée « Autre texture ». La sélectionner révèle un champ texte. La valeur produit une `SelectionMateriau` d'origine `libre`, affichée avec une mention visible « non calibré ».
 
@@ -184,7 +251,30 @@ Une valeur libre :
 
 La séparation des deux tableaux dans le payload est le mécanisme qui garantit le critère « une saisie libre n'entre jamais dans un prompt » : n8n construit le prompt à partir de `materiaux` seul, et crée les lignes `statut = 'a_calibrer'` à partir de `materiaux_libres` seul.
 
-### 5.6 Franchissabilité des étapes
+### 5.8 Bloc environnement conditionnel
+
+`champsEnvironnementAffiches(mode)` :
+
+| Mode | Végétation et éléments à retirer | Ciel |
+|---|---|---|
+| `photomontage_controle` | affichés | **masqué** |
+| `presentation_generative` | affichés | affiché |
+| `retexturation_revit` | **masqués** | affiché |
+
+Deux règles distinctes du référentiel :
+
+- Le ciel disparaît en photomontage contrôlé parce que la photographie est le canevas et que sa lumière fait alors autorité (`REF-001 §9`, `ENG-004 ⑥`). Un choix de ciel y serait une instruction contredisant une source autoritaire. L'étape affiche à la place une phrase indiquant que la lumière et le ciel seront repris de la photo.
+- La végétation et les éléments à retirer disparaissent sans photo : il n'existe alors aucun environnement réel à conserver ou à supprimer (`ENG-004 ⑤`).
+
+### 5.9 Éléments à préserver
+
+Champ texte libre à l'étape 2, sous les images, invitant à nommer un par un les éléments secondaires à ne pas perdre : garde-corps, murets, escaliers, panneaux, différences de matériau sur un même ouvrage.
+
+Fondement : `ENG-001 §4.2`. Un élément secondaire non nommé individuellement risque de ne pas être reconstruit fidèlement, même sous une consigne générale de préservation de la géométrie — le moteur tient les grandes masses et improvise sur les détails ambigus qui ne lui ont pas été signalés un par un. Une consigne générique de type « respecter tous les éléments » ne produit pas cet effet.
+
+Le champ est facultatif et alimente une section dédiée du prompt, distincte des précisions générales de l'étape 6.
+
+### 5.10 Franchissabilité des étapes
 
 `etapeFranchissable(etat, etape): boolean` dans `lib/form/validation.ts`.
 
@@ -194,15 +284,15 @@ La séparation des deux tableaux dans le payload est le mécanisme qui garantit 
 | 2 | `typeCadrage` renseigné, image de cadrage chargée |
 | 3 | aucune |
 | 4 | aucune |
-| 5 | `style` renseigné |
+| 5 | `style` renseigné et présent dans `stylesDisponibles(mode)` |
 | 6 | aucune |
 | 7 | toutes les conditions ci-dessus réunies pour autoriser l'envoi |
 
-Aucun matériau n'est obligatoire (voir §11, arbitrage 2). Le retour en arrière n'est jamais conditionné.
+Aucun matériau n'est obligatoire (voir §12, arbitrage 2). Le retour en arrière n'est jamais conditionné.
 
-### 5.7 Message conditionnel sur la photo de site
+### 5.11 Message conditionnel sur la photo de site
 
-Quand le cadrage vaut `axonometrie`, l'étape 2 indique que la photo du site servira de référence d'ambiance et de matériaux seulement, aucun alignement n'étant possible avec une vue axonométrique (PRD §5 étape 2).
+Quand le cadrage vaut `axonometrie` et qu'une photo est fournie, l'étape 2 indique que la photo servira de référence d'ambiance et de matériaux seulement, aucun alignement n'étant possible avec une vue axonométrique (PRD §5 étape 2).
 
 ---
 
@@ -259,28 +349,30 @@ Seules les lignes `statut = 'valide'` sont retournées. `fragment_prompt` n'est 
 {
   "action": "generate",
   "reference": "2026-042",
-  "projet":  { "type": "piscine", "usage": "permis_de_construire" },
+  "projet":  { "type": "extension", "usage": "permis_de_construire" },
   "cadrage": { "type": "perspective" },
+  "mode_production": "photomontage_controle",
   "images": {
     "cadrage":        "data:image/jpeg;base64,...",
     "complementaire": null,
     "site":           "data:image/jpeg;base64,..."
   },
+  "elements_a_preserver": "garde-corps métallique du balcon nord, muret en pierre le long de l'accès",
   "materiaux": {
-    "toiture":     null,
-    "facade":      null,
+    "toiture":     { "origine": "catalogue", "id": "uuid", "terme": "Tuiles canal terre cuite" },
+    "facade":      { "origine": "existant" },
     "volets":      null,
-    "menuiseries": null,
-    "margelles":   { "id": "uuid", "terme": "Pierre reconstituée" },
-    "plage":       { "id": "uuid", "terme": "Travertin" }
+    "menuiseries": { "origine": "catalogue", "id": "uuid", "terme": "Aluminium gris anthracite" },
+    "margelles":   null,
+    "plage":       null
   },
-  "materiaux_libres": [ { "categorie": "facade", "terme": "enduit chaux teinté" } ],
+  "materiaux_libres": [ { "categorie": "volets", "terme": "bois peint vert olive" } ],
   "environnement": {
     "conserver_vegetation": true,
     "elements_a_retirer": "",
-    "ciel": "degage"
+    "ciel": null
   },
-  "style": "administratif_soigne",
+  "style": "photomontage_administratif",
   "precisions": ""
 }
 
@@ -291,7 +383,13 @@ Seules les lignes `statut = 'valide'` sont retournées. `fragment_prompt` n'est 
 { "erreur": { "code": "materiau_inconnu", "message": "..." } }
 ```
 
-Les catégories non applicables au type de projet sont présentes à `null` plutôt qu'absentes : la forme du payload ne dépend pas des choix de l'utilisateur, ce qui simplifie le traitement côté n8n et rend les tests de `payload.ts` déterministes.
+Trois conventions de forme, choisies pour que le traitement côté n8n soit déterministe :
+
+- Les catégories non applicables au type de projet sont présentes à `null` plutôt qu'absentes. La forme du payload ne dépend jamais des choix de l'utilisateur.
+- `materiaux` porte toujours un discriminant `origine`. La valeur `existant` signifie « reprendre le matériau tel qu'il apparaît sur la photo, ne pas l'interpréter » : n8n n'ajoute alors aucun `fragment_prompt` pour cette catégorie, mais une instruction de conservation.
+- Les champs d'environnement masqués par la règle §5.8 partent à `null`, jamais avec leur valeur par défaut. Un `ciel` à `null` indique à n8n que la photographie fait autorité sur la lumière.
+
+`mode_production` détermine la clause que n8n ajoute au prompt (`ENG-002 §3`). Le front le calcule parce qu'il détient déjà toutes les données de la matrice ; le recalculer côté n8n créerait deux implémentations de la même règle, avec le risque qu'elles divergent.
 
 ---
 
@@ -322,32 +420,50 @@ Pas de timeout court côté client. Compteur d'attente visible, message explicat
 
 ---
 
-## 11. Arbitrages sur les ambiguïtés du PRD
+## 11. Parcours résultant
 
-1. **Un projet Terrasse n'a aucun matériau à renseigner.** L'application littérale de la table §5 laisse l'étape 3 vide pour ce type de projet. L'étape affiche « aucun matériau à renseigner pour ce type de projet » et reste franchissable. Si une terrasse doit porter un matériau de sol, c'est une catégorie manquante dans la table `materiaux`, à traiter côté données et non côté front.
-2. **Aucun matériau n'est obligatoire.** Le PRD ne l'exige nulle part, contrairement au formulaire n8n V1 où toutes les listes étaient `requiredField`. Les champs restent facultatifs et la fiche projet de l'étape 7 signale visiblement ceux qui sont vides.
-3. **La photo du site reste facultative**, conformément au PRD §5 étape 2, alors que le formulaire n8n V1 l'exigeait. En son absence, le prompt d'environnement se limite au ciel neutre — comportement déjà couvert par le system prompt existant.
+Récapitulatif des sept étapes après application des règles ci-dessus.
+
+| Étape | Contenu |
+|---|---|
+| 1 — Identification | Référence de dossier, type de projet, usage du rendu |
+| 2 — Documents | Type de cadrage, vue de cadrage, vue complémentaire, photo du site, éléments à préserver |
+| 3 — Matériaux | Catégories selon le type de projet, option « conserver l'existant » en extension et restructuration, saisie libre partout |
+| 4 — Environnement | Végétation et éléments à retirer si une photo existe, ciel si la photo n'est pas le canevas |
+| 5 — Style | Deux ou trois styles selon le mode déduit, un pré-sélectionné |
+| 6 — Précisions | Texte libre, récapitulatif des matériaux non calibrés |
+| 7 — Fiche projet | Synthèse de tous les choix, accès direct à chaque étape, lancement |
 
 ---
 
-## 12. Tests
+## 12. Arbitrages sur les ambiguïtés du PRD
+
+1. **Un projet Terrasse n'a aucun matériau à renseigner.** L'application littérale de la table §5 laisse l'étape 3 vide pour ce type de projet. L'étape affiche « aucun matériau à renseigner pour ce type de projet » et reste franchissable. Si une terrasse doit porter un matériau de sol, c'est une catégorie manquante dans la table `materiaux`, à traiter côté données et non côté front.
+2. **Aucun matériau n'est obligatoire.** Le PRD ne l'exige nulle part, contrairement au formulaire n8n V1 où toutes les listes étaient `requiredField`. Les champs restent facultatifs et la fiche projet de l'étape 7 signale visiblement ceux qui sont vides.
+3. **La photo du site reste facultative**, conformément au PRD §5 étape 2, alors que le formulaire n8n V1 l'exigeait. Son absence bascule le mode en retexturation Revit et retire le style photomontage administratif, ce qui rend la conséquence visible à l'utilisateur sans le bloquer.
+4. **Les éléments secondaires — personnages, véhicules, mobilier — n'ont pas de champ dédié.** `REF-001 §10` les interdit par défaut sauf demande explicite, et le prompt système porte déjà cette interdiction. Une demande explicite passe par les précisions libres de l'étape 6. Ajouter un champ dédié pour une réponse qui est « non » dans l'immense majorité des cas n'est pas justifié.
+5. **La compatibilité des caméras n'est pas évaluée par le formulaire.** `REF-001 §5` et `LIB-004 §5` en font un préalable à toute production administrative, mais c'est un jugement visuel qui relève du contrôle après génération, hors lot. À reprendre lors de la conception de l'écran post-génération.
+
+---
+
+## 13. Tests
 
 Vitest, sur la logique pure uniquement. Chaque fichier de test est posé à côté du module qu'il couvre (`lib/form/regles.test.ts` et ainsi de suite), pas dans un répertoire `__tests__` séparé.
 
 | Fichier | Couverture |
 |---|---|
-| `regles.test.ts` | les cinq tables de champs matériaux, retrait du photomontage en axonométrie dans les deux sens de saisie, pré-sélection de style et son écrasement |
-| `validation.test.ts` | franchissabilité de chaque étape, référence vide ou blanche, cadrage sans image |
-| `payload.test.ts` | payload complet, catégories non applicables à `null`, matériaux libres présents dans `materiaux_libres` et absents de `materiaux` |
-| `reducer.test.ts` | correction automatique du style, progression de `etapeMax`, retour arrière sans perte |
+| `regles.test.ts` | les trois cas de la matrice de mode, les styles disponibles par mode, la pré-sélection pour chaque couple mode × usage, les cinq tables de champs matériaux, la condition d'affichage de l'option « conserver l'existant », les trois cas du bloc environnement |
+| `validation.test.ts` | franchissabilité de chaque étape, référence vide ou blanche, cadrage sans image, style devenu indisponible |
+| `payload.test.ts` | payload complet, catégories non applicables à `null`, discriminant `origine` sur chaque sélection, champs d'environnement masqués à `null`, matériaux libres présents dans `materiaux_libres` et absents de `materiaux` |
+| `reducer.test.ts` | correction automatique du style au retrait de la photo et au passage en axonométrie, progression de `etapeMax`, retour arrière sans perte |
 | `persistance.test.ts` | aller-retour sessionStorage et IndexedDB, restauration après échec partiel |
 | `redimensionner.test.ts` | plafond 2048 px, rapport d'aspect conservé, pas de montée en résolution |
 
-Ces tests couvrent directement les critères d'acceptation « Formulaire » du PRD §9.
+Ces tests couvrent les critères d'acceptation « Formulaire » du PRD §9 ainsi que les règles RIF transcrites au §5.
 
 ---
 
-## 13. Livrables
+## 14. Livrables
 
 - Le formulaire complet, sept étapes, règles conditionnelles, persistance de session
 - La suite de tests Vitest et sa configuration
@@ -356,12 +472,35 @@ Ces tests couvrent directement les critères d'acceptation « Formulaire » du P
 
 ---
 
-## 14. Dépendances externes et suites
+## 15. Dépendances externes et suites
 
 Hors périmètre de ce lot, mais nécessaires avant un premier essai réel :
 
 - Webhook n8n exposant `get_materiaux` et `generate` selon le contrat du §8, avec un node *Respond to Webhook* — le workflow actuel se termine par un envoi d'email et ne renvoie rien.
 - Table `materiaux` alimentée. Les dictionnaires `toitureDesc`, `facadeDesc` et `menuiseriesDesc` du node `Construction Prompt` fournissent vingt entrées avec leurs `fragment_prompt` déjà calibrés. Les catégories volets, margelles et plage n'existent nulle part et sont entièrement à rédiger.
-- Blocs de style : le workflow en contient trois, le PRD en exige cinq. Manquent `administratif_simple` et `administratif_soigne`.
+- Traitement de l'origine `existant` côté n8n : n'ajouter aucun fragment de matériau pour la catégorie concernée, mais une instruction de conservation de l'aspect visible sur la photographie.
+- Clause de mode dans le prompt selon `ENG-002 §3`, choisie d'après `mode_production` reçu du front.
 - **Rotation de la clé fal.ai**, exposée en clair dans les deux nodes HTTP Request du workflow exporté. La nouvelle clé doit vivre dans une credential, jamais dans le champ `value` d'un node, faute de quoi elle repart dans chaque export.
 - Vérifier si le n8n est derrière Cloudflare en mode proxy — détermine si la coupure à cent secondes s'applique.
+- Nettoyage du workflow : il contient deux branches jumelles complètes, dupliquées à l'identique.
+
+Signalé sans action requise dans ce lot : le prompt système actuel du workflow emploie abondamment les termes « 3D » et « render », que `LIB-001 §8A` proscrit dans tout texte transmis au moteur au motif qu'ils orientent la génération vers une esthétique de synthèse, y compris en formulation négative. À arbitrer côté n8n, le prompt donnant par ailleurs des résultats jugés satisfaisants.
+
+---
+
+## 16. Sources RIF utilisées
+
+| Module | Apport à ce document |
+|---|---|
+| `ARCH-001` §6 | Séparation mode de production / style, ordre de sélection |
+| `REF-001` §9 | La lumière de la photographie fait autorité quand elle est le canevas |
+| `REF-001` §10 | Éléments secondaires interdits par défaut |
+| `REF-003` | Vocabulaire architectural : margelle, plage, volet, pool house |
+| `ENG-001` §4.2 | Nécessité de nommer individuellement les éléments à préserver |
+| `ENG-002` §3 | Clauses de prompt par mode, consommées côté n8n |
+| `ENG-004` ⑤⑥ | Questions retirées selon le mode : environnement sans photo, lumière avec photo |
+| `LIB-001` §2 | Matériau existant repris tel quel, jamais interprété |
+| `LIB-001` §8A | Règles de rédaction du texte transmis au moteur (côté n8n) |
+| `LIB-005` | Les trois styles actifs, leurs usages, la sélection automatique |
+| `LIB-006` | Matrice de déduction du mode, styles compatibles par mode |
+| `LIB-002`, `LIB-004` | Contrôle et décisions — pour l'écran post-génération, hors lot |
