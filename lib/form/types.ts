@@ -11,13 +11,22 @@ export type Usage = 'permis_de_construire' | 'presentation_client' | 'les_deux'
 
 export type TypeCadrage = 'perspective' | 'axonometrie'
 
-export type Categorie =
-  | 'toiture'
-  | 'facade'
-  | 'volets'
-  | 'menuiseries'
-  | 'margelles'
-  | 'plage'
+/**
+ * L'union est derivee du tableau, et non l'inverse : une annotation
+ * `readonly Categorie[]` verifierait que chaque element est une categorie,
+ * jamais que les six y sont. Un tableau incomplet compilerait en silence et
+ * `payload.ts` enverrait une cle absente la ou le contrat exige `null`.
+ */
+export const CATEGORIES = [
+  'toiture',
+  'facade',
+  'volets',
+  'menuiseries',
+  'margelles',
+  'plage',
+] as const
+
+export type Categorie = (typeof CATEGORIES)[number]
 
 export type Style =
   | 'photomontage_administratif'
@@ -90,12 +99,3 @@ export type EtatFormulaire = {
 
   precisions: string
 }
-
-export const CATEGORIES: readonly Categorie[] = [
-  'toiture',
-  'facade',
-  'volets',
-  'menuiseries',
-  'margelles',
-  'plage',
-]
