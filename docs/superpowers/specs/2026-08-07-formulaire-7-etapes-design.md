@@ -20,7 +20,7 @@ Côté n8n, le workflow `rendu-formulaire-n8n-v1` existe et fonctionne, mais ave
 
 ### 1.2 Rapport au PRD et au RIF
 
-Le PRD reste la spécification du produit. Sur trois points il est en retard sur la documentation RIF, qui fait autorité et que ce document suit :
+Le PRD reste la spécification du produit. La documentation RIF cadre le concept et apporte des règles éprouvées ; elle ne fait pas loi. Sur trois points elle comble une lacune du PRD et ce document la suit :
 
 | Point | PRD | RIF | Retenu |
 |---|---|---|---|
@@ -28,7 +28,9 @@ Le PRD reste la spécification du produit. Sur trois points il est en retard sur
 | Mode de production | absent | structurant, précède le style (ARCH-001 §6, LIB-006) | déduit automatiquement |
 | Matériau existant conservé | absent | LIB-001 §2, ENG-004 ④ | option dédiée |
 
-La documentation RIF est également muette sur des points que le PRD tranche — les six catégories de matériaux, la référence de dossier, la persistance. Les deux sources se complètent plus qu'elles ne se contredisent.
+La documentation RIF est également muette sur des points que le PRD tranche — les six catégories de matériaux, la référence de dossier, la persistance.
+
+**Principe d'arbitrage.** Le framework est retenu quand il apporte une règle de cohérence ou un savoir de terrain : ce qui empêche de produire un rendu faux, ou ce qui traduit un comportement observé du moteur. Il est écarté quand il restreint un choix de création. Le formulaire n'interdit ni ne corrige une intention esthétique de l'utilisateur, et ne commente pas ses choix d'ambiance. Les préférences documentées dans le framework — notamment les interdictions de `LIB-005 §5` sur les styles administratifs — restent consignées ici à titre d'information, sans traduction en comportement.
 
 Aucune terminologie interne du RIF n'apparaît dans l'interface : ni le sigle, ni les identifiants de modules, ni les codes ADR ou TEST (PRD §9). Le mode de production n'est jamais affiché.
 
@@ -119,8 +121,10 @@ type EtatFormulaire = {
   materiaux: Record<Categorie, SelectionMateriau | null>
 
   conserverVegetation: boolean    // vrai par défaut
+  aspectPelouse: AspectPelouse
   elementsARetirer: string
   ciel: Ciel
+  eclairages: Eclairages          // sans objet hors fin de journée et crépuscule
 
   style: Style | null
   styleChoisiManuellement: boolean
@@ -144,7 +148,15 @@ type SelectionMateriau =
 type TypeProjet   = 'piscine' | 'extension' | 'restructuration' | 'terrasse' | 'pool_house'
 type Usage        = 'permis_de_construire' | 'presentation_client' | 'les_deux'
 type TypeCadrage  = 'perspective' | 'axonometrie'
-type Ciel         = 'degage' | 'legerement_voile' | 'neutre'
+type Ciel         = 'reprendre_photo' | 'degage' | 'legerement_voile' | 'neutre_diffus'
+                  | 'fin_de_journee' | 'crepuscule'
+type AspectPelouse = 'telle_quelle' | 'tondue_soignee' | 'fleurie'
+type Eclairages   = {
+  margelles: boolean
+  sousMarin: boolean
+  appliquesFacade: boolean
+  interieurVisible: boolean
+}
 type Categorie    = 'toiture' | 'facade' | 'volets' | 'menuiseries' | 'margelles' | 'plage'
 type Style        = 'photomontage_administratif' | 'presentation_client' | 'commercial'
 type ModeProduction = 'photomontage_controle' | 'presentation_generative' | 'retexturation_revit'
@@ -173,7 +185,7 @@ Toutes dans `lib/form/regles.ts`, toutes pures.
 | fournie | axonometrie | `presentation_generative` |
 | absente | quel qu'il soit | `retexturation_revit` |
 
-Le mode n'est jamais affiché ni proposé au choix. Il commande trois choses : les styles disponibles, l'affichage du bloc environnement, et la clause que n8n ajoutera au prompt (`ENG-002 §3`).
+Le mode n'est jamais affiché ni proposé au choix. Il commande deux choses, et rien d'autre : les styles disponibles à l'étape 5, et la clause que n8n ajoutera au prompt (`ENG-002 §3`). Il n'a aucun effet sur l'étape 4 (voir §5.8).
 
 Justification du deuxième cas : un photomontage exige une correspondance de point de vue entre la photographie et la vue géométrique, impossible avec une axonométrie. La photo reste utile comme référence d'ambiance et de matériaux, ce qui correspond exactement à la présentation générative.
 
@@ -251,20 +263,44 @@ Une valeur libre :
 
 La séparation des deux tableaux dans le payload est le mécanisme qui garantit le critère « une saisie libre n'entre jamais dans un prompt » : n8n construit le prompt à partir de `materiaux` seul, et crée les lignes `statut = 'a_calibrer'` à partir de `materiaux_libres` seul.
 
-### 5.8 Bloc environnement conditionnel
+### 5.8 Environnement — toujours paramétrable
 
-`champsEnvironnementAffiches(mode)` :
+**Tous les champs de l'étape 4 sont affichés en permanence, quel que soit le mode de production.** Le mode n'a aucun effet sur cette étape.
 
-| Mode | Végétation et éléments à retirer | Ciel |
-|---|---|---|
-| `photomontage_controle` | affichés | **masqué** |
-| `presentation_generative` | affichés | affiché |
-| `retexturation_revit` | **masqués** | affiché |
+`REF-001 §9` et `ENG-004 ⑥` font de la lumière de la photographie la référence quand celle-ci est le canevas, et `ENG-004 ⑤` retire la question de l'environnement en l'absence de photo. Ces règles décrivent des valeurs par défaut raisonnables, pas des interdictions : `REF-001 §3` prévoit explicitement que les informations validées par l'utilisateur complètent les sources. Une demande d'ambiance de fin de journée ou de pelouse fleurie est une intention de création, et le formulaire ne la refuse pas.
 
-Deux règles distinctes du référentiel :
+Ces règles se traduisent donc en pré-sélections, jamais en masquages.
 
-- Le ciel disparaît en photomontage contrôlé parce que la photographie est le canevas et que sa lumière fait alors autorité (`REF-001 §9`, `ENG-004 ⑥`). Un choix de ciel y serait une instruction contredisant une source autoritaire. L'étape affiche à la place une phrase indiquant que la lumière et le ciel seront repris de la photo.
-- La végétation et les éléments à retirer disparaissent sans photo : il n'existe alors aucun environnement réel à conserver ou à supprimer (`ENG-004 ⑤`).
+#### Ciel et lumière
+
+| Valeur | Note |
+|---|---|
+| Reprendre la lumière de la photo | pré-sélectionnée quand une photo du site est fournie |
+| Dégagé | |
+| Légèrement voilé | |
+| Neutre diffus | pré-sélectionnée en l'absence de photo (`REF-001 §9`) |
+| Fin de journée, lumière chaude | |
+| Crépuscule | |
+
+`cielProposeParDefaut(images): Ciel` porte la pré-sélection. Elle est écrasée dès que l'utilisateur choisit une valeur, selon le même mécanisme que le style (§5.4).
+
+#### Éclairages
+
+Une question complémentaire apparaît lorsque le ciel vaut `fin_de_journee` ou `crepuscule`, et seulement dans ce cas : quels éclairages activer, parmi margelles, éclairage sous-marin de la piscine, appliques de façade, intérieur visible par les baies. Quatre interrupteurs, tous à faux par défaut.
+
+Fondement : `ENG-004 §4.3`. Sans cette question, une ambiance crépusculaire produit une maison éteinte, ce qui est rarement l'effet recherché. Les valeurs de piscine — margelles et sous-marin — ne sont proposées que pour les types de projet comportant un bassin, soit Piscine et Pool house.
+
+#### Végétation
+
+| Champ | Valeurs |
+|---|---|
+| Conserver la végétation existante | interrupteur, vrai par défaut |
+| Aspect de la pelouse | telle quelle · tondue et soignée · fleurie, type prairie avec marguerites |
+| Éléments à retirer | texte court |
+
+L'interrupteur de conservation reste affiché même sans photo du site. Il est alors sans effet pratique, mais le masquer obligerait l'utilisateur à comprendre une règle implicite pour retrouver un champ disparu.
+
+Note de calibration, sans effet sur le front : le PRD §6.1 impose que toute mention de variation naturelle de couleur pour la végétation soit bornée, faute de quoi le résultat prend un aspect irrégulier et maladif. Les trois fragments d'aspect de pelouse sont à rédiger côté n8n en tenant compte de cette contrainte.
 
 ### 5.9 Éléments à préserver
 
@@ -369,8 +405,15 @@ Seules les lignes `statut = 'valide'` sont retournées. `fragment_prompt` n'est 
   "materiaux_libres": [ { "categorie": "volets", "terme": "bois peint vert olive" } ],
   "environnement": {
     "conserver_vegetation": true,
+    "aspect_pelouse": "tondue_soignee",
     "elements_a_retirer": "",
-    "ciel": null
+    "ciel": "fin_de_journee",
+    "eclairages": {
+      "margelles": true,
+      "sous_marin": true,
+      "appliques_facade": false,
+      "interieur_visible": true
+    }
   },
   "style": "photomontage_administratif",
   "precisions": ""
@@ -387,7 +430,7 @@ Trois conventions de forme, choisies pour que le traitement côté n8n soit dét
 
 - Les catégories non applicables au type de projet sont présentes à `null` plutôt qu'absentes. La forme du payload ne dépend jamais des choix de l'utilisateur.
 - `materiaux` porte toujours un discriminant `origine`. La valeur `existant` signifie « reprendre le matériau tel qu'il apparaît sur la photo, ne pas l'interpréter » : n8n n'ajoute alors aucun `fragment_prompt` pour cette catégorie, mais une instruction de conservation.
-- Les champs d'environnement masqués par la règle §5.8 partent à `null`, jamais avec leur valeur par défaut. Un `ciel` à `null` indique à n8n que la photographie fait autorité sur la lumière.
+- `eclairages` vaut `null` dès que le ciel n'est ni `fin_de_journee` ni `crepuscule` : la question n'a alors pas été posée, et un objet de quatre `false` serait indiscernable d'un choix explicite de tout éteindre. Un `ciel` à `reprendre_photo` indique à n8n de suivre la lumière de la photographie.
 
 `mode_production` détermine la clause que n8n ajoute au prompt (`ENG-002 §3`). Le front le calcule parce qu'il détient déjà toutes les données de la matrice ; le recalculer côté n8n créerait deux implémentations de la même règle, avec le risque qu'elles divergent.
 
@@ -429,7 +472,7 @@ Récapitulatif des sept étapes après application des règles ci-dessus.
 | 1 — Identification | Référence de dossier, type de projet, usage du rendu |
 | 2 — Documents | Type de cadrage, vue de cadrage, vue complémentaire, photo du site, éléments à préserver |
 | 3 — Matériaux | Catégories selon le type de projet, option « conserver l'existant » en extension et restructuration, saisie libre partout |
-| 4 — Environnement | Végétation et éléments à retirer si une photo existe, ciel si la photo n'est pas le canevas |
+| 4 — Environnement | Conservation de la végétation, aspect de la pelouse, éléments à retirer, ciel et lumière, éclairages si l'ambiance est crépusculaire |
 | 5 — Style | Deux ou trois styles selon le mode déduit, un pré-sélectionné |
 | 6 — Précisions | Texte libre, récapitulatif des matériaux non calibrés |
 | 7 — Fiche projet | Synthèse de tous les choix, accès direct à chaque étape, lancement |
@@ -443,6 +486,7 @@ Récapitulatif des sept étapes après application des règles ci-dessus.
 3. **La photo du site reste facultative**, conformément au PRD §5 étape 2, alors que le formulaire n8n V1 l'exigeait. Son absence bascule le mode en retexturation Revit et retire le style photomontage administratif, ce qui rend la conséquence visible à l'utilisateur sans le bloquer.
 4. **Les éléments secondaires — personnages, véhicules, mobilier — n'ont pas de champ dédié.** `REF-001 §10` les interdit par défaut sauf demande explicite, et le prompt système porte déjà cette interdiction. Une demande explicite passe par les précisions libres de l'étape 6. Ajouter un champ dédié pour une réponse qui est « non » dans l'immense majorité des cas n'est pas justifié.
 5. **La compatibilité des caméras n'est pas évaluée par le formulaire.** `REF-001 §5` et `LIB-004 §5` en font un préalable à toute production administrative, mais c'est un jugement visuel qui relève du contrôle après génération, hors lot. À reprendre lors de la conception de l'écran post-génération.
+6. **Aucun avertissement de cohérence entre l'ambiance et le style.** `LIB-005 §5` proscrit les couchers de soleil et les scènes nocturnes pour les styles administratifs, et réserve le crépuscule au style Commercial. Le formulaire ne le signale pas, ne bascule pas le style et ne bloque pas l'envoi : ces règles relèvent de la préférence esthétique, pas de la cohérence technique, et le choix appartient à l'utilisateur. Voir le principe d'arbitrage du §1.2.
 
 ---
 
@@ -452,9 +496,9 @@ Vitest, sur la logique pure uniquement. Chaque fichier de test est posé à côt
 
 | Fichier | Couverture |
 |---|---|
-| `regles.test.ts` | les trois cas de la matrice de mode, les styles disponibles par mode, la pré-sélection pour chaque couple mode × usage, les cinq tables de champs matériaux, la condition d'affichage de l'option « conserver l'existant », les trois cas du bloc environnement |
+| `regles.test.ts` | les trois cas de la matrice de mode, les styles disponibles par mode, la pré-sélection de style pour chaque couple mode × usage, les cinq tables de champs matériaux, la condition d'affichage de l'option « conserver l'existant », la pré-sélection du ciel selon la présence d'une photo, l'apparition des éclairages sur les deux seules valeurs de ciel concernées, le retrait des éclairages de piscine hors projets à bassin |
 | `validation.test.ts` | franchissabilité de chaque étape, référence vide ou blanche, cadrage sans image, style devenu indisponible |
-| `payload.test.ts` | payload complet, catégories non applicables à `null`, discriminant `origine` sur chaque sélection, champs d'environnement masqués à `null`, matériaux libres présents dans `materiaux_libres` et absents de `materiaux` |
+| `payload.test.ts` | payload complet, catégories non applicables à `null`, discriminant `origine` sur chaque sélection, `eclairages` à `null` hors ambiance crépusculaire, matériaux libres présents dans `materiaux_libres` et absents de `materiaux` |
 | `reducer.test.ts` | correction automatique du style au retrait de la photo et au passage en axonométrie, progression de `etapeMax`, retour arrière sans perte |
 | `persistance.test.ts` | aller-retour sessionStorage et IndexedDB, restauration après échec partiel |
 | `redimensionner.test.ts` | plafond 2048 px, rapport d'aspect conservé, pas de montée en résolution |
@@ -479,6 +523,7 @@ Hors périmètre de ce lot, mais nécessaires avant un premier essai réel :
 - Webhook n8n exposant `get_materiaux` et `generate` selon le contrat du §8, avec un node *Respond to Webhook* — le workflow actuel se termine par un envoi d'email et ne renvoie rien.
 - Table `materiaux` alimentée. Les dictionnaires `toitureDesc`, `facadeDesc` et `menuiseriesDesc` du node `Construction Prompt` fournissent vingt entrées avec leurs `fragment_prompt` déjà calibrés. Les catégories volets, margelles et plage n'existent nulle part et sont entièrement à rédiger.
 - Traitement de l'origine `existant` côté n8n : n'ajouter aucun fragment de matériau pour la catégorie concernée, mais une instruction de conservation de l'aspect visible sur la photographie.
+- Fragments de prompt à rédiger pour les nouvelles valeurs d'environnement : six ambiances de ciel, trois aspects de pelouse, quatre éclairages. Le workflow actuel ne couvre aucune de ces valeurs. Les trois fragments de pelouse doivent respecter la contrainte du PRD §6.1 sur la variation de couleur bornée.
 - Clause de mode dans le prompt selon `ENG-002 §3`, choisie d'après `mode_production` reçu du front.
 - **Rotation de la clé fal.ai**, exposée en clair dans les deux nodes HTTP Request du workflow exporté. La nouvelle clé doit vivre dans une credential, jamais dans le champ `value` d'un node, faute de quoi elle repart dans chaque export.
 - Vérifier si le n8n est derrière Cloudflare en mode proxy — détermine si la coupure à cent secondes s'applique.
@@ -493,12 +538,14 @@ Signalé sans action requise dans ce lot : le prompt système actuel du workflow
 | Module | Apport à ce document |
 |---|---|
 | `ARCH-001` §6 | Séparation mode de production / style, ordre de sélection |
-| `REF-001` §9 | La lumière de la photographie fait autorité quand elle est le canevas |
+| `REF-001` §3 | Les informations validées par l'utilisateur complètent les sources |
+| `REF-001` §9 | Lumière de la photographie et lumière neutre à défaut — retenues comme pré-sélections |
 | `REF-001` §10 | Éléments secondaires interdits par défaut |
 | `REF-003` | Vocabulaire architectural : margelle, plage, volet, pool house |
 | `ENG-001` §4.2 | Nécessité de nommer individuellement les éléments à préserver |
 | `ENG-002` §3 | Clauses de prompt par mode, consommées côté n8n |
-| `ENG-004` ⑤⑥ | Questions retirées selon le mode : environnement sans photo, lumière avec photo |
+| `ENG-004` ⑤⑥ | Valeurs par défaut de l'environnement et de la lumière selon la présence d'une photo |
+| `ENG-004` §4.3 | Question complémentaire sur les éclairages en ambiance de fin de journée ou de crépuscule |
 | `LIB-001` §2 | Matériau existant repris tel quel, jamais interprété |
 | `LIB-001` §8A | Règles de rédaction du texte transmis au moteur (côté n8n) |
 | `LIB-005` | Les trois styles actifs, leurs usages, la sélection automatique |
