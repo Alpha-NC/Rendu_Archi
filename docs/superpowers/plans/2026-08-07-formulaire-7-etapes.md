@@ -779,7 +779,7 @@ export function eclairagesPiscineProposes(typeProjet: TypeProjet | null): boolea
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- regles`
-Expected: PASS, 31 tests.
+Expected: PASS, 30 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1274,7 +1274,7 @@ function normaliser(etat: EtatFormulaire): EtatFormulaire {
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- reducer`
-Expected: PASS, 10 tests.
+Expected: PASS, 11 tests.
 
 - [ ] **Step 5: Lancer toute la suite**
 
