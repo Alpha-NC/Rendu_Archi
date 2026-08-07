@@ -102,6 +102,24 @@ export function cielProposeParDefaut(images: ImagesFormulaire): Ciel {
   return images.site ? 'reprendre_photo' : 'neutre_diffus'
 }
 
+const CIELS_EXPLICITES: Ciel[] = [
+  'degage',
+  'legerement_voile',
+  'neutre_diffus',
+  'fin_de_journee',
+  'crepuscule',
+]
+
+/**
+ * Ambiances proposables, dans l'ordre d'affichage.
+ * « Reprendre la lumiere de la photo » disparait sans photo du site : cette
+ * valeur demanderait a n8n de suivre une photographie absente du payload.
+ * Oter une option devenue sans referent n'est pas masquer un champ.
+ */
+export function cielsDisponibles(images: ImagesFormulaire): Ciel[] {
+  return images.site ? ['reprendre_photo', ...CIELS_EXPLICITES] : [...CIELS_EXPLICITES]
+}
+
 /**
  * Une ambiance de fin de journee ou de crepuscule appelle une question
  * complementaire sur les eclairages : sans elle, le resultat montre une

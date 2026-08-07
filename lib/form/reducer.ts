@@ -1,6 +1,7 @@
 import {
   champsMateriauxPour,
   cielProposeParDefaut,
+  cielsDisponibles,
   conservationExistantProposee,
   eclairagesProposes,
   modeProduction,
@@ -115,25 +116,41 @@ function appliquer(
  * Retablit les invariants apres chaque action :
  * - le style suit la preselection tant qu'il n'a pas ete choisi a la main,
  *   et bascule de force s'il devient indisponible dans le mode courant ;
- * - le ciel suit la preselection tant qu'il n'a pas ete choisi a la main ;
+ * - le ciel obeit a la meme regle, « reprendre la lumiere de la photo »
+ *   cessant d'etre disponible des que la photo du site est retiree ;
  * - les materiaux des categories qui ne sont plus affichees sont effaces,
  *   ainsi que les conservations de l'existant devenues impossibles ;
  * - les eclairages qui ne sont plus proposes sont eteints, faute de quoi un
  *   projet passe de piscine a extension enverrait un eclairage de bassin
  *   sur un projet qui n'en a pas.
+ *
+ * Chaque bloc lit uniquement les champs bruts de `etat`, jamais la sortie
+ * d'un autre bloc : c'est ce qui rend leur ordre indifferent. Tout invariant
+ * qui dependrait d'une valeur normalisee devrait etre place explicitement
+ * apres elle.
+ *
+ * Deux choses ne sont volontairement pas normalisees ici :
+ * - la coherence des eclairages avec le ciel. La question n'etant pas posee
+ *   hors ambiance crepusculaire, `payload.ts` envoie `null` ; conserver les
+ *   interrupteurs permet un aller-retour sans perte.
+ * - la navigation. `etape` et `etapeMax` relevent de l'orchestrateur, qui
+ *   s'appuie sur `validation.ts` pour activer ou non le bouton Continuer.
  */
-function normaliser(etat: EtatFormulaire): EtatFormulaire {
+export function normaliser(etat: EtatFormulaire): EtatFormulaire {
   const mode = modeProduction(etat.images, etat.typeCadrage)
   const disponibles = stylesDisponibles(mode)
 
-  let style = etat.style
-  if (!etat.styleChoisiManuellement) {
-    style = stylePreselectionne(mode, etat.usage)
-  } else if (style !== null && !disponibles.includes(style)) {
-    style = stylePreselectionne(mode, etat.usage)
-  }
+  const style =
+    etat.styleChoisiManuellement &&
+    etat.style !== null &&
+    disponibles.includes(etat.style)
+      ? etat.style
+      : stylePreselectionne(mode, etat.usage)
 
-  const ciel = etat.cielChoisiManuellement ? etat.ciel : cielProposeParDefaut(etat.images)
+  const ciel =
+    etat.cielChoisiManuellement && cielsDisponibles(etat.images).includes(etat.ciel)
+      ? etat.ciel
+      : cielProposeParDefaut(etat.images)
 
   const affichees = champsMateriauxPour(etat.typeProjet)
   const existantPropose = conservationExistantProposee(etat.typeProjet, etat.images)

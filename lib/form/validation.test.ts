@@ -101,4 +101,14 @@ describe('peutEnvoyer', () => {
   it('refuse l envoi sans reference', () => {
     expect(peutEnvoyer(etat({ ...etatComplet, reference: '' }))).toBe(false)
   })
+
+  it('refuse l envoi quand le style n est plus disponible', () => {
+    const sansPhoto = etat({
+      ...etatComplet,
+      images: { cadrage: image, complementaire: null, site: null },
+    })
+    expect(sansPhoto.style).toBe('photomontage_administratif')
+    expect(peutEnvoyer(sansPhoto)).toBe(false)
+    expect(etapeFranchissable(sansPhoto, 7)).toBe(false)
+  })
 })

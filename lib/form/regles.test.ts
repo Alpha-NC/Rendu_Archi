@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   champsMateriauxPour,
   cielProposeParDefaut,
+  cielsDisponibles,
   conservationExistantProposee,
   eclairagesDemandes,
   eclairagesProposes,
@@ -203,6 +204,33 @@ describe('cielProposeParDefaut', () => {
 
   it('propose une lumiere neutre sans photo', () => {
     expect(cielProposeParDefaut(images({ cadrage: image }))).toBe('neutre_diffus')
+  })
+})
+
+describe('cielsDisponibles', () => {
+  it('propose de reprendre la lumiere de la photo seulement si elle existe', () => {
+    expect(cielsDisponibles(images({ site: image }))).toContain('reprendre_photo')
+    expect(cielsDisponibles(images())).not.toContain('reprendre_photo')
+  })
+
+  it('propose les cinq ambiances explicites dans tous les cas', () => {
+    for (const jeu of [images({ site: image }), images()]) {
+      expect(cielsDisponibles(jeu)).toEqual(
+        expect.arrayContaining([
+          'degage',
+          'legerement_voile',
+          'neutre_diffus',
+          'fin_de_journee',
+          'crepuscule',
+        ]),
+      )
+    }
+  })
+
+  it('contient toujours le ciel propose par defaut', () => {
+    for (const jeu of [images({ site: image }), images()]) {
+      expect(cielsDisponibles(jeu)).toContain(cielProposeParDefaut(jeu))
+    }
   })
 })
 

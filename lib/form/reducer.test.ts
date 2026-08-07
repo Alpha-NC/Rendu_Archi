@@ -68,6 +68,15 @@ describe('preselection du ciel', () => {
     e = reduire(e, { type: 'image', role: 'site', valeur: image })
     expect(e.ciel).toBe('crepuscule')
   })
+
+  it('abandonne la lumiere de la photo quand la photo est retiree', () => {
+    let e = reduire(etat(), { type: 'image', role: 'site', valeur: image })
+    e = reduire(e, { type: 'ciel', valeur: 'reprendre_photo' })
+    expect(e.ciel).toBe('reprendre_photo')
+
+    e = reduire(e, { type: 'image', role: 'site', valeur: null })
+    expect(e.ciel).toBe('neutre_diffus')
+  })
 })
 
 describe('materiaux', () => {
@@ -131,5 +140,59 @@ describe('navigation', () => {
     e = reduire(e, { type: 'allerEtape', etape: 1 })
     expect(e.reference).toBe('2026-042')
     expect(e.elementsARetirer).toBe('abri de jardin')
+  })
+})
+
+describe('restauration', () => {
+  it('normalise un etat incoherent venu du stockage', () => {
+    const pourri: EtatFormulaire = {
+      ...etatInitial,
+      typeProjet: 'terrasse',
+      typeCadrage: 'perspective',
+      images: { cadrage: image, complementaire: null, site: null },
+      materiaux: {
+        ...etatInitial.materiaux,
+        toiture: { origine: 'catalogue', id: 'a', terme: 'Tuiles plates' },
+        facade: { origine: 'existant' },
+      },
+      ciel: 'reprendre_photo',
+      cielChoisiManuellement: true,
+      eclairages: {
+        margelles: true,
+        sousMarin: true,
+        appliquesFacade: true,
+        interieurVisible: false,
+      },
+      style: 'photomontage_administratif',
+      styleChoisiManuellement: true,
+    }
+
+    const e = reduire(etat(), { type: 'restaurer', etat: pourri })
+
+    expect(e.materiaux.toiture).toBeNull()
+    expect(e.materiaux.facade).toBeNull()
+    expect(e.ciel).toBe('neutre_diffus')
+    expect(e.eclairages.margelles).toBe(false)
+    expect(e.eclairages.sousMarin).toBe(false)
+    expect(e.eclairages.appliquesFacade).toBe(true)
+    expect(e.style).toBe('presentation_client')
+  })
+
+  it('ne laisse jamais un style null derriere un drapeau manuel', () => {
+    const sansStyle: EtatFormulaire = {
+      ...etatInitial,
+      style: null,
+      styleChoisiManuellement: true,
+    }
+    const e = reduire(etat(), { type: 'restaurer', etat: sansStyle })
+    expect(e.style).not.toBeNull()
+  })
+
+  it('est idempotente', () => {
+    let e = reduire(etat(), { type: 'image', role: 'site', valeur: image })
+    e = reduire(e, { type: 'typeCadrage', valeur: 'perspective' })
+    e = reduire(e, { type: 'typeProjet', valeur: 'pool_house' })
+    e = reduire(e, { type: 'usage', valeur: 'permis_de_construire' })
+    expect(reduire(e, { type: 'restaurer', etat: e })).toEqual(e)
   })
 })

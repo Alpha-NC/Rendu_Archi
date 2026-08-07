@@ -3,6 +3,8 @@ import type { Etape, EtatFormulaire } from './types'
 
 /**
  * Conditions pour quitter une etape vers la suivante.
+ * L'etape 7 fait exception : elle n'a pas de suivante, la question y devient
+ * « peut-on envoyer ».
  * Le retour en arriere n'est jamais conditionne.
  * Aucun materiau n'est obligatoire : les etapes 3, 4 et 6 sont toujours
  * franchissables.
@@ -27,11 +29,13 @@ export function etapeFranchissable(etat: EtatFormulaire, etape: Etape): boolean 
   }
 }
 
-/** L'envoi exige que toutes les etapes bloquantes soient satisfaites. */
+const ETAPES_A_SATISFAIRE = [1, 2, 3, 4, 5, 6] as const
+
+/**
+ * L'envoi exige que toutes les etapes precedentes soient franchissables.
+ * L'etape 7 en est exclue par le type de la constante : c'est elle qui
+ * delegue ici, l'inclure ferait une recursion infinie.
+ */
 export function peutEnvoyer(etat: EtatFormulaire): boolean {
-  return (
-    etapeFranchissable(etat, 1) &&
-    etapeFranchissable(etat, 2) &&
-    etapeFranchissable(etat, 5)
-  )
+  return ETAPES_A_SATISFAIRE.every((etape) => etapeFranchissable(etat, etape))
 }
