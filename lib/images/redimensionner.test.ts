@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LARGEUR_MAX, dimensionsCibles } from './redimensionner'
+import { LARGEUR_MAX, dimensionsCibles, poidsDataUri } from './redimensionner'
 
 describe('dimensionsCibles', () => {
   it('plafonne la largeur a 2048 px', () => {
@@ -37,5 +37,22 @@ describe('dimensionsCibles', () => {
 
   it('plafonne aussi une image en portrait par sa largeur', () => {
     expect(dimensionsCibles(3000, 4000)).toEqual({ largeur: 2048, hauteur: 2731 })
+  })
+})
+
+describe('poidsDataUri', () => {
+  it('deduit le poids de la longueur base64', () => {
+    // 8 caracteres base64 apres la virgule, soit 6 octets.
+    expect(poidsDataUri('data:image/jpeg;base64,AAAAAAAA')).toBe(6)
+  })
+
+  it('ignore l en-tete quelle que soit sa longueur', () => {
+    const court = poidsDataUri('data:image/jpeg;base64,AAAAAAAA')
+    const long = poidsDataUri('data:image/jpeg;charset=utf-8;base64,AAAAAAAA')
+    expect(long).toBe(court)
+  })
+
+  it('rend zero sur une chaine sans separateur', () => {
+    expect(poidsDataUri('pas-un-data-uri')).toBe(0)
   })
 })

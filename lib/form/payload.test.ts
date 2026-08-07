@@ -135,8 +135,29 @@ describe('construirePayloadGenerate', () => {
     })
   })
 
-  it('leve une erreur si l etat n autorise pas l envoi', () => {
-    const incomplet: EtatFormulaire = { ...base, images: { ...base.images, cadrage: null } }
-    expect(() => construirePayloadGenerate(incomplet)).toThrow()
+  it('ignore une saisie libre restee vide', () => {
+    for (const terme of ['', '   ']) {
+      const etat: EtatFormulaire = {
+        ...base,
+        materiaux: { ...base.materiaux, volets: { origine: 'libre', terme } },
+      }
+      const payload = construirePayloadGenerate(etat)
+      expect(payload.materiaux.volets).toBeNull()
+      expect(payload.materiaux_libres).toEqual([])
+    }
+  })
+
+  it('refuse de construire un payload amputé d un champ obligatoire', () => {
+    const amputations: Partial<EtatFormulaire>[] = [
+      { images: { ...base.images, cadrage: null } },
+      { typeProjet: null },
+      { typeCadrage: null },
+      { style: null },
+    ]
+    for (const amputation of amputations) {
+      expect(() =>
+        construirePayloadGenerate({ ...base, ...amputation }),
+      ).toThrow()
+    }
   })
 })

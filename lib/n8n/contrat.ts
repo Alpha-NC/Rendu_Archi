@@ -1,3 +1,14 @@
+/**
+ * Le contrat externe emploie volontairement le vocabulaire du domaine
+ * interne : les valeurs du webhook et celles du formulaire sont les memes par
+ * conception, et dupliquer les six unions creerait deux listes a synchroniser
+ * a la main dont la divergence ne se verrait qu'a l'execution, cote n8n.
+ * Consequence a garder en tete : renommer une valeur dans
+ * `lib/form/types.ts` modifie le contrat externe et exige une modification
+ * du workflow n8n. Si les deux vocabulaires doivent un jour diverger, la
+ * couture est une fonction de traduction dans `payload.ts`, pas une copie
+ * des types ici.
+ */
 import type {
   AspectPelouse,
   Categorie,
@@ -64,6 +75,18 @@ export type ReponseGenerate = {
 
 export type ReponseErreur = { erreur: { code: string; message: string } }
 
+/**
+ * Verifie la forme imbriquee, pas seulement la presence de la cle.
+ * C'est le chemin le moins pardonnable : une reponse `{ erreur: null }` ferait
+ * lever un TypeError brut au moment precis ou l'on veut afficher a
+ * l'utilisateur le message metier renvoye par n8n.
+ */
 export function estErreur(valeur: unknown): valeur is ReponseErreur {
-  return typeof valeur === 'object' && valeur !== null && 'erreur' in valeur
+  if (typeof valeur !== 'object' || valeur === null || !('erreur' in valeur)) {
+    return false
+  }
+  const { erreur } = valeur as { erreur: unknown }
+  if (typeof erreur !== 'object' || erreur === null) return false
+  const { code, message } = erreur as { code?: unknown; message?: unknown }
+  return typeof code === 'string' && typeof message === 'string'
 }

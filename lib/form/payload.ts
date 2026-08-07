@@ -9,6 +9,24 @@ import type {
 } from '@/lib/n8n/contrat'
 
 /**
+ * Extrait les quatre champs sans lesquels aucune requete n'a de sens.
+ * Les tests de nullite sont faits ici plutot que confies a `peutEnvoyer` :
+ * une assertion non-nulle adossee a une garantie que le compilateur ne voit
+ * pas produirait, le jour ou cette garantie tomberait, une cle absente du
+ * JSON et donc un prompt construit sur du vide. Trois des quatre champs
+ * echoueraient en silence, et `typeCadrage` manquant ferait en plus deduire
+ * le mauvais mode de production.
+ */
+function champsObligatoires(etat: EtatFormulaire) {
+  const { typeProjet, typeCadrage, style } = etat
+  const cadrage = etat.images.cadrage
+  if (typeProjet === null || typeCadrage === null || style === null || cadrage === null) {
+    return null
+  }
+  return { typeProjet, typeCadrage, style, cadrage }
+}
+
+/**
  * Construit le corps de la requete `generate`.
  *
  * Trois conventions de forme, pour que le traitement cote n8n soit
@@ -23,14 +41,13 @@ import type {
  * et jamais pour construire un prompt.
  */
 export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate {
-  if (!peutEnvoyer(etat)) {
-    throw new Error('Le formulaire est incomplet : payload non constructible.')
+  const obligatoires = champsObligatoires(etat)
+  if (obligatoires === null || !peutEnvoyer(etat)) {
+    throw new Error(
+      'La fiche projet est incomplète : la génération ne peut pas être lancée.',
+    )
   }
-  // peutEnvoyer garantit ces quatre valeurs.
-  const cadrage = etat.images.cadrage!
-  const typeCadrage = etat.typeCadrage!
-  const style = etat.style!
-  const typeProjet = etat.typeProjet!
+  const { typeProjet, typeCadrage, style, cadrage } = obligatoires
 
   const materiaux = {} as Record<Categorie, MateriauEnvoye | null>
   const materiauxLibres: MateriauLibre[] = []
@@ -43,7 +60,10 @@ export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate
     }
     if (selection.origine === 'libre') {
       materiaux[categorie] = null
-      materiauxLibres.push({ categorie, terme: selection.terme.trim() })
+      // Ouvrir le champ « Autre texture » sans rien y ecrire est un etat
+      // atteignable : ne pas creer de ligne a calibrer vide dans Supabase.
+      const terme = selection.terme.trim()
+      if (terme.length > 0) materiauxLibres.push({ categorie, terme })
       continue
     }
     materiaux[categorie] = selection
