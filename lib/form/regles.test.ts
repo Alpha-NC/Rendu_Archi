@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { modeProduction, stylesDisponibles, stylePreselectionne } from './regles'
+import {
+  champsMateriauxPour,
+  conservationExistantProposee,
+  modeProduction,
+  stylesDisponibles,
+  stylePreselectionne,
+} from './regles'
 import type { ImageChargee, ImagesFormulaire } from './types'
 
 const image: ImageChargee = {
@@ -106,5 +112,69 @@ describe('stylePreselectionne', () => {
         expect(stylePreselectionne(mode, usage)).not.toBe('commercial')
       }
     }
+  })
+})
+
+describe('champsMateriauxPour', () => {
+  it('propose margelles et plage pour une piscine', () => {
+    expect(champsMateriauxPour('piscine')).toEqual(['margelles', 'plage'])
+  })
+
+  it('propose le bati pour une extension', () => {
+    expect(champsMateriauxPour('extension')).toEqual([
+      'toiture',
+      'facade',
+      'volets',
+      'menuiseries',
+    ])
+  })
+
+  it('propose le bati pour une restructuration', () => {
+    expect(champsMateriauxPour('restructuration')).toEqual([
+      'toiture',
+      'facade',
+      'volets',
+      'menuiseries',
+    ])
+  })
+
+  it('ne propose aucun materiau pour une terrasse', () => {
+    expect(champsMateriauxPour('terrasse')).toEqual([])
+  })
+
+  it('propose les six categories pour un pool house', () => {
+    expect(champsMateriauxPour('pool_house')).toEqual([
+      'toiture',
+      'facade',
+      'volets',
+      'menuiseries',
+      'margelles',
+      'plage',
+    ])
+  })
+
+  it('ne propose rien tant que le type de projet est inconnu', () => {
+    expect(champsMateriauxPour(null)).toEqual([])
+  })
+})
+
+describe('conservationExistantProposee', () => {
+  it('est proposee en extension avec une photo du site', () => {
+    expect(conservationExistantProposee('extension', images({ site: image }))).toBe(true)
+  })
+
+  it('est proposee en restructuration avec une photo du site', () => {
+    expect(conservationExistantProposee('restructuration', images({ site: image }))).toBe(
+      true,
+    )
+  })
+
+  it('n est pas proposee sans photo du site', () => {
+    expect(conservationExistantProposee('extension', images())).toBe(false)
+  })
+
+  it('n est pas proposee sur un projet neuf', () => {
+    expect(conservationExistantProposee('piscine', images({ site: image }))).toBe(false)
+    expect(conservationExistantProposee('pool_house', images({ site: image }))).toBe(false)
   })
 })

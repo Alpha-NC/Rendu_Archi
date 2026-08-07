@@ -1,4 +1,12 @@
-import type { ImagesFormulaire, ModeProduction, Style, TypeCadrage, Usage } from './types'
+import type {
+  Categorie,
+  ImagesFormulaire,
+  ModeProduction,
+  Style,
+  TypeCadrage,
+  TypeProjet,
+  Usage,
+} from './types'
 
 /**
  * Matrice de deduction du mode de production.
@@ -42,4 +50,39 @@ export function stylePreselectionne(mode: ModeProduction, usage: Usage | null): 
     return 'photomontage_administratif'
   }
   return 'presentation_client'
+}
+
+const MATERIAUX_BATI: Categorie[] = ['toiture', 'facade', 'volets', 'menuiseries']
+const MATERIAUX_PISCINE: Categorie[] = ['margelles', 'plage']
+
+/**
+ * Categories de materiaux affichees selon le type de projet.
+ * Margelles et plage restent deux ouvrages distincts, jamais fusionnes.
+ */
+export function champsMateriauxPour(typeProjet: TypeProjet | null): Categorie[] {
+  switch (typeProjet) {
+    case 'piscine':
+      return [...MATERIAUX_PISCINE]
+    case 'extension':
+    case 'restructuration':
+      return [...MATERIAUX_BATI]
+    case 'pool_house':
+      return [...MATERIAUX_BATI, ...MATERIAUX_PISCINE]
+    case 'terrasse':
+    default:
+      return []
+  }
+}
+
+/**
+ * L'option « conserver l'existant » n'a de sens que lorsque la photographie
+ * montre un bati existant que le projet reprend : extension et
+ * restructuration. Le materiau est alors repris tel quel, jamais interprete.
+ */
+export function conservationExistantProposee(
+  typeProjet: TypeProjet | null,
+  images: ImagesFormulaire,
+): boolean {
+  if (!images.site) return false
+  return typeProjet === 'extension' || typeProjet === 'restructuration'
 }
