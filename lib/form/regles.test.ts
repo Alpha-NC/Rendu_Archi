@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { modeProduction } from './regles'
+import { modeProduction, stylesDisponibles, stylePreselectionne } from './regles'
 import type { ImageChargee, ImagesFormulaire } from './types'
 
 const image: ImageChargee = {
@@ -35,5 +35,76 @@ describe('modeProduction', () => {
 
   it('cadrage non encore choisi avec photo ne revendique pas un photomontage', () => {
     expect(modeProduction(images({ site: image }), null)).toBe('presentation_generative')
+  })
+})
+
+describe('stylesDisponibles', () => {
+  it('propose les trois styles en photomontage controle', () => {
+    expect(stylesDisponibles('photomontage_controle')).toEqual([
+      'photomontage_administratif',
+      'presentation_client',
+      'commercial',
+    ])
+  })
+
+  it('exclut le photomontage administratif en presentation generative', () => {
+    expect(stylesDisponibles('presentation_generative')).toEqual([
+      'presentation_client',
+      'commercial',
+    ])
+  })
+
+  it('exclut le photomontage administratif en retexturation Revit', () => {
+    expect(stylesDisponibles('retexturation_revit')).toEqual([
+      'presentation_client',
+      'commercial',
+    ])
+  })
+})
+
+describe('stylePreselectionne', () => {
+  it('choisit le photomontage administratif pour un permis de construire', () => {
+    expect(stylePreselectionne('photomontage_controle', 'permis_de_construire')).toBe(
+      'photomontage_administratif',
+    )
+  })
+
+  it('choisit le photomontage administratif pour un usage mixte', () => {
+    expect(stylePreselectionne('photomontage_controle', 'les_deux')).toBe(
+      'photomontage_administratif',
+    )
+  })
+
+  it('choisit la presentation client pour une reunion client', () => {
+    expect(stylePreselectionne('photomontage_controle', 'presentation_client')).toBe(
+      'presentation_client',
+    )
+  })
+
+  it('choisit la presentation client quand le photomontage est indisponible', () => {
+    expect(stylePreselectionne('retexturation_revit', 'permis_de_construire')).toBe(
+      'presentation_client',
+    )
+    expect(stylePreselectionne('presentation_generative', 'les_deux')).toBe(
+      'presentation_client',
+    )
+  })
+
+  it('choisit la presentation client quand l usage n est pas encore renseigne', () => {
+    expect(stylePreselectionne('photomontage_controle', null)).toBe('presentation_client')
+  })
+
+  it('ne preselectionne jamais le style commercial', () => {
+    const modes = [
+      'photomontage_controle',
+      'presentation_generative',
+      'retexturation_revit',
+    ] as const
+    const usages = ['permis_de_construire', 'presentation_client', 'les_deux', null] as const
+    for (const mode of modes) {
+      for (const usage of usages) {
+        expect(stylePreselectionne(mode, usage)).not.toBe('commercial')
+      }
+    }
   })
 })
