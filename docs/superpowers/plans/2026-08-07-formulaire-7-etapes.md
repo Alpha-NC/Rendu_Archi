@@ -4105,6 +4105,7 @@ export function FormulaireRendu() {
   )
   const [erreurCatalogue, setErreurCatalogue] = useState<string | null>(null)
   const [envoi, setEnvoi] = useState<Envoi>({ statut: 'repos' })
+  const [persistanceEnEchec, setPersistanceEnEchec] = useState(false)
   const enVol = useRef(false)
 
   // Restauration au montage, avant toute sauvegarde.
@@ -4127,10 +4128,18 @@ export function FormulaireRendu() {
   // `eclairages` a chaque action, donc l'effet se redeclenche a chaque
   // frappe. Sans ce delai, chaque caractere tape provoquerait une ecriture
   // sessionStorage et une transaction IndexedDB.
+  //
+  // L'echec n'est jamais bloquant, mais il est signale : avaler l'erreur
+  // laisserait la sauvegarde cesser de fonctionner sans que personne ne le
+  // sache, et l'utilisateur perdrait tout au premier rechargement en croyant
+  // son travail conserve.
   useEffect(() => {
     if (!restaure) return
     const minuteur = setTimeout(() => {
-      sauvegarderEtat(etat).catch(() => undefined)
+      sauvegarderEtat(etat).then(
+        () => setPersistanceEnEchec(false),
+        () => setPersistanceEnEchec(true),
+      )
     }, 400)
     return () => clearTimeout(minuteur)
   }, [etat, restaure])
@@ -4216,6 +4225,13 @@ export function FormulaireRendu() {
           <h2 className="text-base text-slate-700">
             {etat.etape}. {TITRES[etat.etape]}
           </h2>
+          {persistanceEnEchec && (
+            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+              Vos saisies ne peuvent pas être enregistrées sur ce poste. Le
+              formulaire reste utilisable, mais un rechargement de la page ferait
+              tout perdre.
+            </p>
+          )}
         </header>
 
         {etat.etape === 1 && <Etape1Identification />}
