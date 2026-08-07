@@ -42,6 +42,8 @@ Trois ajouts par rapport à la structure de la spec §3, décidés ici :
 - `components/formulaire/contexte.ts` — le contexte React et son hook, sortis de `FormulaireRendu.tsx` pour que les composants d'étape n'importent pas l'orchestrateur, ce qui créerait un cycle d'imports.
 - `cielChoisiManuellement` dans l'état — la spec §5.8 dit que la pré-sélection du ciel est écrasée « selon le même mécanisme que le style », ce qui suppose un drapeau symétrique de `styleChoisiManuellement`.
 
+Point de vigilance pour les tâches de composants : `normaliser` reconstruit `etat.materiaux` et `etat.eclairages` à chaque action, y compris une simple frappe dans un champ texte. Ne jamais mettre ces deux objets en dépendance d'un `useMemo`, d'un `useEffect` ou d'un `React.memo`. Les valeurs qu'ils contiennent, elles, gardent leur identité : `etat.materiaux[categorie]` est une dépendance sûre.
+
 ---
 
 ## Task 1: Mise en place de Vitest
@@ -121,7 +123,7 @@ git commit -m "test: mise en place de Vitest avec jsdom et fake-indexeddb"
 **Files:**
 - Create: `lib/form/types.ts`
 
-Aucun test : ce fichier ne contient que des déclarations de types, vérifiées par le compilateur.
+Aucun test : ce fichier porte le vocabulaire du domaine — des types vérifiés par le compilateur, plus la liste des catégories dont l'union est dérivée.
 
 - [ ] **Step 1: Écrire les types**
 
@@ -141,13 +143,22 @@ export type Usage = 'permis_de_construire' | 'presentation_client' | 'les_deux'
 
 export type TypeCadrage = 'perspective' | 'axonometrie'
 
-export type Categorie =
-  | 'toiture'
-  | 'facade'
-  | 'volets'
-  | 'menuiseries'
-  | 'margelles'
-  | 'plage'
+/**
+ * L'union est derivee du tableau, et non l'inverse : une annotation
+ * `readonly Categorie[]` verifierait que chaque element est une categorie,
+ * jamais que les six y sont. Un tableau incomplet compilerait en silence et
+ * `payload.ts` enverrait une cle absente la ou le contrat exige `null`.
+ */
+export const CATEGORIES = [
+  'toiture',
+  'facade',
+  'volets',
+  'menuiseries',
+  'margelles',
+  'plage',
+] as const
+
+export type Categorie = (typeof CATEGORIES)[number]
 
 export type Style =
   | 'photomontage_administratif'
@@ -169,11 +180,15 @@ export type Ciel =
 
 export type AspectPelouse = 'telle_quelle' | 'tondue_soignee' | 'fleurie'
 
-export type CleEclairage =
-  | 'margelles'
-  | 'sousMarin'
-  | 'appliquesFacade'
-  | 'interieurVisible'
+/** Meme raison que pour CATEGORIES : la liste doit etre prouvablement complete. */
+export const CLES_ECLAIRAGE = [
+  'margelles',
+  'sousMarin',
+  'appliquesFacade',
+  'interieurVisible',
+] as const
+
+export type CleEclairage = (typeof CLES_ECLAIRAGE)[number]
 
 export type Eclairages = Record<CleEclairage, boolean>
 
@@ -220,15 +235,6 @@ export type EtatFormulaire = {
 
   precisions: string
 }
-
-export const CATEGORIES: readonly Categorie[] = [
-  'toiture',
-  'facade',
-  'volets',
-  'menuiseries',
-  'margelles',
-  'plage',
-]
 ```
 
 - [ ] **Step 2: Vérifier la compilation**
@@ -381,6 +387,9 @@ import type { ImagesFormulaire, ModeProduction, TypeCadrage } from './types'
  * Matrice de deduction du mode de production.
  * Le mode n'est jamais affiche : il commande uniquement les styles
  * proposables et la clause de prompt construite cote n8n.
+ * Le photomontage n'est revendique que sur une perspective averee, jamais
+ * par defaut : tant que le cadrage n'est pas choisi, une photo seule ne
+ * suffit pas.
  */
 export function modeProduction(
   images: ImagesFormulaire,
@@ -490,6 +499,20 @@ describe('stylePreselectionne', () => {
       }
     }
   })
+
+  it('preselectionne toujours un style disponible dans le mode', () => {
+    const modes = [
+      'photomontage_controle',
+      'presentation_generative',
+      'retexturation_revit',
+    ] as const
+    const usages = ['permis_de_construire', 'presentation_client', 'les_deux', null] as const
+    for (const mode of modes) {
+      for (const usage of usages) {
+        expect(stylesDisponibles(mode)).toContain(stylePreselectionne(mode, usage))
+      }
+    }
+  })
 })
 ```
 
@@ -506,7 +529,7 @@ Ajouter à `lib/form/regles.ts`, en complétant l'import de types avec `Style` e
 
 ```ts
 /**
- * Styles proposables selon le mode.
+ * Styles proposables selon le mode, dans l'ordre d'affichage de l'etape 5.
  * Le photomontage administratif exige une photo du site et une perspective :
  * il est structurellement exclu en retexturation Revit (son objet est
  * l'integration a une photographie, absente de ce mode) et exclu en
@@ -539,7 +562,7 @@ export function stylePreselectionne(mode: ModeProduction, usage: Usage | null): 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- regles`
-Expected: PASS, 13 tests.
+Expected: PASS, 14 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -642,7 +665,8 @@ const MATERIAUX_BATI: Categorie[] = ['toiture', 'facade', 'volets', 'menuiseries
 const MATERIAUX_PISCINE: Categorie[] = ['margelles', 'plage']
 
 /**
- * Categories de materiaux affichees selon le type de projet.
+ * Categories de materiaux affichees selon le type de projet, dans l'ordre
+ * d'affichage de l'etape 3.
  * Margelles et plage restent deux ouvrages distincts, jamais fusionnes.
  */
 export function champsMateriauxPour(typeProjet: TypeProjet | null): Categorie[] {
@@ -655,7 +679,7 @@ export function champsMateriauxPour(typeProjet: TypeProjet | null): Categorie[] 
     case 'pool_house':
       return [...MATERIAUX_BATI, ...MATERIAUX_PISCINE]
     case 'terrasse':
-    default:
+    case null:
       return []
   }
 }
@@ -677,7 +701,7 @@ export function conservationExistantProposee(
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- regles`
-Expected: PASS, 23 tests.
+Expected: PASS, 24 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -711,6 +735,33 @@ describe('cielProposeParDefaut', () => {
   })
 })
 
+describe('cielsDisponibles', () => {
+  it('propose de reprendre la lumiere de la photo seulement si elle existe', () => {
+    expect(cielsDisponibles(images({ site: image }))).toContain('reprendre_photo')
+    expect(cielsDisponibles(images())).not.toContain('reprendre_photo')
+  })
+
+  it('propose les cinq ambiances explicites dans tous les cas', () => {
+    for (const jeu of [images({ site: image }), images()]) {
+      expect(cielsDisponibles(jeu)).toEqual(
+        expect.arrayContaining([
+          'degage',
+          'legerement_voile',
+          'neutre_diffus',
+          'fin_de_journee',
+          'crepuscule',
+        ]),
+      )
+    }
+  })
+
+  it('contient toujours le ciel propose par defaut', () => {
+    for (const jeu of [images({ site: image }), images()]) {
+      expect(cielsDisponibles(jeu)).toContain(cielProposeParDefaut(jeu))
+    }
+  })
+})
+
 describe('eclairagesDemandes', () => {
   it('demande les eclairages en fin de journee', () => {
     expect(eclairagesDemandes('fin_de_journee')).toBe(true)
@@ -727,17 +778,29 @@ describe('eclairagesDemandes', () => {
   })
 })
 
-describe('eclairagesPiscineProposes', () => {
+describe('eclairagesProposes', () => {
   it('propose les eclairages de bassin sur les projets avec piscine', () => {
-    expect(eclairagesPiscineProposes('piscine')).toBe(true)
-    expect(eclairagesPiscineProposes('pool_house')).toBe(true)
+    expect(eclairagesProposes('piscine')).toEqual([
+      'margelles',
+      'sousMarin',
+      'appliquesFacade',
+      'interieurVisible',
+    ])
+    expect(eclairagesProposes('pool_house')).toEqual([
+      'margelles',
+      'sousMarin',
+      'appliquesFacade',
+      'interieurVisible',
+    ])
   })
 
-  it('ne les propose pas ailleurs', () => {
-    expect(eclairagesPiscineProposes('extension')).toBe(false)
-    expect(eclairagesPiscineProposes('restructuration')).toBe(false)
-    expect(eclairagesPiscineProposes('terrasse')).toBe(false)
-    expect(eclairagesPiscineProposes(null)).toBe(false)
+  it('ne propose que les eclairages du bati ailleurs', () => {
+    for (const typeProjet of ['extension', 'restructuration', 'terrasse', null] as const) {
+      expect(eclairagesProposes(typeProjet)).toEqual([
+        'appliquesFacade',
+        'interieurVisible',
+      ])
+    }
   })
 })
 ```
@@ -761,6 +824,24 @@ export function cielProposeParDefaut(images: ImagesFormulaire): Ciel {
   return images.site ? 'reprendre_photo' : 'neutre_diffus'
 }
 
+const CIELS_EXPLICITES: Ciel[] = [
+  'degage',
+  'legerement_voile',
+  'neutre_diffus',
+  'fin_de_journee',
+  'crepuscule',
+]
+
+/**
+ * Ambiances proposables, dans l'ordre d'affichage.
+ * « Reprendre la lumiere de la photo » disparait sans photo du site : cette
+ * valeur demanderait a n8n de suivre une photographie absente du payload.
+ * Oter une option devenue sans referent n'est pas masquer un champ.
+ */
+export function cielsDisponibles(images: ImagesFormulaire): Ciel[] {
+  return images.site ? ['reprendre_photo', ...CIELS_EXPLICITES] : [...CIELS_EXPLICITES]
+}
+
 /**
  * Une ambiance de fin de journee ou de crepuscule appelle une question
  * complementaire sur les eclairages : sans elle, le resultat montre une
@@ -770,16 +851,26 @@ export function eclairagesDemandes(ciel: Ciel): boolean {
   return ciel === 'fin_de_journee' || ciel === 'crepuscule'
 }
 
-/** Les eclairages de bassin n'ont de sens que sur un projet qui en comporte un. */
-export function eclairagesPiscineProposes(typeProjet: TypeProjet | null): boolean {
-  return typeProjet === 'piscine' || typeProjet === 'pool_house'
+const ECLAIRAGES_BATI: CleEclairage[] = ['appliquesFacade', 'interieurVisible']
+const ECLAIRAGES_PISCINE: CleEclairage[] = ['margelles', 'sousMarin']
+
+/**
+ * Eclairages proposes, dans l'ordre d'affichage : ceux du bassin n'ont de
+ * sens que sur un projet qui en comporte un.
+ * La fonction rend la liste et non un booleen, pour que les cles restent
+ * dans ce module. Le reducer s'en sert aussi pour eteindre un eclairage
+ * devenu sans objet apres un changement de type de projet.
+ */
+export function eclairagesProposes(typeProjet: TypeProjet | null): CleEclairage[] {
+  const avecBassin = typeProjet === 'piscine' || typeProjet === 'pool_house'
+  return avecBassin ? [...ECLAIRAGES_PISCINE, ...ECLAIRAGES_BATI] : [...ECLAIRAGES_BATI]
 }
 ```
 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- regles`
-Expected: PASS, 31 tests.
+Expected: PASS, 34 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -906,6 +997,16 @@ describe('peutEnvoyer', () => {
   it('refuse l envoi sans reference', () => {
     expect(peutEnvoyer(etat({ ...etatComplet, reference: '' }))).toBe(false)
   })
+
+  it('refuse l envoi quand le style n est plus disponible', () => {
+    const sansPhoto = etat({
+      ...etatComplet,
+      images: { cadrage: image, complementaire: null, site: null },
+    })
+    expect(sansPhoto.style).toBe('photomontage_administratif')
+    expect(peutEnvoyer(sansPhoto)).toBe(false)
+    expect(etapeFranchissable(sansPhoto, 7)).toBe(false)
+  })
 })
 ```
 
@@ -924,6 +1025,8 @@ import type { Etape, EtatFormulaire } from './types'
 
 /**
  * Conditions pour quitter une etape vers la suivante.
+ * L'etape 7 fait exception : elle n'a pas de suivante, la question y devient
+ * « peut-on envoyer ».
  * Le retour en arriere n'est jamais conditionne.
  * Aucun materiau n'est obligatoire : les etapes 3, 4 et 6 sont toujours
  * franchissables.
@@ -948,20 +1051,22 @@ export function etapeFranchissable(etat: EtatFormulaire, etape: Etape): boolean 
   }
 }
 
-/** L'envoi exige que toutes les etapes bloquantes soient satisfaites. */
+const ETAPES_A_SATISFAIRE = [1, 2, 3, 4, 5, 6] as const
+
+/**
+ * L'envoi exige que toutes les etapes precedentes soient franchissables.
+ * L'etape 7 en est exclue par le type de la constante : c'est elle qui
+ * delegue ici, l'inclure ferait une recursion infinie.
+ */
 export function peutEnvoyer(etat: EtatFormulaire): boolean {
-  return (
-    etapeFranchissable(etat, 1) &&
-    etapeFranchissable(etat, 2) &&
-    etapeFranchissable(etat, 5)
-  )
+  return ETAPES_A_SATISFAIRE.every((etape) => etapeFranchissable(etat, etape))
 }
 ```
 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- validation`
-Expected: PASS, 10 tests.
+Expected: PASS, 11 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -986,7 +1091,7 @@ Créer `lib/form/reducer.test.ts` :
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { reduire } from './reducer'
+import { etapeVoisine, reduire } from './reducer'
 import { etatInitial } from './etat-initial'
 import type { EtatFormulaire, ImageChargee } from './types'
 
@@ -1055,6 +1160,69 @@ describe('preselection du ciel', () => {
     e = reduire(e, { type: 'image', role: 'site', valeur: image })
     expect(e.ciel).toBe('crepuscule')
   })
+
+  it('abandonne la lumiere de la photo quand la photo est retiree', () => {
+    let e = reduire(etat(), { type: 'image', role: 'site', valeur: image })
+    e = reduire(e, { type: 'ciel', valeur: 'reprendre_photo' })
+    expect(e.ciel).toBe('reprendre_photo')
+
+    e = reduire(e, { type: 'image', role: 'site', valeur: null })
+    expect(e.ciel).toBe('neutre_diffus')
+  })
+})
+
+describe('restauration', () => {
+  it('normalise un etat incoherent venu du stockage', () => {
+    const pourri: EtatFormulaire = {
+      ...etatInitial,
+      typeProjet: 'terrasse',
+      typeCadrage: 'perspective',
+      images: { cadrage: image, complementaire: null, site: null },
+      materiaux: {
+        ...etatInitial.materiaux,
+        toiture: { origine: 'catalogue', id: 'a', terme: 'Tuiles plates' },
+        facade: { origine: 'existant' },
+      },
+      ciel: 'reprendre_photo',
+      cielChoisiManuellement: true,
+      eclairages: {
+        margelles: true,
+        sousMarin: true,
+        appliquesFacade: true,
+        interieurVisible: false,
+      },
+      style: 'photomontage_administratif',
+      styleChoisiManuellement: true,
+    }
+
+    const e = reduire(etat(), { type: 'restaurer', etat: pourri })
+
+    expect(e.materiaux.toiture).toBeNull()
+    expect(e.materiaux.facade).toBeNull()
+    expect(e.ciel).toBe('neutre_diffus')
+    expect(e.eclairages.margelles).toBe(false)
+    expect(e.eclairages.sousMarin).toBe(false)
+    expect(e.eclairages.appliquesFacade).toBe(true)
+    expect(e.style).toBe('presentation_client')
+  })
+
+  it('ne laisse jamais un style null derriere un drapeau manuel', () => {
+    const sansStyle: EtatFormulaire = {
+      ...etatInitial,
+      style: null,
+      styleChoisiManuellement: true,
+    }
+    const e = reduire(etat(), { type: 'restaurer', etat: sansStyle })
+    expect(e.style).not.toBeNull()
+  })
+
+  it('est idempotente', () => {
+    let e = reduire(etat(), { type: 'image', role: 'site', valeur: image })
+    e = reduire(e, { type: 'typeCadrage', valeur: 'perspective' })
+    e = reduire(e, { type: 'typeProjet', valeur: 'pool_house' })
+    e = reduire(e, { type: 'usage', valeur: 'permis_de_construire' })
+    expect(reduire(e, { type: 'restaurer', etat: e })).toEqual(e)
+  })
 })
 
 describe('materiaux', () => {
@@ -1069,6 +1237,19 @@ describe('materiaux', () => {
 
     e = reduire(e, { type: 'typeProjet', valeur: 'piscine' })
     expect(e.materiaux.toiture).toBeNull()
+  })
+
+  it('eteint un eclairage de bassin quand le projet n en a plus', () => {
+    let e = reduire(etat(), { type: 'typeProjet', valeur: 'piscine' })
+    e = reduire(e, { type: 'ciel', valeur: 'crepuscule' })
+    e = reduire(e, { type: 'eclairage', cle: 'sousMarin', valeur: true })
+    e = reduire(e, { type: 'eclairage', cle: 'appliquesFacade', valeur: true })
+    expect(e.eclairages.sousMarin).toBe(true)
+
+    e = reduire(e, { type: 'typeProjet', valeur: 'extension' })
+    expect(e.eclairages.sousMarin).toBe(false)
+    expect(e.eclairages.margelles).toBe(false)
+    expect(e.eclairages.appliquesFacade).toBe(true)
   })
 
   it('efface une conservation de l existant devenue impossible', () => {
@@ -1089,6 +1270,13 @@ describe('navigation', () => {
     e = reduire(e, { type: 'allerEtape', etape: 2 })
     expect(e.etape).toBe(2)
     expect(e.etapeMax).toBe(3)
+  })
+
+  it('borne l etape voisine aux extremites', () => {
+    expect(etapeVoisine(1, -1)).toBe(1)
+    expect(etapeVoisine(7, 1)).toBe(7)
+    expect(etapeVoisine(3, 1)).toBe(4)
+    expect(etapeVoisine(3, -1)).toBe(2)
   })
 
   it('ne perd aucune donnee lors d un retour en arriere', () => {
@@ -1115,12 +1303,14 @@ Créer `lib/form/reducer.ts` :
 import {
   champsMateriauxPour,
   cielProposeParDefaut,
+  cielsDisponibles,
   conservationExistantProposee,
+  eclairagesProposes,
   modeProduction,
   stylePreselectionne,
   stylesDisponibles,
 } from './regles'
-import { CATEGORIES } from './types'
+import { CATEGORIES, CLES_ECLAIRAGE } from './types'
 import type {
   AspectPelouse,
   Categorie,
@@ -1160,6 +1350,18 @@ export function reduire(
   action: ActionFormulaire,
 ): EtatFormulaire {
   return normaliser(appliquer(etat, action))
+}
+
+/**
+ * Etape voisine, bornee a l'intervalle 1..7.
+ * `etape + 1` ne compile pas contre une union litterale : l'assertion est
+ * isolee ici, une fois, plutot que dispersee dans les composants.
+ */
+export function etapeVoisine(etape: Etape, pas: 1 | -1): Etape {
+  const cible = etape + pas
+  if (cible < 1) return 1
+  if (cible > 7) return 7
+  return cible as Etape
 }
 
 function appliquer(
@@ -1205,7 +1407,7 @@ function appliquer(
       return {
         ...etat,
         etape: action.etape,
-        etapeMax: (action.etape > etat.etapeMax ? action.etape : etat.etapeMax) as Etape,
+        etapeMax: action.etape > etat.etapeMax ? action.etape : etat.etapeMax,
       }
     case 'restaurer':
       return action.etat
@@ -1216,22 +1418,41 @@ function appliquer(
  * Retablit les invariants apres chaque action :
  * - le style suit la preselection tant qu'il n'a pas ete choisi a la main,
  *   et bascule de force s'il devient indisponible dans le mode courant ;
- * - le ciel suit la preselection tant qu'il n'a pas ete choisi a la main ;
+ * - le ciel obeit a la meme regle, « reprendre la lumiere de la photo »
+ *   cessant d'etre disponible des que la photo du site est retiree ;
  * - les materiaux des categories qui ne sont plus affichees sont effaces,
- *   ainsi que les conservations de l'existant devenues impossibles.
+ *   ainsi que les conservations de l'existant devenues impossibles ;
+ * - les eclairages qui ne sont plus proposes sont eteints, faute de quoi un
+ *   projet passe de piscine a extension enverrait un eclairage de bassin
+ *   sur un projet qui n'en a pas.
+ *
+ * Chaque bloc lit uniquement les champs bruts de `etat`, jamais la sortie
+ * d'un autre bloc : c'est ce qui rend leur ordre indifferent. Tout invariant
+ * qui dependrait d'une valeur normalisee devrait etre place explicitement
+ * apres elle.
+ *
+ * Deux choses ne sont volontairement pas normalisees ici :
+ * - la coherence des eclairages avec le ciel. La question n'etant pas posee
+ *   hors ambiance crepusculaire, `payload.ts` envoie `null` ; conserver les
+ *   interrupteurs permet un aller-retour sans perte.
+ * - la navigation. `etape` et `etapeMax` relevent de l'orchestrateur, qui
+ *   s'appuie sur `validation.ts` pour activer ou non le bouton Continuer.
  */
-function normaliser(etat: EtatFormulaire): EtatFormulaire {
+export function normaliser(etat: EtatFormulaire): EtatFormulaire {
   const mode = modeProduction(etat.images, etat.typeCadrage)
   const disponibles = stylesDisponibles(mode)
 
-  let style = etat.style
-  if (!etat.styleChoisiManuellement) {
-    style = stylePreselectionne(mode, etat.usage)
-  } else if (style !== null && !disponibles.includes(style)) {
-    style = stylePreselectionne(mode, etat.usage)
-  }
+  const style =
+    etat.styleChoisiManuellement &&
+    etat.style !== null &&
+    disponibles.includes(etat.style)
+      ? etat.style
+      : stylePreselectionne(mode, etat.usage)
 
-  const ciel = etat.cielChoisiManuellement ? etat.ciel : cielProposeParDefaut(etat.images)
+  const ciel =
+    etat.cielChoisiManuellement && cielsDisponibles(etat.images).includes(etat.ciel)
+      ? etat.ciel
+      : cielProposeParDefaut(etat.images)
 
   const affichees = champsMateriauxPour(etat.typeProjet)
   const existantPropose = conservationExistantProposee(etat.typeProjet, etat.images)
@@ -1248,19 +1469,25 @@ function normaliser(etat: EtatFormulaire): EtatFormulaire {
     }
   }
 
-  return { ...etat, style, ciel, materiaux }
+  const proposes = eclairagesProposes(etat.typeProjet)
+  const eclairages = { ...etat.eclairages }
+  for (const cle of CLES_ECLAIRAGE) {
+    if (!proposes.includes(cle)) eclairages[cle] = false
+  }
+
+  return { ...etat, style, ciel, materiaux, eclairages }
 }
 ```
 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- reducer`
-Expected: PASS, 9 tests.
+Expected: PASS, 16 tests.
 
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 50 tests.
+Expected: PASS, 61 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1280,9 +1507,22 @@ Spec §8. Types partagés entre le client réseau, le mock et la construction du
 
 - [ ] **Step 1: Écrire les types**
 
+Un test accompagne malgré tout ce fichier : `estErreur` est son seul code exécutable, et il garde le chemin d'erreur — celui où une seconde panne est le moins pardonnable.
+
 Créer `lib/n8n/contrat.ts` :
 
 ```ts
+/**
+ * Le contrat externe emploie volontairement le vocabulaire du domaine
+ * interne : les valeurs du webhook et celles du formulaire sont les memes par
+ * conception, et dupliquer les six unions creerait deux listes a synchroniser
+ * a la main dont la divergence ne se verrait qu'a l'execution, cote n8n.
+ * Consequence a garder en tete : renommer une valeur dans
+ * `lib/form/types.ts` modifie le contrat externe et exige une modification
+ * du workflow n8n. Si les deux vocabulaires doivent un jour diverger, la
+ * couture est une fonction de traduction dans `payload.ts`, pas une copie
+ * des types ici.
+ */
 import type {
   AspectPelouse,
   Categorie,
@@ -1347,10 +1587,65 @@ export type ReponseGenerate = {
   prompt: string
 }
 
+/**
+ * Une reponse 2xx sans cle `erreur` n'est pas pour autant un succes.
+ * Le node « Respond to Webhook » de n8n renvoie par defaut ses items sous
+ * forme de tableau : `[{ cycle_id, image_url }]` traverserait `estErreur`
+ * sans encombre et donnerait un `<img>` casse apres quatre-vingt-dix
+ * secondes d'attente, sans le moindre message.
+ */
+export function estReponseGenerate(valeur: unknown): valeur is ReponseGenerate {
+  if (typeof valeur !== 'object' || valeur === null || Array.isArray(valeur)) {
+    return false
+  }
+  const { cycle_id, image_url } = valeur as Record<string, unknown>
+  return (
+    typeof cycle_id === 'string' &&
+    typeof image_url === 'string' &&
+    image_url.length > 0
+  )
+}
+
+/** Erreur metier renvoyee par n8n : la requete a abouti, le traitement a refuse. */
+export class ErreurMetier extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'ErreurMetier'
+  }
+}
+
+/**
+ * Echec de transport : coupure, timeout de proxy, statut non-2xx, reponse
+ * inexploitable. Distinct d'une erreur metier parce que la generation a pu
+ * aboutir cote serveur malgre la coupure — derriere un proxy coupant a
+ * 100 s, une generation reussie arrive en 524.
+ */
+export class ErreurReseau extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ErreurReseau'
+  }
+}
+
 export type ReponseErreur = { erreur: { code: string; message: string } }
 
+/**
+ * Verifie la forme imbriquee, pas seulement la presence de la cle.
+ * C'est le chemin le moins pardonnable : une reponse `{ erreur: null }` ferait
+ * lever un TypeError brut au moment precis ou l'on veut afficher a
+ * l'utilisateur le message metier renvoye par n8n.
+ */
 export function estErreur(valeur: unknown): valeur is ReponseErreur {
-  return typeof valeur === 'object' && valeur !== null && 'erreur' in valeur
+  if (typeof valeur !== 'object' || valeur === null || !('erreur' in valeur)) {
+    return false
+  }
+  const { erreur } = valeur as { erreur: unknown }
+  if (typeof erreur !== 'object' || erreur === null) return false
+  const { code, message } = erreur as { code?: unknown; message?: unknown }
+  return typeof code === 'string' && typeof message === 'string'
 }
 ```
 
@@ -1359,10 +1654,76 @@ export function estErreur(valeur: unknown): valeur is ReponseErreur {
 Run: `npx tsc --noEmit`
 Expected: aucune erreur.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Tester `estErreur`**
+
+Créer `lib/n8n/contrat.test.ts` :
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { estErreur, estReponseGenerate } from './contrat'
+
+describe('estErreur', () => {
+  it('reconnait une erreur metier bien formee', () => {
+    expect(estErreur({ erreur: { code: 'materiau_inconnu', message: 'Détail.' } })).toBe(
+      true,
+    )
+  })
+
+  it('refuse une reponse de succes', () => {
+    expect(
+      estErreur({ cycle_id: 'a', reference: 'b', image_url: 'c', prompt: 'd' }),
+    ).toBe(false)
+  })
+
+  it('refuse une cle erreur mal formee', () => {
+    expect(estErreur({ erreur: null })).toBe(false)
+    expect(estErreur({ erreur: 'quelque chose' })).toBe(false)
+    expect(estErreur({ erreur: { code: 'a' } })).toBe(false)
+    expect(estErreur({ erreur: { message: 'a' } })).toBe(false)
+    expect(estErreur({ erreur: { code: 1, message: 'a' } })).toBe(false)
+  })
+
+  it('refuse ce qui n est pas un objet', () => {
+    for (const valeur of [null, undefined, 'erreur', 42, []]) {
+      expect(estErreur(valeur)).toBe(false)
+    }
+  })
+})
+
+describe('estReponseGenerate', () => {
+  it('reconnait une reponse de generation complete', () => {
+    expect(
+      estReponseGenerate({
+        cycle_id: 'c1',
+        reference: 'r',
+        image_url: 'https://exemple/x.jpg',
+        prompt: 'p',
+      }),
+    ).toBe(true)
+  })
+
+  it('refuse un tableau, forme par defaut du node Respond to Webhook', () => {
+    expect(
+      estReponseGenerate([{ cycle_id: 'c1', image_url: 'https://exemple/x.jpg' }]),
+    ).toBe(false)
+  })
+
+  it('refuse une reponse sans image exploitable', () => {
+    expect(estReponseGenerate({ cycle_id: 'c1', image_url: '' })).toBe(false)
+    expect(estReponseGenerate({ cycle_id: 'c1' })).toBe(false)
+    expect(estReponseGenerate({ image_url: 'https://exemple/x.jpg' })).toBe(false)
+    expect(estReponseGenerate(null)).toBe(false)
+  })
+})
+```
+
+Run: `npm test -- contrat`
+Expected: PASS, 7 tests.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add lib/n8n/contrat.ts
+git add lib/n8n/contrat.ts lib/n8n/contrat.test.ts
 git commit -m "feat: types du contrat webhook n8n"
 ```
 
@@ -1475,6 +1836,9 @@ describe('construirePayloadGenerate', () => {
     expect(payload.environnement.eclairages).toBeNull()
   })
 
+  // Deux motifs complementaires : avec quatre booleens, un seul motif laisse
+  // toujours une paire de cles indiscernable, donc une inversion de mapping
+  // passerait inapercue.
   it('transporte les eclairages en fin de journee', () => {
     const etat: EtatFormulaire = {
       ...base,
@@ -1482,22 +1846,63 @@ describe('construirePayloadGenerate', () => {
       eclairages: {
         margelles: true,
         sousMarin: false,
-        appliquesFacade: true,
-        interieurVisible: false,
+        appliquesFacade: false,
+        interieurVisible: true,
       },
     }
     const payload = construirePayloadGenerate(etat)
     expect(payload.environnement.eclairages).toEqual({
       margelles: true,
       sous_marin: false,
-      appliques_facade: true,
+      appliques_facade: false,
+      interieur_visible: true,
+    })
+  })
+
+  it('transporte les eclairages au crepuscule sans confondre deux cles', () => {
+    const etat: EtatFormulaire = {
+      ...base,
+      ciel: 'crepuscule',
+      eclairages: {
+        margelles: true,
+        sousMarin: true,
+        appliquesFacade: false,
+        interieurVisible: false,
+      },
+    }
+    const payload = construirePayloadGenerate(etat)
+    expect(payload.environnement.eclairages).toEqual({
+      margelles: true,
+      sous_marin: true,
+      appliques_facade: false,
       interieur_visible: false,
     })
   })
 
-  it('leve une erreur si l etat n autorise pas l envoi', () => {
-    const incomplet: EtatFormulaire = { ...base, images: { ...base.images, cadrage: null } }
-    expect(() => construirePayloadGenerate(incomplet)).toThrow()
+  it('ignore une saisie libre restee vide', () => {
+    for (const terme of ['', '   ']) {
+      const etat: EtatFormulaire = {
+        ...base,
+        materiaux: { ...base.materiaux, volets: { origine: 'libre', terme } },
+      }
+      const payload = construirePayloadGenerate(etat)
+      expect(payload.materiaux.volets).toBeNull()
+      expect(payload.materiaux_libres).toEqual([])
+    }
+  })
+
+  it('refuse de construire un payload amputé d un champ obligatoire', () => {
+    const amputations: Partial<EtatFormulaire>[] = [
+      { images: { ...base.images, cadrage: null } },
+      { typeProjet: null },
+      { typeCadrage: null },
+      { style: null },
+    ]
+    for (const amputation of amputations) {
+      expect(() =>
+        construirePayloadGenerate({ ...base, ...amputation }),
+      ).toThrow()
+    }
   })
 })
 ```
@@ -1536,15 +1941,32 @@ import type {
  * dans `materiaux_libres`, que n8n utilise pour creer des lignes a calibrer
  * et jamais pour construire un prompt.
  */
-export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate {
-  if (!peutEnvoyer(etat)) {
-    throw new Error('Le formulaire est incomplet : payload non constructible.')
+/**
+ * Extrait les quatre champs sans lesquels aucune requete n'a de sens.
+ * Les tests de nullite sont faits ici plutot que confies a `peutEnvoyer` :
+ * une assertion non-nulle adossee a une garantie que le compilateur ne voit
+ * pas produirait, le jour ou cette garantie tomberait, une cle absente du
+ * JSON et donc un prompt construit sur du vide. Trois des quatre champs
+ * echoueraient en silence, et `typeCadrage` manquant ferait en plus deduire
+ * le mauvais mode de production.
+ */
+function champsObligatoires(etat: EtatFormulaire) {
+  const { typeProjet, typeCadrage, style } = etat
+  const cadrage = etat.images.cadrage
+  if (typeProjet === null || typeCadrage === null || style === null || cadrage === null) {
+    return null
   }
-  // peutEnvoyer garantit ces trois valeurs.
-  const cadrage = etat.images.cadrage!
-  const typeCadrage = etat.typeCadrage!
-  const style = etat.style!
-  const typeProjet = etat.typeProjet!
+  return { typeProjet, typeCadrage, style, cadrage }
+}
+
+export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate {
+  const obligatoires = champsObligatoires(etat)
+  if (obligatoires === null || !peutEnvoyer(etat)) {
+    throw new Error(
+      'La fiche projet est incomplète : la génération ne peut pas être lancée.',
+    )
+  }
+  const { typeProjet, typeCadrage, style, cadrage } = obligatoires
 
   const materiaux = {} as Record<Categorie, MateriauEnvoye | null>
   const materiauxLibres: MateriauLibre[] = []
@@ -1557,7 +1979,10 @@ export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate
     }
     if (selection.origine === 'libre') {
       materiaux[categorie] = null
-      materiauxLibres.push({ categorie, terme: selection.terme.trim() })
+      // Ouvrir le champ « Autre texture » sans rien y ecrire est un etat
+      // atteignable : ne pas creer de ligne a calibrer vide dans Supabase.
+      const terme = selection.terme.trim()
+      if (terme.length > 0) materiauxLibres.push({ categorie, terme })
       continue
     }
     materiaux[categorie] = selection
@@ -1600,7 +2025,7 @@ export function construirePayloadGenerate(etat: EtatFormulaire): RequeteGenerate
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- payload`
-Expected: PASS, 7 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1625,7 +2050,7 @@ Créer `lib/images/redimensionner.test.ts` :
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { LARGEUR_MAX, dimensionsCibles } from './redimensionner'
+import { LARGEUR_MAX, dimensionsCibles, poidsDataUri } from './redimensionner'
 
 describe('dimensionsCibles', () => {
   it('plafonne la largeur a 2048 px', () => {
@@ -1633,9 +2058,18 @@ describe('dimensionsCibles', () => {
     expect(dimensionsCibles(4096, 3072)).toEqual({ largeur: 2048, hauteur: 1536 })
   })
 
-  it('conserve le rapport d aspect', () => {
-    const { largeur, hauteur } = dimensionsCibles(3000, 1000)
-    expect(largeur / hauteur).toBeCloseTo(3, 5)
+  it('conserve le rapport d aspect a un demi pixel pres', () => {
+    // Un arrondi au pixel entier ne peut pas faire mieux qu'un demi-pixel :
+    // c'est la borne exacte, pas une tolerance choisie au jugé.
+    for (const [largeurSource, hauteurSource] of [
+      [3000, 1000],
+      [4096, 3072],
+      [5000, 2813],
+    ] as const) {
+      const { largeur, hauteur } = dimensionsCibles(largeurSource, hauteurSource)
+      const attendue = (largeur * hauteurSource) / largeurSource
+      expect(Math.abs(hauteur - attendue)).toBeLessThanOrEqual(0.5)
+    }
   })
 
   it('ne monte jamais en resolution', () => {
@@ -1654,6 +2088,23 @@ describe('dimensionsCibles', () => {
 
   it('plafonne aussi une image en portrait par sa largeur', () => {
     expect(dimensionsCibles(3000, 4000)).toEqual({ largeur: 2048, hauteur: 2731 })
+  })
+})
+
+describe('poidsDataUri', () => {
+  it('deduit le poids de la longueur base64', () => {
+    // 8 caracteres base64 apres la virgule, soit 6 octets.
+    expect(poidsDataUri('data:image/jpeg;base64,AAAAAAAA')).toBe(6)
+  })
+
+  it('ignore l en-tete quelle que soit sa longueur', () => {
+    const court = poidsDataUri('data:image/jpeg;base64,AAAAAAAA')
+    const long = poidsDataUri('data:image/jpeg;charset=utf-8;base64,AAAAAAAA')
+    expect(long).toBe(court)
+  })
+
+  it('rend zero sur une chaine sans separateur', () => {
+    expect(poidsDataUri('pas-un-data-uri')).toBe(0)
   })
 })
 ```
@@ -1694,29 +2145,50 @@ export function dimensionsCibles(
  * Effectue a la selection du fichier, pas a l'envoi : l'apercu affiche est
  * donc exactement l'image qui partira, et son poids est connu tout de suite.
  */
+/**
+ * Poids du JPEG decode, deduit de la longueur base64.
+ * Surestime de 0 a 2 octets a cause du remplissage, negligeable pour un
+ * affichage. Attention : c'est le poids de l'image, pas celui transmis —
+ * le corps de la requete transporte la forme base64, environ 1,33 fois plus
+ * lourde. Ne pas s'en servir pour un garde-fou de taille de requete.
+ */
+export function poidsDataUri(dataUri: string): number {
+  const debut = dataUri.indexOf(',')
+  if (debut === -1) return 0
+  return Math.round((dataUri.length - debut - 1) * 0.75)
+}
+
 export async function chargerImage(fichier: File): Promise<ImageChargee> {
   const bitmap = await createImageBitmap(fichier)
   const { largeur, hauteur } = dimensionsCibles(bitmap.width, bitmap.height)
 
-  const canvas = document.createElement('canvas')
-  canvas.width = largeur
-  canvas.height = hauteur
-  const contexte = canvas.getContext('2d')
-  if (!contexte) {
+  let dataUri: string
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = largeur
+    canvas.height = hauteur
+    const contexte = canvas.getContext('2d')
+    if (!contexte) {
+      throw new Error("Impossible de preparer l'image : contexte canvas indisponible.")
+    }
+    contexte.drawImage(bitmap, 0, 0, largeur, hauteur)
+    dataUri = canvas.toDataURL('image/jpeg', QUALITE_JPEG)
+  } finally {
     bitmap.close()
-    throw new Error("Impossible de preparer l'image : contexte canvas indisponible.")
   }
-  contexte.drawImage(bitmap, 0, 0, largeur, hauteur)
-  bitmap.close()
 
-  const dataUri = canvas.toDataURL('image/jpeg', QUALITE_JPEG)
+  // Un canvas trop grand fait rendre « data:, » sans lever : sans ce garde,
+  // une image vide partirait vers le moteur de generation.
+  if (!dataUri.startsWith('data:image/jpeg')) {
+    throw new Error("Cette image est trop grande pour etre preparee.")
+  }
 
   return {
     dataUri,
     nomOrigine: fichier.name,
     largeur,
     hauteur,
-    poidsOctets: Math.round((dataUri.length - dataUri.indexOf(',') - 1) * 0.75),
+    poidsOctets: poidsDataUri(dataUri),
   }
 }
 ```
@@ -1724,7 +2196,7 @@ export async function chargerImage(fichier: File): Promise<ImageChargee> {
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- redimensionner`
-Expected: PASS, 6 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1802,13 +2274,41 @@ describe('persistance', () => {
     expect(await chargerEtat()).toBeNull()
   })
 
-  it('restitue un etat sans image', async () => {
+  it('restitue un etat sans image en ramenant l etape a 2', async () => {
     const sansImage: EtatFormulaire = {
       ...etat,
       images: { cadrage: null, complementaire: null, site: null },
     }
     await sauvegarderEtat(sansImage)
-    expect(await chargerEtat()).toEqual(sansImage)
+    expect(await chargerEtat()).toEqual({ ...sansImage, etape: 2, etapeMax: 2 })
+  })
+
+  it('n ecrit pas les images quand seul un champ change', async () => {
+    await sauvegarderEtat(etat)
+    // Meme reference d'images, champ modifie : l'ecriture lourde est evitee
+    // mais la restitution reste complete.
+    await sauvegarderEtat({ ...etat, precisions: 'ajout tardif' })
+    const restaure = await chargerEtat()
+    expect(restaure?.precisions).toBe('ajout tardif')
+    expect(restaure?.images).toEqual(etat.images)
+  })
+
+  it('efface les images orphelines quand les champs ont disparu', async () => {
+    await sauvegarderEtat(etat)
+    const champs = sessionStorage.getItem('rendu-architectural:formulaire')
+    sessionStorage.clear()
+
+    expect(await chargerEtat()).toBeNull()
+
+    // On remet les champs tels quels : les images doivent avoir ete nettoyees
+    // par le chargement precedent, qui a constate leur orphelinage.
+    sessionStorage.setItem('rendu-architectural:formulaire', champs as string)
+    const restaure = await chargerEtat()
+    expect(restaure?.images).toEqual({
+      cadrage: null,
+      complementaire: null,
+      site: null,
+    })
   })
 })
 ```
@@ -1830,23 +2330,94 @@ const BASE_IDB = 'rendu-architectural'
 const MAGASIN = 'images'
 const CLE_IMAGES = 'formulaire'
 
-type EtatSansImages = Omit<EtatFormulaire, 'images'>
+const IMAGES_VIDES: ImagesFormulaire = {
+  cadrage: null,
+  complementaire: null,
+  site: null,
+}
+
+/**
+ * Champs persistes, enumeres explicitement plutot que derives par
+ * `Omit<EtatFormulaire, 'images'>`. Un futur champ lourd — l'image generee,
+ * un calque d'annotation — atterrirait sinon en silence dans sessionStorage,
+ * depasserait le plafond, et `setItem` echouerait en perdant l'ecriture
+ * entiere. Ici, tout nouveau champ est exclu par defaut : l'inclure est une
+ * decision.
+ */
+const CHAMPS_PERSISTES = [
+  'etape',
+  'etapeMax',
+  'reference',
+  'typeProjet',
+  'usage',
+  'typeCadrage',
+  'elementsAPreserver',
+  'materiaux',
+  'conserverVegetation',
+  'aspectPelouse',
+  'elementsARetirer',
+  'ciel',
+  'cielChoisiManuellement',
+  'eclairages',
+  'style',
+  'styleChoisiManuellement',
+  'precisions',
+] as const
+
+type ChampPersiste = (typeof CHAMPS_PERSISTES)[number]
+type EtatSansImages = Pick<EtatFormulaire, ChampPersiste>
+
+/** Derniere reference d'images ecrite, pour ne pas les reecrire pour rien. */
+let dernieresImages: ImagesFormulaire | null = null
 
 /**
  * Les champs tiennent largement dans sessionStorage. Les images non :
  * trois vues redimensionnees pesent environ 4 Mo en base64, au-dessus du
  * plafond pratique de 5 Mo, qui echoue en perdant l'ecriture entiere.
  * D'ou le partage entre les deux stockages.
+ *
+ * Les images sont ecrites en premier, et seulement si leur reference a
+ * change. L'ordre importe : sessionStorage commite des l'appel alors que
+ * l'ecriture IndexedDB dure. Une interruption dans cette fenetre laisserait
+ * sinon des champs en avance sur les images — un etat qui pretend etre a
+ * l'etape 5 sans vue de cadrage, que `normaliser` « reparerait » en changeant
+ * silencieusement le style de l'utilisateur. Un etat en retard est inoffensif,
+ * un etat incoherent ne l'est pas.
+ *
+ * `normaliser` preserve l'identite de `etat.images` pour toute action autre
+ * qu'un changement d'image : la comparaison par reference evite donc de
+ * reecrire 3 Mo a chaque frappe dans un champ texte.
  */
 export async function sauvegarderEtat(etat: EtatFormulaire): Promise<void> {
-  const { images, ...champs } = etat
+  const { images } = etat
+  if (images !== dernieresImages) {
+    await ecrireImages(images)
+    dernieresImages = images
+  }
+  const champs = {} as Record<string, unknown>
+  for (const champ of CHAMPS_PERSISTES) champs[champ] = etat[champ]
   sessionStorage.setItem(CLE_SESSION, JSON.stringify(champs))
-  await ecrireImages(images)
 }
 
+/**
+ * Un echec de restauration n'est jamais bloquant : on repart d'un etat
+ * vierge. Le stockage peut etre indisponible — navigation privee, politique
+ * d'entreprise, quota sature — et l'application doit demarrer quand meme.
+ */
 export async function chargerEtat(): Promise<EtatFormulaire | null> {
-  const brut = sessionStorage.getItem(CLE_SESSION)
-  if (!brut) return null
+  let brut: string | null
+  try {
+    brut = sessionStorage.getItem(CLE_SESSION)
+  } catch {
+    return null
+  }
+  if (!brut) {
+    // Les images survivent a la fermeture de l'onglet, pas les champs.
+    // Sans ce nettoyage, jusqu'a 3 Mo de photos du site resteraient sur le
+    // poste indefiniment, sans aucun ecran pour les effacer.
+    await effacerEtat().catch(() => undefined)
+    return null
+  }
 
   let champs: EtatSansImages
   try {
@@ -1855,13 +2426,28 @@ export async function chargerEtat(): Promise<EtatFormulaire | null> {
     return null
   }
 
-  const images = await lireImages()
-  return { ...champs, images }
+  let images: ImagesFormulaire
+  try {
+    images = await lireImages()
+  } catch {
+    images = { ...IMAGES_VIDES }
+  }
+
+  // Garde-fou contre un etat malgre tout dechire : pretendre avoir depasse
+  // l'etape 2 sans vue de cadrage n'est pas atteignable normalement.
+  const sansCadrage = images.cadrage === null
+  return {
+    ...champs,
+    images,
+    etape: sansCadrage && champs.etape > 2 ? 2 : champs.etape,
+    etapeMax: sansCadrage && champs.etapeMax > 2 ? 2 : champs.etapeMax,
+  }
 }
 
 export async function effacerEtat(): Promise<void> {
   sessionStorage.removeItem(CLE_SESSION)
-  await ecrireImages({ cadrage: null, complementaire: null, site: null })
+  await ecrireImages({ ...IMAGES_VIDES })
+  dernieresImages = null
 }
 
 function ouvrirBase(): Promise<IDBDatabase> {
@@ -1872,43 +2458,53 @@ function ouvrirBase(): Promise<IDBDatabase> {
     }
     requete.onsuccess = () => resoudre(requete.result)
     requete.onerror = () => rejeter(requete.error)
+    // Sans ce gestionnaire, un futur changement de version bloque par une
+    // connexion restee ouverte ne resoudrait ni ne rejetterait jamais :
+    // l'application se figerait au montage, sans erreur.
+    requete.onblocked = () =>
+      rejeter(new Error('Le stockage local est occupé par un autre onglet.'))
   })
 }
 
 async function ecrireImages(images: ImagesFormulaire): Promise<void> {
   const base = await ouvrirBase()
-  await new Promise<void>((resoudre, rejeter) => {
-    const transaction = base.transaction(MAGASIN, 'readwrite')
-    transaction.objectStore(MAGASIN).put(images, CLE_IMAGES)
-    transaction.oncomplete = () => resoudre()
-    transaction.onerror = () => rejeter(transaction.error)
-  })
-  base.close()
+  try {
+    await new Promise<void>((resoudre, rejeter) => {
+      const transaction = base.transaction(MAGASIN, 'readwrite')
+      transaction.objectStore(MAGASIN).put(images, CLE_IMAGES)
+      transaction.oncomplete = () => resoudre()
+      transaction.onerror = () => rejeter(transaction.error)
+    })
+  } finally {
+    base.close()
+  }
 }
 
 async function lireImages(): Promise<ImagesFormulaire> {
-  const vide: ImagesFormulaire = { cadrage: null, complementaire: null, site: null }
   const base = await ouvrirBase()
-  const images = await new Promise<ImagesFormulaire>((resoudre) => {
-    const transaction = base.transaction(MAGASIN, 'readonly')
-    const requete = transaction.objectStore(MAGASIN).get(CLE_IMAGES)
-    requete.onsuccess = () => resoudre((requete.result as ImagesFormulaire) ?? vide)
-    requete.onerror = () => resoudre(vide)
-  })
-  base.close()
-  return images
+  try {
+    return await new Promise<ImagesFormulaire>((resoudre) => {
+      const transaction = base.transaction(MAGASIN, 'readonly')
+      const requete = transaction.objectStore(MAGASIN).get(CLE_IMAGES)
+      requete.onsuccess = () =>
+        resoudre((requete.result as ImagesFormulaire) ?? { ...IMAGES_VIDES })
+      requete.onerror = () => resoudre({ ...IMAGES_VIDES })
+    })
+  } finally {
+    base.close()
+  }
 }
 ```
 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- persistance`
-Expected: PASS, 4 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 67 tests.
+Expected: PASS, 99 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1931,6 +2527,7 @@ Spec §9. Les termes du catalogue sont repris du node `Construction Prompt` du w
 Créer `lib/n8n/mock.ts` :
 
 ```ts
+import { ErreurMetier, ErreurReseau } from './contrat'
 import type {
   ReponseGenerate,
   ReponseGetMateriaux,
@@ -2003,11 +2600,28 @@ const IMAGE_TEST =
   )
 
 export async function mockGetMateriaux(): Promise<ReponseGetMateriaux> {
-  return { materiaux: CATALOGUE }
+  return { materiaux: structuredClone(CATALOGUE) }
 }
 
+/**
+ * Sans ces sentinelles, le mock ne saurait que reussir : les deux branches
+ * d'erreur de l'ecran de generation ne seraient jamais exercees avant le
+ * premier essai reel contre n8n. Saisir une reference commencant par `ERR-`
+ * ou `NET-` declenche l'issue correspondante.
+ */
 export async function mockGenerate(requete: RequeteGenerate): Promise<ReponseGenerate> {
   await new Promise((resoudre) => setTimeout(resoudre, DELAI_GENERATION_MS))
+
+  if (requete.reference.startsWith('ERR-')) {
+    throw new ErreurMetier(
+      'materiau_inconnu',
+      'Le matériau demandé pour la toiture n’est pas calibré.',
+    )
+  }
+  if (requete.reference.startsWith('NET-')) {
+    throw new ErreurReseau('La connexion au service a été interrompue.')
+  }
+
   return {
     cycle_id: `mock-${Date.now()}`,
     reference: requete.reference,
@@ -2044,35 +2658,44 @@ Créer `lib/n8n/client.ts` :
 
 ```ts
 import { mockGenerate, mockGetMateriaux } from './mock'
-import { estErreur } from './contrat'
+import {
+  ErreurMetier,
+  ErreurReseau,
+  estErreur,
+  estReponseGenerate,
+} from './contrat'
+import { CATEGORIES } from '@/lib/form/types'
 import type {
   ReponseGenerate,
   ReponseGetMateriaux,
   RequeteGenerate,
 } from './contrat'
 
-/** Erreur metier renvoyee par n8n : la requete a abouti, le traitement a refuse. */
-export class ErreurMetier extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'ErreurMetier'
-  }
-}
+export { ErreurMetier, ErreurReseau } from './contrat'
 
 /**
- * Echec de transport : coupure, timeout de proxy, statut non-2xx.
- * Distinct d'une erreur metier parce que la generation a pu aboutir cote
- * serveur malgre la coupure — derriere un proxy coupant a 100 s, une
- * generation reussie arrive en 524.
+ * Traduit une reponse deja lue en issue du domaine. Aucun acces reseau, donc
+ * testable sur des objets nus.
+ *
+ * C'est la seule fonction du projet dont la sortie n'est pas une valeur mais
+ * un choix parmi trois issues, et ce choix determine mot pour mot ce que
+ * l'utilisateur lit apres quatre-vingt-dix secondes d'attente.
  */
-export class ErreurReseau extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ErreurReseau'
+export function interpreter<T>(
+  statut: number,
+  charge: unknown,
+  estAttendue: (valeur: unknown) => valeur is T,
+): T {
+  if (statut < 200 || statut >= 300) {
+    throw new ErreurReseau(`Le service a répondu avec le statut ${statut}.`)
   }
+  if (estErreur(charge)) {
+    throw new ErreurMetier(charge.erreur.code, charge.erreur.message)
+  }
+  if (!estAttendue(charge)) {
+    throw new ErreurReseau("La réponse du service n'est pas exploitable.")
+  }
+  return charge
 }
 
 function urlWebhook(): string | null {
@@ -2085,12 +2708,19 @@ export function enModeMock(): boolean {
   return urlWebhook() === null
 }
 
-async function appeler<T>(corps: object): Promise<T> {
+/** En deca de ce delai, la requete n'a pas pu atteindre le moteur. */
+const DELAI_ECHEC_IMMEDIAT_MS = 5000
+
+async function appeler<T>(
+  corps: object,
+  estAttendue: (valeur: unknown) => valeur is T,
+): Promise<T> {
   const url = urlWebhook()
   if (url === null) {
     throw new ErreurReseau("Aucune URL de webhook n'est configurée.")
   }
 
+  const depart = Date.now()
   let reponse: Response
   try {
     reponse = await fetch(url, {
@@ -2099,35 +2729,57 @@ async function appeler<T>(corps: object): Promise<T> {
       body: JSON.stringify(corps),
     })
   } catch {
-    throw new ErreurReseau('La connexion au service a échoué.')
-  }
-
-  if (!reponse.ok) {
-    throw new ErreurReseau(`Le service a répondu avec le statut ${reponse.status}.`)
+    // Un rejet quasi immediat n'a pas atteint le service : refus CORS,
+    // DNS, hors ligne. Le distinguer d'une coupure tardive evite d'annoncer
+    // « la generation a peut-etre abouti » alors que rien n'est parti.
+    throw new ErreurReseau(
+      Date.now() - depart < DELAI_ECHEC_IMMEDIAT_MS
+        ? "Le service n'a pas pu être contacté. Vérifiez l'adresse du webhook et votre connexion."
+        : 'La connexion au service a été interrompue.',
+    )
   }
 
   let charge: unknown
   try {
     charge = await reponse.json()
   } catch {
-    throw new ErreurReseau('La réponse du service est illisible.')
+    charge = null
   }
 
-  if (estErreur(charge)) {
-    throw new ErreurMetier(charge.erreur.code, charge.erreur.message)
-  }
+  return interpreter(reponse.status, charge, estAttendue)
+}
 
-  return charge as T
+/**
+ * Reconstruit les six categories a partir de CATEGORIES, en defaussant sur
+ * un tableau vide. Le contrat impose que n8n les renvoie toutes, mais c'est
+ * ici la frontiere entre « ce que le fil a donne » et « ce que le domaine
+ * promet » : une cle manquante doit produire une liste vide, pas un ecran
+ * blanc a l'etape 3.
+ */
+function normaliserCatalogue(
+  brut: Partial<ReponseGetMateriaux['materiaux']> | undefined,
+): ReponseGetMateriaux['materiaux'] {
+  const catalogue = {} as ReponseGetMateriaux['materiaux']
+  for (const categorie of CATEGORIES) {
+    catalogue[categorie] = brut?.[categorie] ?? []
+  }
+  return catalogue
+}
+
+/** Le catalogue est normalise ensuite : toute forme d'objet est acceptable ici. */
+function estObjet(valeur: unknown): valeur is Partial<ReponseGetMateriaux> {
+  return typeof valeur === 'object' && valeur !== null && !Array.isArray(valeur)
 }
 
 export async function getMateriaux(): Promise<ReponseGetMateriaux> {
   if (enModeMock()) return mockGetMateriaux()
-  return appeler<ReponseGetMateriaux>({ action: 'get_materiaux' })
+  const reponse = await appeler({ action: 'get_materiaux' }, estObjet)
+  return { materiaux: normaliserCatalogue(reponse.materiaux) }
 }
 
 export async function generate(requete: RequeteGenerate): Promise<ReponseGenerate> {
   if (enModeMock()) return mockGenerate(requete)
-  return appeler<ReponseGenerate>(requete)
+  return appeler(requete, estReponseGenerate)
 }
 ```
 
@@ -2136,10 +2788,74 @@ export async function generate(requete: RequeteGenerate): Promise<ReponseGenerat
 Run: `npx tsc --noEmit`
 Expected: aucune erreur.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Tester la logique de décision**
+
+Créer `lib/n8n/client.test.ts` :
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { ErreurMetier, ErreurReseau, interpreter } from './client'
+import { estReponseGenerate } from './contrat'
+
+const succes = {
+  cycle_id: 'c1',
+  reference: '2026-042',
+  image_url: 'https://exemple/rendu.jpg',
+  prompt: 'texte',
+}
+
+describe('interpreter', () => {
+  it('rend la charge quand elle a la forme attendue', () => {
+    expect(interpreter(200, succes, estReponseGenerate)).toEqual(succes)
+  })
+
+  it('leve une erreur metier sur une reponse d erreur', () => {
+    const charge = { erreur: { code: 'materiau_inconnu', message: 'Détail.' } }
+    try {
+      interpreter(200, charge, estReponseGenerate)
+      throw new Error('aurait du lever')
+    } catch (erreur) {
+      expect(erreur).toBeInstanceOf(ErreurMetier)
+      expect((erreur as ErreurMetier).code).toBe('materiau_inconnu')
+      expect((erreur as ErreurMetier).message).toBe('Détail.')
+    }
+  })
+
+  it('leve une erreur reseau sur un statut non-2xx', () => {
+    expect(() => interpreter(524, succes, estReponseGenerate)).toThrow(ErreurReseau)
+    expect(() => interpreter(500, null, estReponseGenerate)).toThrow(ErreurReseau)
+  })
+
+  it('prefere l erreur reseau au contenu quand le statut est mauvais', () => {
+    const charge = { erreur: { code: 'x', message: 'y' } }
+    expect(() => interpreter(500, charge, estReponseGenerate)).toThrow(ErreurReseau)
+  })
+
+  it('leve une erreur reseau sur une reponse inexploitable', () => {
+    for (const charge of [null, undefined, 'texte', 42, {}, { image_url: '' }]) {
+      expect(() => interpreter(200, charge, estReponseGenerate)).toThrow(ErreurReseau)
+    }
+  })
+
+  it('refuse un tableau, forme par defaut du node Respond to Webhook', () => {
+    expect(() => interpreter(200, [succes], estReponseGenerate)).toThrow(ErreurReseau)
+  })
+
+  it('ne confond jamais les deux familles d erreur', () => {
+    const metier = { erreur: { code: 'a', message: 'b' } }
+    expect(() => interpreter(200, metier, estReponseGenerate)).not.toThrow(ErreurReseau)
+    expect(() => interpreter(200, {}, estReponseGenerate)).not.toThrow(ErreurMetier)
+  })
+})
+```
+
+Run: `npm test -- client`
+Expected: PASS, 7 tests.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add lib/n8n/client.ts
+git add lib/n8n/client.ts lib/n8n/client.test.ts
 git commit -m "feat: client webhook avec bascule automatique vers le mock"
 ```
 
@@ -2202,15 +2918,6 @@ export const LIBELLE_CIEL: Record<Ciel, string> = {
   fin_de_journee: 'Fin de journée, lumière chaude',
   crepuscule: 'Crépuscule',
 }
-
-export const ORDRE_CIEL: readonly Ciel[] = [
-  'reprendre_photo',
-  'degage',
-  'legerement_voile',
-  'neutre_diffus',
-  'fin_de_journee',
-  'crepuscule',
-]
 
 export const LIBELLE_PELOUSE: Record<AspectPelouse, string> = {
   telle_quelle: 'Telle quelle',
@@ -2942,35 +3649,30 @@ Créer `components/formulaire/etapes/Etape4Environnement.tsx` :
 import { ChampChoixUnique } from '../champs/ChampChoixUnique'
 import { ChampInterrupteur } from '../champs/ChampInterrupteur'
 import { useFormulaire } from '../contexte'
-import { eclairagesDemandes, eclairagesPiscineProposes } from '@/lib/form/regles'
+import {
+  cielsDisponibles,
+  eclairagesDemandes,
+  eclairagesProposes,
+} from '@/lib/form/regles'
 import {
   LIBELLE_CIEL,
   LIBELLE_ECLAIRAGE,
   LIBELLE_PELOUSE,
-  ORDRE_CIEL,
   ORDRE_PELOUSE,
 } from '@/lib/form/libelles'
-import type { CleEclairage } from '@/lib/form/types'
-
-const OPTIONS_CIEL = ORDRE_CIEL.map((valeur) => ({
-  valeur,
-  libelle: LIBELLE_CIEL[valeur],
-}))
 
 const OPTIONS_PELOUSE = ORDRE_PELOUSE.map((valeur) => ({
   valeur,
   libelle: LIBELLE_PELOUSE[valeur],
 }))
 
-const ECLAIRAGES_BATI: CleEclairage[] = ['appliquesFacade', 'interieurVisible']
-const ECLAIRAGES_PISCINE: CleEclairage[] = ['margelles', 'sousMarin']
-
 export function Etape4Environnement() {
   const { etat, envoyer } = useFormulaire()
-
-  const cles = eclairagesPiscineProposes(etat.typeProjet)
-    ? [...ECLAIRAGES_PISCINE, ...ECLAIRAGES_BATI]
-    : ECLAIRAGES_BATI
+  const cles = eclairagesProposes(etat.typeProjet)
+  const optionsCiel = cielsDisponibles(etat.images).map((valeur) => ({
+    valeur,
+    libelle: LIBELLE_CIEL[valeur],
+  }))
 
   return (
     <div className="space-y-8">
@@ -3010,7 +3712,7 @@ export function Etape4Environnement() {
 
       <ChampChoixUnique
         intitule="Ciel et lumière"
-        options={OPTIONS_CIEL}
+        options={optionsCiel}
         valeur={etat.ciel}
         onChange={(valeur) => envoyer({ type: 'ciel', valeur })}
       />
@@ -3182,7 +3884,7 @@ import { useFormulaire } from '../contexte'
 import {
   champsMateriauxPour,
   eclairagesDemandes,
-  eclairagesPiscineProposes,
+  eclairagesProposes,
 } from '@/lib/form/regles'
 import {
   LIBELLE_CADRAGE,
@@ -3195,7 +3897,7 @@ import {
   LIBELLE_USAGE,
 } from '@/lib/form/libelles'
 import type { ReactNode } from 'react'
-import type { CleEclairage, Etape, SelectionMateriau } from '@/lib/form/types'
+import type { Etape, SelectionMateriau } from '@/lib/form/types'
 
 function decrireMateriau(selection: SelectionMateriau | null): string {
   if (selection === null) return 'Non renseigné'
@@ -3246,12 +3948,10 @@ export function Etape7FicheProjet() {
   const { etat } = useFormulaire()
   const categories = champsMateriauxPour(etat.typeProjet)
 
-  const clesEclairage: CleEclairage[] = eclairagesPiscineProposes(etat.typeProjet)
-    ? ['margelles', 'sousMarin', 'appliquesFacade', 'interieurVisible']
-    : ['appliquesFacade', 'interieurVisible']
-
   const eclairagesActifs = eclairagesDemandes(etat.ciel)
-    ? clesEclairage.filter((cle) => etat.eclairages[cle]).map((cle) => LIBELLE_ECLAIRAGE[cle])
+    ? eclairagesProposes(etat.typeProjet)
+        .filter((cle) => etat.eclairages[cle])
+        .map((cle) => LIBELLE_ECLAIRAGE[cle])
     : []
 
   return (
@@ -3370,7 +4070,7 @@ import { Etape4Environnement } from './etapes/Etape4Environnement'
 import { Etape5Style } from './etapes/Etape5Style'
 import { Etape6Precisions } from './etapes/Etape6Precisions'
 import { Etape7FicheProjet } from './etapes/Etape7FicheProjet'
-import { reduire } from '@/lib/form/reducer'
+import { etapeVoisine, normaliser, reduire } from '@/lib/form/reducer'
 import { etatInitial } from '@/lib/form/etat-initial'
 import { chargerEtat, sauvegarderEtat } from '@/lib/form/persistance'
 import { etapeFranchissable, peutEnvoyer } from '@/lib/form/validation'
@@ -3396,13 +4096,16 @@ type Envoi =
   | { statut: 'echec'; message: string; coupure: boolean }
 
 export function FormulaireRendu() {
-  const [etat, envoyer] = useReducer(reduire, etatInitial)
+  // L'etat de depart est normalise comme les suivants : sans cela, `style`
+  // resterait null jusqu'a la premiere action.
+  const [etat, envoyer] = useReducer(reduire, etatInitial, normaliser)
   const [restaure, setRestaure] = useState(false)
   const [catalogue, setCatalogue] = useState<Record<Categorie, MateriauCatalogue[]> | null>(
     null,
   )
   const [erreurCatalogue, setErreurCatalogue] = useState<string | null>(null)
   const [envoi, setEnvoi] = useState<Envoi>({ statut: 'repos' })
+  const [persistanceEnEchec, setPersistanceEnEchec] = useState(false)
   const enVol = useRef(false)
 
   // Restauration au montage, avant toute sauvegarde.
@@ -3421,9 +4124,24 @@ export function FormulaireRendu() {
     }
   }, [])
 
+  // Sauvegarde differee : `normaliser` reconstruit `materiaux` et
+  // `eclairages` a chaque action, donc l'effet se redeclenche a chaque
+  // frappe. Sans ce delai, chaque caractere tape provoquerait une ecriture
+  // sessionStorage et une transaction IndexedDB.
+  //
+  // L'echec n'est jamais bloquant, mais il est signale : avaler l'erreur
+  // laisserait la sauvegarde cesser de fonctionner sans que personne ne le
+  // sache, et l'utilisateur perdrait tout au premier rechargement en croyant
+  // son travail conserve.
   useEffect(() => {
     if (!restaure) return
-    sauvegarderEtat(etat).catch(() => undefined)
+    const minuteur = setTimeout(() => {
+      sauvegarderEtat(etat).then(
+        () => setPersistanceEnEchec(false),
+        () => setPersistanceEnEchec(true),
+      )
+    }, 400)
+    return () => clearTimeout(minuteur)
   }, [etat, restaure])
 
   useEffect(() => {
@@ -3507,6 +4225,13 @@ export function FormulaireRendu() {
           <h2 className="text-base text-slate-700">
             {etat.etape}. {TITRES[etat.etape]}
           </h2>
+          {persistanceEnEchec && (
+            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+              Vos saisies ne peuvent pas être enregistrées sur ce poste. Le
+              formulaire reste utilisable, mais un rechargement de la page ferait
+              tout perdre.
+            </p>
+          )}
         </header>
 
         {etat.etape === 1 && <Etape1Identification />}
@@ -3546,7 +4271,7 @@ export function FormulaireRendu() {
             type="button"
             disabled={etat.etape === 1}
             onClick={() =>
-              envoyer({ type: 'allerEtape', etape: (etat.etape - 1) as Etape })
+              envoyer({ type: 'allerEtape', etape: etapeVoisine(etat.etape, -1) })
             }
             className="rounded-lg px-4 py-2 text-sm text-slate-600 disabled:text-slate-300"
           >
@@ -3567,7 +4292,7 @@ export function FormulaireRendu() {
               type="button"
               disabled={!franchissable}
               onClick={() =>
-                envoyer({ type: 'allerEtape', etape: (etat.etape + 1) as Etape })
+                envoyer({ type: 'allerEtape', etape: etapeVoisine(etat.etape, 1) })
               }
               className="rounded-lg bg-slate-900 px-5 py-2 text-sm text-white disabled:bg-slate-300"
             >
@@ -3834,7 +4559,7 @@ git commit -m "docs: contrat du webhook n8n et exemple d environnement"
 - [ ] **Step 1: Lancer toute la suite de tests**
 
 Run: `npm test`
-Expected: PASS, 67 tests, aucun échec.
+Expected: PASS, 99 tests, aucun échec.
 
 - [ ] **Step 2: Vérifier le lint et les types**
 
