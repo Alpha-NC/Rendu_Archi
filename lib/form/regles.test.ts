@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   champsMateriauxPour,
+  cielProposeParDefaut,
   conservationExistantProposee,
+  eclairagesDemandes,
+  eclairagesPiscineProposes,
   modeProduction,
   stylesDisponibles,
   stylePreselectionne,
@@ -176,5 +179,45 @@ describe('conservationExistantProposee', () => {
   it('n est pas proposee sur un projet neuf', () => {
     expect(conservationExistantProposee('piscine', images({ site: image }))).toBe(false)
     expect(conservationExistantProposee('pool_house', images({ site: image }))).toBe(false)
+  })
+})
+
+describe('cielProposeParDefaut', () => {
+  it('propose de reprendre la lumiere de la photo quand elle existe', () => {
+    expect(cielProposeParDefaut(images({ site: image }))).toBe('reprendre_photo')
+  })
+
+  it('propose une lumiere neutre sans photo', () => {
+    expect(cielProposeParDefaut(images({ cadrage: image }))).toBe('neutre_diffus')
+  })
+})
+
+describe('eclairagesDemandes', () => {
+  it('demande les eclairages en fin de journee', () => {
+    expect(eclairagesDemandes('fin_de_journee')).toBe(true)
+  })
+
+  it('demande les eclairages au crepuscule', () => {
+    expect(eclairagesDemandes('crepuscule')).toBe(true)
+  })
+
+  it('ne demande rien pour les autres ambiances', () => {
+    for (const ciel of ['reprendre_photo', 'degage', 'legerement_voile', 'neutre_diffus'] as const) {
+      expect(eclairagesDemandes(ciel)).toBe(false)
+    }
+  })
+})
+
+describe('eclairagesPiscineProposes', () => {
+  it('propose les eclairages de bassin sur les projets avec piscine', () => {
+    expect(eclairagesPiscineProposes('piscine')).toBe(true)
+    expect(eclairagesPiscineProposes('pool_house')).toBe(true)
+  })
+
+  it('ne les propose pas ailleurs', () => {
+    expect(eclairagesPiscineProposes('extension')).toBe(false)
+    expect(eclairagesPiscineProposes('restructuration')).toBe(false)
+    expect(eclairagesPiscineProposes('terrasse')).toBe(false)
+    expect(eclairagesPiscineProposes(null)).toBe(false)
   })
 })

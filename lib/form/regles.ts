@@ -1,5 +1,6 @@
 import type {
   Categorie,
+  Ciel,
   ImagesFormulaire,
   ModeProduction,
   Style,
@@ -85,4 +86,27 @@ export function conservationExistantProposee(
 ): boolean {
   if (!images.site) return false
   return typeProjet === 'extension' || typeProjet === 'restructuration'
+}
+
+/**
+ * Preselection de l'ambiance lumineuse. La lumiere de la photographie sert
+ * de reference quand elle existe, une lumiere neutre a defaut. Ce n'est
+ * qu'une valeur de depart : toutes les ambiances restent choisissables.
+ */
+export function cielProposeParDefaut(images: ImagesFormulaire): Ciel {
+  return images.site ? 'reprendre_photo' : 'neutre_diffus'
+}
+
+/**
+ * Une ambiance de fin de journee ou de crepuscule appelle une question
+ * complementaire sur les eclairages : sans elle, le resultat montre une
+ * maison eteinte.
+ */
+export function eclairagesDemandes(ciel: Ciel): boolean {
+  return ciel === 'fin_de_journee' || ciel === 'crepuscule'
+}
+
+/** Les eclairages de bassin n'ont de sens que sur un projet qui en comporte un. */
+export function eclairagesPiscineProposes(typeProjet: TypeProjet | null): boolean {
+  return typeProjet === 'piscine' || typeProjet === 'pool_house'
 }
