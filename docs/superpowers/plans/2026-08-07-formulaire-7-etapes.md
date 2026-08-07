@@ -178,11 +178,15 @@ export type Ciel =
 
 export type AspectPelouse = 'telle_quelle' | 'tondue_soignee' | 'fleurie'
 
-export type CleEclairage =
-  | 'margelles'
-  | 'sousMarin'
-  | 'appliquesFacade'
-  | 'interieurVisible'
+/** Meme raison que pour CATEGORIES : la liste doit etre prouvablement complete. */
+export const CLES_ECLAIRAGE = [
+  'margelles',
+  'sousMarin',
+  'appliquesFacade',
+  'interieurVisible',
+] as const
+
+export type CleEclairage = (typeof CLES_ECLAIRAGE)[number]
 
 export type Eclairages = Record<CleEclairage, boolean>
 
@@ -381,6 +385,9 @@ import type { ImagesFormulaire, ModeProduction, TypeCadrage } from './types'
  * Matrice de deduction du mode de production.
  * Le mode n'est jamais affiche : il commande uniquement les styles
  * proposables et la clause de prompt construite cote n8n.
+ * Le photomontage n'est revendique que sur une perspective averee, jamais
+ * par defaut : tant que le cadrage n'est pas choisi, une photo seule ne
+ * suffit pas.
  */
 export function modeProduction(
   images: ImagesFormulaire,
@@ -490,6 +497,20 @@ describe('stylePreselectionne', () => {
       }
     }
   })
+
+  it('preselectionne toujours un style disponible dans le mode', () => {
+    const modes = [
+      'photomontage_controle',
+      'presentation_generative',
+      'retexturation_revit',
+    ] as const
+    const usages = ['permis_de_construire', 'presentation_client', 'les_deux', null] as const
+    for (const mode of modes) {
+      for (const usage of usages) {
+        expect(stylesDisponibles(mode)).toContain(stylePreselectionne(mode, usage))
+      }
+    }
+  })
 })
 ```
 
@@ -506,7 +527,7 @@ Ajouter à `lib/form/regles.ts`, en complétant l'import de types avec `Style` e
 
 ```ts
 /**
- * Styles proposables selon le mode.
+ * Styles proposables selon le mode, dans l'ordre d'affichage de l'etape 5.
  * Le photomontage administratif exige une photo du site et une perspective :
  * il est structurellement exclu en retexturation Revit (son objet est
  * l'integration a une photographie, absente de ce mode) et exclu en
@@ -539,7 +560,7 @@ export function stylePreselectionne(mode: ModeProduction, usage: Usage | null): 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- regles`
-Expected: PASS, 13 tests.
+Expected: PASS, 14 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -642,7 +663,8 @@ const MATERIAUX_BATI: Categorie[] = ['toiture', 'facade', 'volets', 'menuiseries
 const MATERIAUX_PISCINE: Categorie[] = ['margelles', 'plage']
 
 /**
- * Categories de materiaux affichees selon le type de projet.
+ * Categories de materiaux affichees selon le type de projet, dans l'ordre
+ * d'affichage de l'etape 3.
  * Margelles et plage restent deux ouvrages distincts, jamais fusionnes.
  */
 export function champsMateriauxPour(typeProjet: TypeProjet | null): Categorie[] {
@@ -655,7 +677,7 @@ export function champsMateriauxPour(typeProjet: TypeProjet | null): Categorie[] 
     case 'pool_house':
       return [...MATERIAUX_BATI, ...MATERIAUX_PISCINE]
     case 'terrasse':
-    default:
+    case null:
       return []
   }
 }
@@ -677,7 +699,7 @@ export function conservationExistantProposee(
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- regles`
-Expected: PASS, 23 tests.
+Expected: PASS, 24 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -727,17 +749,29 @@ describe('eclairagesDemandes', () => {
   })
 })
 
-describe('eclairagesPiscineProposes', () => {
+describe('eclairagesProposes', () => {
   it('propose les eclairages de bassin sur les projets avec piscine', () => {
-    expect(eclairagesPiscineProposes('piscine')).toBe(true)
-    expect(eclairagesPiscineProposes('pool_house')).toBe(true)
+    expect(eclairagesProposes('piscine')).toEqual([
+      'margelles',
+      'sousMarin',
+      'appliquesFacade',
+      'interieurVisible',
+    ])
+    expect(eclairagesProposes('pool_house')).toEqual([
+      'margelles',
+      'sousMarin',
+      'appliquesFacade',
+      'interieurVisible',
+    ])
   })
 
-  it('ne les propose pas ailleurs', () => {
-    expect(eclairagesPiscineProposes('extension')).toBe(false)
-    expect(eclairagesPiscineProposes('restructuration')).toBe(false)
-    expect(eclairagesPiscineProposes('terrasse')).toBe(false)
-    expect(eclairagesPiscineProposes(null)).toBe(false)
+  it('ne propose que les eclairages du bati ailleurs', () => {
+    for (const typeProjet of ['extension', 'restructuration', 'terrasse', null] as const) {
+      expect(eclairagesProposes(typeProjet)).toEqual([
+        'appliquesFacade',
+        'interieurVisible',
+      ])
+    }
   })
 })
 ```
@@ -770,16 +804,26 @@ export function eclairagesDemandes(ciel: Ciel): boolean {
   return ciel === 'fin_de_journee' || ciel === 'crepuscule'
 }
 
-/** Les eclairages de bassin n'ont de sens que sur un projet qui en comporte un. */
-export function eclairagesPiscineProposes(typeProjet: TypeProjet | null): boolean {
-  return typeProjet === 'piscine' || typeProjet === 'pool_house'
+const ECLAIRAGES_BATI: CleEclairage[] = ['appliquesFacade', 'interieurVisible']
+const ECLAIRAGES_PISCINE: CleEclairage[] = ['margelles', 'sousMarin']
+
+/**
+ * Eclairages proposes, dans l'ordre d'affichage : ceux du bassin n'ont de
+ * sens que sur un projet qui en comporte un.
+ * La fonction rend la liste et non un booleen, pour que les cles restent
+ * dans ce module. Le reducer s'en sert aussi pour eteindre un eclairage
+ * devenu sans objet apres un changement de type de projet.
+ */
+export function eclairagesProposes(typeProjet: TypeProjet | null): CleEclairage[] {
+  const avecBassin = typeProjet === 'piscine' || typeProjet === 'pool_house'
+  return avecBassin ? [...ECLAIRAGES_PISCINE, ...ECLAIRAGES_BATI] : [...ECLAIRAGES_BATI]
 }
 ```
 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- regles`
-Expected: PASS, 30 tests.
+Expected: PASS, 31 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1071,6 +1115,19 @@ describe('materiaux', () => {
     expect(e.materiaux.toiture).toBeNull()
   })
 
+  it('eteint un eclairage de bassin quand le projet n en a plus', () => {
+    let e = reduire(etat(), { type: 'typeProjet', valeur: 'piscine' })
+    e = reduire(e, { type: 'ciel', valeur: 'crepuscule' })
+    e = reduire(e, { type: 'eclairage', cle: 'sousMarin', valeur: true })
+    e = reduire(e, { type: 'eclairage', cle: 'appliquesFacade', valeur: true })
+    expect(e.eclairages.sousMarin).toBe(true)
+
+    e = reduire(e, { type: 'typeProjet', valeur: 'extension' })
+    expect(e.eclairages.sousMarin).toBe(false)
+    expect(e.eclairages.margelles).toBe(false)
+    expect(e.eclairages.appliquesFacade).toBe(true)
+  })
+
   it('efface une conservation de l existant devenue impossible', () => {
     let e = reduire(etat(), { type: 'image', role: 'site', valeur: image })
     e = reduire(e, { type: 'typeProjet', valeur: 'extension' })
@@ -1123,11 +1180,12 @@ import {
   champsMateriauxPour,
   cielProposeParDefaut,
   conservationExistantProposee,
+  eclairagesProposes,
   modeProduction,
   stylePreselectionne,
   stylesDisponibles,
 } from './regles'
-import { CATEGORIES } from './types'
+import { CATEGORIES, CLES_ECLAIRAGE } from './types'
 import type {
   AspectPelouse,
   Categorie,
@@ -1237,7 +1295,10 @@ function appliquer(
  *   et bascule de force s'il devient indisponible dans le mode courant ;
  * - le ciel suit la preselection tant qu'il n'a pas ete choisi a la main ;
  * - les materiaux des categories qui ne sont plus affichees sont effaces,
- *   ainsi que les conservations de l'existant devenues impossibles.
+ *   ainsi que les conservations de l'existant devenues impossibles ;
+ * - les eclairages qui ne sont plus proposes sont eteints, faute de quoi un
+ *   projet passe de piscine a extension enverrait un eclairage de bassin
+ *   sur un projet qui n'en a pas.
  */
 function normaliser(etat: EtatFormulaire): EtatFormulaire {
   const mode = modeProduction(etat.images, etat.typeCadrage)
@@ -1267,19 +1328,25 @@ function normaliser(etat: EtatFormulaire): EtatFormulaire {
     }
   }
 
-  return { ...etat, style, ciel, materiaux }
+  const proposes = eclairagesProposes(etat.typeProjet)
+  const eclairages = { ...etat.eclairages }
+  for (const cle of CLES_ECLAIRAGE) {
+    if (!proposes.includes(cle)) eclairages[cle] = false
+  }
+
+  return { ...etat, style, ciel, materiaux, eclairages }
 }
 ```
 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- reducer`
-Expected: PASS, 11 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 51 tests.
+Expected: PASS, 53 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1927,7 +1994,7 @@ Expected: PASS, 4 tests.
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 68 tests.
+Expected: PASS, 70 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -2961,7 +3028,7 @@ Créer `components/formulaire/etapes/Etape4Environnement.tsx` :
 import { ChampChoixUnique } from '../champs/ChampChoixUnique'
 import { ChampInterrupteur } from '../champs/ChampInterrupteur'
 import { useFormulaire } from '../contexte'
-import { eclairagesDemandes, eclairagesPiscineProposes } from '@/lib/form/regles'
+import { eclairagesDemandes, eclairagesProposes } from '@/lib/form/regles'
 import {
   LIBELLE_CIEL,
   LIBELLE_ECLAIRAGE,
@@ -2969,7 +3036,6 @@ import {
   ORDRE_CIEL,
   ORDRE_PELOUSE,
 } from '@/lib/form/libelles'
-import type { CleEclairage } from '@/lib/form/types'
 
 const OPTIONS_CIEL = ORDRE_CIEL.map((valeur) => ({
   valeur,
@@ -2981,15 +3047,9 @@ const OPTIONS_PELOUSE = ORDRE_PELOUSE.map((valeur) => ({
   libelle: LIBELLE_PELOUSE[valeur],
 }))
 
-const ECLAIRAGES_BATI: CleEclairage[] = ['appliquesFacade', 'interieurVisible']
-const ECLAIRAGES_PISCINE: CleEclairage[] = ['margelles', 'sousMarin']
-
 export function Etape4Environnement() {
   const { etat, envoyer } = useFormulaire()
-
-  const cles = eclairagesPiscineProposes(etat.typeProjet)
-    ? [...ECLAIRAGES_PISCINE, ...ECLAIRAGES_BATI]
-    : ECLAIRAGES_BATI
+  const cles = eclairagesProposes(etat.typeProjet)
 
   return (
     <div className="space-y-8">
@@ -3201,7 +3261,7 @@ import { useFormulaire } from '../contexte'
 import {
   champsMateriauxPour,
   eclairagesDemandes,
-  eclairagesPiscineProposes,
+  eclairagesProposes,
 } from '@/lib/form/regles'
 import {
   LIBELLE_CADRAGE,
@@ -3214,7 +3274,7 @@ import {
   LIBELLE_USAGE,
 } from '@/lib/form/libelles'
 import type { ReactNode } from 'react'
-import type { CleEclairage, Etape, SelectionMateriau } from '@/lib/form/types'
+import type { Etape, SelectionMateriau } from '@/lib/form/types'
 
 function decrireMateriau(selection: SelectionMateriau | null): string {
   if (selection === null) return 'Non renseigné'
@@ -3265,12 +3325,10 @@ export function Etape7FicheProjet() {
   const { etat } = useFormulaire()
   const categories = champsMateriauxPour(etat.typeProjet)
 
-  const clesEclairage: CleEclairage[] = eclairagesPiscineProposes(etat.typeProjet)
-    ? ['margelles', 'sousMarin', 'appliquesFacade', 'interieurVisible']
-    : ['appliquesFacade', 'interieurVisible']
-
   const eclairagesActifs = eclairagesDemandes(etat.ciel)
-    ? clesEclairage.filter((cle) => etat.eclairages[cle]).map((cle) => LIBELLE_ECLAIRAGE[cle])
+    ? eclairagesProposes(etat.typeProjet)
+        .filter((cle) => etat.eclairages[cle])
+        .map((cle) => LIBELLE_ECLAIRAGE[cle])
     : []
 
   return (
@@ -3853,7 +3911,7 @@ git commit -m "docs: contrat du webhook n8n et exemple d environnement"
 - [ ] **Step 1: Lancer toute la suite de tests**
 
 Run: `npm test`
-Expected: PASS, 68 tests, aucun échec.
+Expected: PASS, 70 tests, aucun échec.
 
 - [ ] **Step 2: Vérifier le lint et les types**
 
