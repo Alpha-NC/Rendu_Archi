@@ -124,6 +124,7 @@ type EtatFormulaire = {
   aspectPelouse: AspectPelouse
   elementsARetirer: string
   ciel: Ciel
+  cielChoisiManuellement: boolean
   eclairages: Eclairages          // sans objet hors fin de journée et crépuscule
 
   style: Style | null
@@ -283,6 +284,8 @@ Ces règles se traduisent donc en pré-sélections, jamais en masquages.
 | Crépuscule | |
 
 `cielProposeParDefaut(images): Ciel` porte la pré-sélection. Elle est écrasée dès que l'utilisateur choisit une valeur, selon le même mécanisme que le style (§5.4).
+
+« Reprendre la lumière de la photo » n'est proposée que si une photo du site existe — `cielsDisponibles(images)`. Ôter une option devenue sans référent n'est pas masquer un champ : sans photo, cette valeur demanderait à n8n de suivre une photographie absente du payload. Comme pour le style, un choix manuel devenu impossible bascule sur la pré-sélection.
 
 #### Éclairages
 

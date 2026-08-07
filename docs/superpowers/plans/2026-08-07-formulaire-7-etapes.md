@@ -42,6 +42,8 @@ Trois ajouts par rapport à la structure de la spec §3, décidés ici :
 - `components/formulaire/contexte.ts` — le contexte React et son hook, sortis de `FormulaireRendu.tsx` pour que les composants d'étape n'importent pas l'orchestrateur, ce qui créerait un cycle d'imports.
 - `cielChoisiManuellement` dans l'état — la spec §5.8 dit que la pré-sélection du ciel est écrasée « selon le même mécanisme que le style », ce qui suppose un drapeau symétrique de `styleChoisiManuellement`.
 
+Point de vigilance pour les tâches de composants : `normaliser` reconstruit `etat.materiaux` et `etat.eclairages` à chaque action, y compris une simple frappe dans un champ texte. Ne jamais mettre ces deux objets en dépendance d'un `useMemo`, d'un `useEffect` ou d'un `React.memo`. Les valeurs qu'ils contiennent, elles, gardent leur identité : `etat.materiaux[categorie]` est une dépendance sûre.
+
 ---
 
 ## Task 1: Mise en place de Vitest
@@ -733,6 +735,33 @@ describe('cielProposeParDefaut', () => {
   })
 })
 
+describe('cielsDisponibles', () => {
+  it('propose de reprendre la lumiere de la photo seulement si elle existe', () => {
+    expect(cielsDisponibles(images({ site: image }))).toContain('reprendre_photo')
+    expect(cielsDisponibles(images())).not.toContain('reprendre_photo')
+  })
+
+  it('propose les cinq ambiances explicites dans tous les cas', () => {
+    for (const jeu of [images({ site: image }), images()]) {
+      expect(cielsDisponibles(jeu)).toEqual(
+        expect.arrayContaining([
+          'degage',
+          'legerement_voile',
+          'neutre_diffus',
+          'fin_de_journee',
+          'crepuscule',
+        ]),
+      )
+    }
+  })
+
+  it('contient toujours le ciel propose par defaut', () => {
+    for (const jeu of [images({ site: image }), images()]) {
+      expect(cielsDisponibles(jeu)).toContain(cielProposeParDefaut(jeu))
+    }
+  })
+})
+
 describe('eclairagesDemandes', () => {
   it('demande les eclairages en fin de journee', () => {
     expect(eclairagesDemandes('fin_de_journee')).toBe(true)
@@ -795,6 +824,24 @@ export function cielProposeParDefaut(images: ImagesFormulaire): Ciel {
   return images.site ? 'reprendre_photo' : 'neutre_diffus'
 }
 
+const CIELS_EXPLICITES: Ciel[] = [
+  'degage',
+  'legerement_voile',
+  'neutre_diffus',
+  'fin_de_journee',
+  'crepuscule',
+]
+
+/**
+ * Ambiances proposables, dans l'ordre d'affichage.
+ * « Reprendre la lumiere de la photo » disparait sans photo du site : cette
+ * valeur demanderait a n8n de suivre une photographie absente du payload.
+ * Oter une option devenue sans referent n'est pas masquer un champ.
+ */
+export function cielsDisponibles(images: ImagesFormulaire): Ciel[] {
+  return images.site ? ['reprendre_photo', ...CIELS_EXPLICITES] : [...CIELS_EXPLICITES]
+}
+
 /**
  * Une ambiance de fin de journee ou de crepuscule appelle une question
  * complementaire sur les eclairages : sans elle, le resultat montre une
@@ -823,7 +870,7 @@ export function eclairagesProposes(typeProjet: TypeProjet | null): CleEclairage[
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- regles`
-Expected: PASS, 31 tests.
+Expected: PASS, 34 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -950,6 +997,16 @@ describe('peutEnvoyer', () => {
   it('refuse l envoi sans reference', () => {
     expect(peutEnvoyer(etat({ ...etatComplet, reference: '' }))).toBe(false)
   })
+
+  it('refuse l envoi quand le style n est plus disponible', () => {
+    const sansPhoto = etat({
+      ...etatComplet,
+      images: { cadrage: image, complementaire: null, site: null },
+    })
+    expect(sansPhoto.style).toBe('photomontage_administratif')
+    expect(peutEnvoyer(sansPhoto)).toBe(false)
+    expect(etapeFranchissable(sansPhoto, 7)).toBe(false)
+  })
 })
 ```
 
@@ -968,6 +1025,8 @@ import type { Etape, EtatFormulaire } from './types'
 
 /**
  * Conditions pour quitter une etape vers la suivante.
+ * L'etape 7 fait exception : elle n'a pas de suivante, la question y devient
+ * « peut-on envoyer ».
  * Le retour en arriere n'est jamais conditionne.
  * Aucun materiau n'est obligatoire : les etapes 3, 4 et 6 sont toujours
  * franchissables.
@@ -992,20 +1051,22 @@ export function etapeFranchissable(etat: EtatFormulaire, etape: Etape): boolean 
   }
 }
 
-/** L'envoi exige que toutes les etapes bloquantes soient satisfaites. */
+const ETAPES_A_SATISFAIRE = [1, 2, 3, 4, 5, 6] as const
+
+/**
+ * L'envoi exige que toutes les etapes precedentes soient franchissables.
+ * L'etape 7 en est exclue par le type de la constante : c'est elle qui
+ * delegue ici, l'inclure ferait une recursion infinie.
+ */
 export function peutEnvoyer(etat: EtatFormulaire): boolean {
-  return (
-    etapeFranchissable(etat, 1) &&
-    etapeFranchissable(etat, 2) &&
-    etapeFranchissable(etat, 5)
-  )
+  return ETAPES_A_SATISFAIRE.every((etape) => etapeFranchissable(etat, etape))
 }
 ```
 
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- validation`
-Expected: PASS, 10 tests.
+Expected: PASS, 11 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1099,6 +1160,69 @@ describe('preselection du ciel', () => {
     e = reduire(e, { type: 'image', role: 'site', valeur: image })
     expect(e.ciel).toBe('crepuscule')
   })
+
+  it('abandonne la lumiere de la photo quand la photo est retiree', () => {
+    let e = reduire(etat(), { type: 'image', role: 'site', valeur: image })
+    e = reduire(e, { type: 'ciel', valeur: 'reprendre_photo' })
+    expect(e.ciel).toBe('reprendre_photo')
+
+    e = reduire(e, { type: 'image', role: 'site', valeur: null })
+    expect(e.ciel).toBe('neutre_diffus')
+  })
+})
+
+describe('restauration', () => {
+  it('normalise un etat incoherent venu du stockage', () => {
+    const pourri: EtatFormulaire = {
+      ...etatInitial,
+      typeProjet: 'terrasse',
+      typeCadrage: 'perspective',
+      images: { cadrage: image, complementaire: null, site: null },
+      materiaux: {
+        ...etatInitial.materiaux,
+        toiture: { origine: 'catalogue', id: 'a', terme: 'Tuiles plates' },
+        facade: { origine: 'existant' },
+      },
+      ciel: 'reprendre_photo',
+      cielChoisiManuellement: true,
+      eclairages: {
+        margelles: true,
+        sousMarin: true,
+        appliquesFacade: true,
+        interieurVisible: false,
+      },
+      style: 'photomontage_administratif',
+      styleChoisiManuellement: true,
+    }
+
+    const e = reduire(etat(), { type: 'restaurer', etat: pourri })
+
+    expect(e.materiaux.toiture).toBeNull()
+    expect(e.materiaux.facade).toBeNull()
+    expect(e.ciel).toBe('neutre_diffus')
+    expect(e.eclairages.margelles).toBe(false)
+    expect(e.eclairages.sousMarin).toBe(false)
+    expect(e.eclairages.appliquesFacade).toBe(true)
+    expect(e.style).toBe('presentation_client')
+  })
+
+  it('ne laisse jamais un style null derriere un drapeau manuel', () => {
+    const sansStyle: EtatFormulaire = {
+      ...etatInitial,
+      style: null,
+      styleChoisiManuellement: true,
+    }
+    const e = reduire(etat(), { type: 'restaurer', etat: sansStyle })
+    expect(e.style).not.toBeNull()
+  })
+
+  it('est idempotente', () => {
+    let e = reduire(etat(), { type: 'image', role: 'site', valeur: image })
+    e = reduire(e, { type: 'typeCadrage', valeur: 'perspective' })
+    e = reduire(e, { type: 'typeProjet', valeur: 'pool_house' })
+    e = reduire(e, { type: 'usage', valeur: 'permis_de_construire' })
+    expect(reduire(e, { type: 'restaurer', etat: e })).toEqual(e)
+  })
 })
 
 describe('materiaux', () => {
@@ -1179,6 +1303,7 @@ Créer `lib/form/reducer.ts` :
 import {
   champsMateriauxPour,
   cielProposeParDefaut,
+  cielsDisponibles,
   conservationExistantProposee,
   eclairagesProposes,
   modeProduction,
@@ -1293,25 +1418,41 @@ function appliquer(
  * Retablit les invariants apres chaque action :
  * - le style suit la preselection tant qu'il n'a pas ete choisi a la main,
  *   et bascule de force s'il devient indisponible dans le mode courant ;
- * - le ciel suit la preselection tant qu'il n'a pas ete choisi a la main ;
+ * - le ciel obeit a la meme regle, « reprendre la lumiere de la photo »
+ *   cessant d'etre disponible des que la photo du site est retiree ;
  * - les materiaux des categories qui ne sont plus affichees sont effaces,
  *   ainsi que les conservations de l'existant devenues impossibles ;
  * - les eclairages qui ne sont plus proposes sont eteints, faute de quoi un
  *   projet passe de piscine a extension enverrait un eclairage de bassin
  *   sur un projet qui n'en a pas.
+ *
+ * Chaque bloc lit uniquement les champs bruts de `etat`, jamais la sortie
+ * d'un autre bloc : c'est ce qui rend leur ordre indifferent. Tout invariant
+ * qui dependrait d'une valeur normalisee devrait etre place explicitement
+ * apres elle.
+ *
+ * Deux choses ne sont volontairement pas normalisees ici :
+ * - la coherence des eclairages avec le ciel. La question n'etant pas posee
+ *   hors ambiance crepusculaire, `payload.ts` envoie `null` ; conserver les
+ *   interrupteurs permet un aller-retour sans perte.
+ * - la navigation. `etape` et `etapeMax` relevent de l'orchestrateur, qui
+ *   s'appuie sur `validation.ts` pour activer ou non le bouton Continuer.
  */
-function normaliser(etat: EtatFormulaire): EtatFormulaire {
+export function normaliser(etat: EtatFormulaire): EtatFormulaire {
   const mode = modeProduction(etat.images, etat.typeCadrage)
   const disponibles = stylesDisponibles(mode)
 
-  let style = etat.style
-  if (!etat.styleChoisiManuellement) {
-    style = stylePreselectionne(mode, etat.usage)
-  } else if (style !== null && !disponibles.includes(style)) {
-    style = stylePreselectionne(mode, etat.usage)
-  }
+  const style =
+    etat.styleChoisiManuellement &&
+    etat.style !== null &&
+    disponibles.includes(etat.style)
+      ? etat.style
+      : stylePreselectionne(mode, etat.usage)
 
-  const ciel = etat.cielChoisiManuellement ? etat.ciel : cielProposeParDefaut(etat.images)
+  const ciel =
+    etat.cielChoisiManuellement && cielsDisponibles(etat.images).includes(etat.ciel)
+      ? etat.ciel
+      : cielProposeParDefaut(etat.images)
 
   const affichees = champsMateriauxPour(etat.typeProjet)
   const existantPropose = conservationExistantProposee(etat.typeProjet, etat.images)
@@ -1341,12 +1482,12 @@ function normaliser(etat: EtatFormulaire): EtatFormulaire {
 - [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `npm test -- reducer`
-Expected: PASS, 12 tests.
+Expected: PASS, 16 tests.
 
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 53 tests.
+Expected: PASS, 61 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1994,7 +2135,7 @@ Expected: PASS, 4 tests.
 - [ ] **Step 5: Lancer toute la suite**
 
 Run: `npm test`
-Expected: PASS, 70 tests.
+Expected: PASS, 78 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -2288,15 +2429,6 @@ export const LIBELLE_CIEL: Record<Ciel, string> = {
   fin_de_journee: 'Fin de journée, lumière chaude',
   crepuscule: 'Crépuscule',
 }
-
-export const ORDRE_CIEL: readonly Ciel[] = [
-  'reprendre_photo',
-  'degage',
-  'legerement_voile',
-  'neutre_diffus',
-  'fin_de_journee',
-  'crepuscule',
-]
 
 export const LIBELLE_PELOUSE: Record<AspectPelouse, string> = {
   telle_quelle: 'Telle quelle',
@@ -3028,19 +3160,17 @@ Créer `components/formulaire/etapes/Etape4Environnement.tsx` :
 import { ChampChoixUnique } from '../champs/ChampChoixUnique'
 import { ChampInterrupteur } from '../champs/ChampInterrupteur'
 import { useFormulaire } from '../contexte'
-import { eclairagesDemandes, eclairagesProposes } from '@/lib/form/regles'
+import {
+  cielsDisponibles,
+  eclairagesDemandes,
+  eclairagesProposes,
+} from '@/lib/form/regles'
 import {
   LIBELLE_CIEL,
   LIBELLE_ECLAIRAGE,
   LIBELLE_PELOUSE,
-  ORDRE_CIEL,
   ORDRE_PELOUSE,
 } from '@/lib/form/libelles'
-
-const OPTIONS_CIEL = ORDRE_CIEL.map((valeur) => ({
-  valeur,
-  libelle: LIBELLE_CIEL[valeur],
-}))
 
 const OPTIONS_PELOUSE = ORDRE_PELOUSE.map((valeur) => ({
   valeur,
@@ -3050,6 +3180,10 @@ const OPTIONS_PELOUSE = ORDRE_PELOUSE.map((valeur) => ({
 export function Etape4Environnement() {
   const { etat, envoyer } = useFormulaire()
   const cles = eclairagesProposes(etat.typeProjet)
+  const optionsCiel = cielsDisponibles(etat.images).map((valeur) => ({
+    valeur,
+    libelle: LIBELLE_CIEL[valeur],
+  }))
 
   return (
     <div className="space-y-8">
@@ -3089,7 +3223,7 @@ export function Etape4Environnement() {
 
       <ChampChoixUnique
         intitule="Ciel et lumière"
-        options={OPTIONS_CIEL}
+        options={optionsCiel}
         valeur={etat.ciel}
         onChange={(valeur) => envoyer({ type: 'ciel', valeur })}
       />
@@ -3447,7 +3581,7 @@ import { Etape4Environnement } from './etapes/Etape4Environnement'
 import { Etape5Style } from './etapes/Etape5Style'
 import { Etape6Precisions } from './etapes/Etape6Precisions'
 import { Etape7FicheProjet } from './etapes/Etape7FicheProjet'
-import { etapeVoisine, reduire } from '@/lib/form/reducer'
+import { etapeVoisine, normaliser, reduire } from '@/lib/form/reducer'
 import { etatInitial } from '@/lib/form/etat-initial'
 import { chargerEtat, sauvegarderEtat } from '@/lib/form/persistance'
 import { etapeFranchissable, peutEnvoyer } from '@/lib/form/validation'
@@ -3473,7 +3607,9 @@ type Envoi =
   | { statut: 'echec'; message: string; coupure: boolean }
 
 export function FormulaireRendu() {
-  const [etat, envoyer] = useReducer(reduire, etatInitial)
+  // L'etat de depart est normalise comme les suivants : sans cela, `style`
+  // resterait null jusqu'a la premiere action.
+  const [etat, envoyer] = useReducer(reduire, etatInitial, normaliser)
   const [restaure, setRestaure] = useState(false)
   const [catalogue, setCatalogue] = useState<Record<Categorie, MateriauCatalogue[]> | null>(
     null,
@@ -3498,9 +3634,16 @@ export function FormulaireRendu() {
     }
   }, [])
 
+  // Sauvegarde differee : `normaliser` reconstruit `materiaux` et
+  // `eclairages` a chaque action, donc l'effet se redeclenche a chaque
+  // frappe. Sans ce delai, chaque caractere tape provoquerait une ecriture
+  // sessionStorage et une transaction IndexedDB.
   useEffect(() => {
     if (!restaure) return
-    sauvegarderEtat(etat).catch(() => undefined)
+    const minuteur = setTimeout(() => {
+      sauvegarderEtat(etat).catch(() => undefined)
+    }, 400)
+    return () => clearTimeout(minuteur)
   }, [etat, restaure])
 
   useEffect(() => {
@@ -3911,7 +4054,7 @@ git commit -m "docs: contrat du webhook n8n et exemple d environnement"
 - [ ] **Step 1: Lancer toute la suite de tests**
 
 Run: `npm test`
-Expected: PASS, 70 tests, aucun échec.
+Expected: PASS, 78 tests, aucun échec.
 
 - [ ] **Step 2: Vérifier le lint et les types**
 
