@@ -92,6 +92,9 @@ describe('construirePayloadGenerate', () => {
     expect(payload.environnement.eclairages).toBeNull()
   })
 
+  // Deux motifs complementaires : avec quatre booleens, un seul motif laisse
+  // toujours une paire de cles indiscernable, donc une inversion de mapping
+  // passerait inapercue.
   it('transporte les eclairages en fin de journee', () => {
     const etat: EtatFormulaire = {
       ...base,
@@ -99,15 +102,35 @@ describe('construirePayloadGenerate', () => {
       eclairages: {
         margelles: true,
         sousMarin: false,
-        appliquesFacade: true,
-        interieurVisible: false,
+        appliquesFacade: false,
+        interieurVisible: true,
       },
     }
     const payload = construirePayloadGenerate(etat)
     expect(payload.environnement.eclairages).toEqual({
       margelles: true,
       sous_marin: false,
-      appliques_facade: true,
+      appliques_facade: false,
+      interieur_visible: true,
+    })
+  })
+
+  it('transporte les eclairages au crepuscule sans confondre deux cles', () => {
+    const etat: EtatFormulaire = {
+      ...base,
+      ciel: 'crepuscule',
+      eclairages: {
+        margelles: true,
+        sousMarin: true,
+        appliquesFacade: false,
+        interieurVisible: false,
+      },
+    }
+    const payload = construirePayloadGenerate(etat)
+    expect(payload.environnement.eclairages).toEqual({
+      margelles: true,
+      sous_marin: true,
+      appliques_facade: false,
       interieur_visible: false,
     })
   })
