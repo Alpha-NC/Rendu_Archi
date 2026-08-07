@@ -1,6 +1,7 @@
 import type {
   Categorie,
   Ciel,
+  CleEclairage,
   ImagesFormulaire,
   ModeProduction,
   Style,
@@ -13,6 +14,9 @@ import type {
  * Matrice de deduction du mode de production.
  * Le mode n'est jamais affiche : il commande uniquement les styles
  * proposables et la clause de prompt construite cote n8n.
+ * Le photomontage n'est revendique que sur une perspective averee, jamais
+ * par defaut : tant que le cadrage n'est pas choisi, une photo seule ne
+ * suffit pas.
  */
 export function modeProduction(
   images: ImagesFormulaire,
@@ -24,7 +28,7 @@ export function modeProduction(
 }
 
 /**
- * Styles proposables selon le mode.
+ * Styles proposables selon le mode, dans l'ordre d'affichage de l'etape 5.
  * Le photomontage administratif exige une photo du site et une perspective :
  * il est structurellement exclu en retexturation Revit (son objet est
  * l'integration a une photographie, absente de ce mode) et exclu en
@@ -57,7 +61,8 @@ const MATERIAUX_BATI: Categorie[] = ['toiture', 'facade', 'volets', 'menuiseries
 const MATERIAUX_PISCINE: Categorie[] = ['margelles', 'plage']
 
 /**
- * Categories de materiaux affichees selon le type de projet.
+ * Categories de materiaux affichees selon le type de projet, dans l'ordre
+ * d'affichage de l'etape 3.
  * Margelles et plage restent deux ouvrages distincts, jamais fusionnes.
  */
 export function champsMateriauxPour(typeProjet: TypeProjet | null): Categorie[] {
@@ -70,7 +75,7 @@ export function champsMateriauxPour(typeProjet: TypeProjet | null): Categorie[] 
     case 'pool_house':
       return [...MATERIAUX_BATI, ...MATERIAUX_PISCINE]
     case 'terrasse':
-    default:
+    case null:
       return []
   }
 }
@@ -106,7 +111,17 @@ export function eclairagesDemandes(ciel: Ciel): boolean {
   return ciel === 'fin_de_journee' || ciel === 'crepuscule'
 }
 
-/** Les eclairages de bassin n'ont de sens que sur un projet qui en comporte un. */
-export function eclairagesPiscineProposes(typeProjet: TypeProjet | null): boolean {
-  return typeProjet === 'piscine' || typeProjet === 'pool_house'
+const ECLAIRAGES_BATI: CleEclairage[] = ['appliquesFacade', 'interieurVisible']
+const ECLAIRAGES_PISCINE: CleEclairage[] = ['margelles', 'sousMarin']
+
+/**
+ * Eclairages proposes, dans l'ordre d'affichage : ceux du bassin n'ont de
+ * sens que sur un projet qui en comporte un.
+ * La fonction rend la liste et non un booleen, pour que les cles restent
+ * dans ce module. Le reducer s'en sert aussi pour eteindre un eclairage
+ * devenu sans objet apres un changement de type de projet.
+ */
+export function eclairagesProposes(typeProjet: TypeProjet | null): CleEclairage[] {
+  const avecBassin = typeProjet === 'piscine' || typeProjet === 'pool_house'
+  return avecBassin ? [...ECLAIRAGES_PISCINE, ...ECLAIRAGES_BATI] : [...ECLAIRAGES_BATI]
 }

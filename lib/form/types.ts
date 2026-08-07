@@ -48,11 +48,15 @@ export type Ciel =
 
 export type AspectPelouse = 'telle_quelle' | 'tondue_soignee' | 'fleurie'
 
-export type CleEclairage =
-  | 'margelles'
-  | 'sousMarin'
-  | 'appliquesFacade'
-  | 'interieurVisible'
+/** Meme raison que pour CATEGORIES : la liste doit etre prouvablement complete. */
+export const CLES_ECLAIRAGE = [
+  'margelles',
+  'sousMarin',
+  'appliquesFacade',
+  'interieurVisible',
+] as const
+
+export type CleEclairage = (typeof CLES_ECLAIRAGE)[number]
 
 export type Eclairages = Record<CleEclairage, boolean>
 

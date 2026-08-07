@@ -4,7 +4,7 @@ import {
   cielProposeParDefaut,
   conservationExistantProposee,
   eclairagesDemandes,
-  eclairagesPiscineProposes,
+  eclairagesProposes,
   modeProduction,
   stylesDisponibles,
   stylePreselectionne,
@@ -116,6 +116,20 @@ describe('stylePreselectionne', () => {
       }
     }
   })
+
+  it('preselectionne toujours un style disponible dans le mode', () => {
+    const modes = [
+      'photomontage_controle',
+      'presentation_generative',
+      'retexturation_revit',
+    ] as const
+    const usages = ['permis_de_construire', 'presentation_client', 'les_deux', null] as const
+    for (const mode of modes) {
+      for (const usage of usages) {
+        expect(stylesDisponibles(mode)).toContain(stylePreselectionne(mode, usage))
+      }
+    }
+  })
 })
 
 describe('champsMateriauxPour', () => {
@@ -208,16 +222,28 @@ describe('eclairagesDemandes', () => {
   })
 })
 
-describe('eclairagesPiscineProposes', () => {
+describe('eclairagesProposes', () => {
   it('propose les eclairages de bassin sur les projets avec piscine', () => {
-    expect(eclairagesPiscineProposes('piscine')).toBe(true)
-    expect(eclairagesPiscineProposes('pool_house')).toBe(true)
+    expect(eclairagesProposes('piscine')).toEqual([
+      'margelles',
+      'sousMarin',
+      'appliquesFacade',
+      'interieurVisible',
+    ])
+    expect(eclairagesProposes('pool_house')).toEqual([
+      'margelles',
+      'sousMarin',
+      'appliquesFacade',
+      'interieurVisible',
+    ])
   })
 
-  it('ne les propose pas ailleurs', () => {
-    expect(eclairagesPiscineProposes('extension')).toBe(false)
-    expect(eclairagesPiscineProposes('restructuration')).toBe(false)
-    expect(eclairagesPiscineProposes('terrasse')).toBe(false)
-    expect(eclairagesPiscineProposes(null)).toBe(false)
+  it('ne propose que les eclairages du bati ailleurs', () => {
+    for (const typeProjet of ['extension', 'restructuration', 'terrasse', null] as const) {
+      expect(eclairagesProposes(typeProjet)).toEqual([
+        'appliquesFacade',
+        'interieurVisible',
+      ])
+    }
   })
 })
