@@ -21,7 +21,7 @@ export function Etape5Style() {
   return (
     <div className="space-y-6">
       {photomontageRetire && (
-        <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+        <p className="rounded-[2px] border border-trait bg-papier-eleve p-3 text-xs text-encre-douce">
           {etat.images.site
             ? "Le photomontage administratif n'est pas proposé : il suppose une insertion alignée sur la photo, impossible depuis une vue axonométrique."
             : "Le photomontage administratif n'est pas proposé : il suppose une photo réelle du site, que vous n'avez pas fournie."}
@@ -36,7 +36,7 @@ export function Etape5Style() {
         onChange={(valeur) => envoyer({ type: 'style', valeur })}
       />
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-encre-douce">
         Le style agit sur la lumière et la présentation. Il ne modifie jamais
         l&apos;architecture.
       </p>

@@ -9,17 +9,21 @@ type Props = {
 
 export function ChampInterrupteur({ intitule, description, valeur, onChange }: Props) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3">
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-[2px] border p-3 transition ${
+        valeur ? 'border-encre bg-papier-eleve' : 'border-trait hover:border-encre-douce'
+      }`}
+    >
       <input
         type="checkbox"
-        className="mt-1 accent-slate-800"
+        className="mt-1 accent-encre"
         checked={valeur}
         onChange={(evenement) => onChange(evenement.target.checked)}
       />
       <span>
-        <span className="block text-sm text-slate-900">{intitule}</span>
+        <span className="block text-sm text-encre">{intitule}</span>
         {description && (
-          <span className="mt-0.5 block text-xs text-slate-500">{description}</span>
+          <span className="mt-0.5 block text-xs text-encre-douce">{description}</span>
         )}
       </span>
     </label>

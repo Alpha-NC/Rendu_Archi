@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { chargerImage } from '@/lib/images/redimensionner'
 import type { ImageChargee } from '@/lib/form/types'
+import { IconeCroix, IconeTeleverser } from '../Icones'
 
 type Props = {
   intitule: string
@@ -42,46 +43,57 @@ export function ChampFichierImage({
 
   return (
     <div className="space-y-2">
-      <div className="text-sm font-medium text-slate-800">
+      <div className="font-sans text-sm font-semibold uppercase tracking-wide text-encre">
         {intitule}
-        {obligatoire && <span className="ml-1 text-rose-600">*</span>}
+        {obligatoire && <span className="ml-1 text-rouille">*</span>}
       </div>
-      {description && <p className="text-xs text-slate-500">{description}</p>}
+      {description && <p className="text-xs text-encre-douce">{description}</p>}
 
       {valeur ? (
-        <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
+        <div className="flex items-start gap-3 rounded-[2px] border border-trait p-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={valeur.dataUri}
             alt=""
-            className="h-20 w-28 rounded object-cover"
+            className="h-20 w-28 rounded-[2px] object-cover"
           />
-          <div className="min-w-0 flex-1 text-xs text-slate-600">
-            <p className="truncate text-slate-900">{valeur.nomOrigine}</p>
-            <p className="mt-1">
+          <div className="min-w-0 flex-1 text-xs text-encre-douce">
+            <p className="truncate text-sm text-encre">{valeur.nomOrigine}</p>
+            <p className="mt-1 font-mono tabular-nums">
               {valeur.largeur} × {valeur.hauteur} px · {formaterPoids(valeur.poidsOctets)}
             </p>
             <button
               type="button"
-              className="mt-2 text-slate-700 underline"
+              className="mt-2 inline-flex items-center gap-1 text-encre transition hover:text-rouille"
               onClick={() => onChange(null)}
             >
+              <IconeCroix className="h-3.5 w-3.5" />
               Retirer
             </button>
           </div>
         </div>
       ) : (
-        <input
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          disabled={enCours}
-          onChange={(evenement) => selectionner(evenement.target.files?.[0])}
-          className="block w-full cursor-pointer rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600"
-        />
+        <label
+          className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[2px] border border-dashed border-trait p-6 text-center transition hover:border-encre-douce ${
+            enCours ? 'cursor-wait opacity-60' : ''
+          }`}
+        >
+          <IconeTeleverser className="h-5 w-5 text-encre-douce" />
+          <span className="font-sans text-sm font-medium uppercase tracking-wide text-encre">
+            {enCours ? 'Préparation…' : 'Choisir un fichier'}
+          </span>
+          <span className="font-mono text-[0.65rem] text-encre-douce">JPEG · PNG · WEBP</span>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            disabled={enCours}
+            onChange={(evenement) => selectionner(evenement.target.files?.[0])}
+            className="sr-only"
+          />
+        </label>
       )}
 
-      {enCours && <p className="text-xs text-slate-500">Préparation de l&apos;image…</p>}
-      {erreur && <p className="text-xs text-rose-600">{erreur}</p>}
+      {erreur && <p className="text-xs text-rouille">{erreur}</p>}
     </div>
   )
 }

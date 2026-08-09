@@ -18,6 +18,7 @@ import { construirePayloadGenerate } from '@/lib/form/payload'
 import { ErreurMetier, ErreurReseau, generate, getMateriaux } from '@/lib/n8n/client'
 import type { Categorie, Etape } from '@/lib/form/types'
 import type { MateriauCatalogue, ReponseGenerate } from '@/lib/n8n/contrat'
+import { IconeChevronDroit, IconeChevronGauche } from './Icones'
 
 const TITRES: Record<Etape, string> = {
   1: 'Identification',
@@ -131,22 +132,31 @@ export function FormulaireRendu() {
   }
 
   if (!restaure) {
-    return <p className="p-8 text-sm text-slate-500">Chargement…</p>
+    return (
+      <p className="p-10 text-center font-mono text-xs uppercase tracking-widest text-encre-douce">
+        Chargement…
+      </p>
+    )
   }
 
   if (envoi.statut === 'reussi') {
     return (
-      <main className="mx-auto max-w-3xl space-y-4 p-6">
-        <h1 className="text-lg font-medium text-slate-900">
-          Rendu généré — {envoi.resultat.reference}
+      <main className="mx-auto max-w-3xl space-y-5 px-6 py-10 sm:px-10 sm:py-14">
+        <h1 className="font-sans text-3xl font-semibold tracking-tight text-encre sm:text-4xl">
+          Rendu généré
+          <span className="ml-3 font-mono text-base font-normal tracking-normal text-encre-douce">
+            {envoi.resultat.reference}
+          </span>
         </h1>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={envoi.resultat.image_url}
           alt="Rendu généré"
-          className="w-full rounded-lg border border-slate-200"
+          className="w-full rounded-[2px] border border-trait"
         />
-        <p className="text-xs text-slate-500">Cycle {envoi.resultat.cycle_id}</p>
+        <p className="font-mono text-xs uppercase tracking-widest text-encre-douce">
+          Cycle {envoi.resultat.cycle_id}
+        </p>
       </main>
     )
   }
@@ -158,15 +168,17 @@ export function FormulaireRendu() {
     <ContexteFormulaireReact.Provider
       value={{ etat, envoyer, catalogue, erreurCatalogue }}
     >
-      <main className="mx-auto max-w-3xl space-y-6 p-6">
-        <header className="space-y-4">
-          <h1 className="text-lg font-medium text-slate-900">Générateur de rendu</h1>
+      <main className="mx-auto max-w-3xl px-6 py-10 sm:px-10 sm:py-14">
+        <header className="space-y-6">
           <IndicateurEtapes />
-          <h2 className="text-base text-slate-700">
-            {etat.etape}. {TITRES[etat.etape]}
-          </h2>
+          <h1 className="font-sans text-4xl font-semibold tracking-tight text-encre sm:text-5xl">
+            <span className="mr-3 align-middle font-mono text-lg font-normal tracking-normal text-encre-douce">
+              {String(etat.etape).padStart(2, '0')}/07
+            </span>
+            {TITRES[etat.etape]}
+          </h1>
           {persistanceEnEchec && (
-            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+            <p className="rounded-[2px] border border-ocre/50 bg-ocre-fond/60 p-3 text-xs text-encre">
               Vos saisies ne peuvent pas être enregistrées sur ce poste. Le
               formulaire reste utilisable, mais un rechargement de la page ferait
               tout perdre.
@@ -174,31 +186,36 @@ export function FormulaireRendu() {
           )}
         </header>
 
-        {etat.etape === 1 && <Etape1Identification />}
-        {etat.etape === 2 && <Etape2Documents />}
-        {etat.etape === 3 && <Etape3Materiaux />}
-        {etat.etape === 4 && <Etape4Environnement />}
-        {etat.etape === 5 && <Etape5Style />}
-        {etat.etape === 6 && <Etape6Precisions />}
-        {etat.etape === 7 && <Etape7FicheProjet />}
+        <div className="mt-8 space-y-8">
+          {etat.etape === 1 && <Etape1Identification />}
+          {etat.etape === 2 && <Etape2Documents />}
+          {etat.etape === 3 && <Etape3Materiaux />}
+          {etat.etape === 4 && <Etape4Environnement />}
+          {etat.etape === 5 && <Etape5Style />}
+          {etat.etape === 6 && <Etape6Precisions />}
+          {etat.etape === 7 && <Etape7FicheProjet />}
+        </div>
 
         {envoi.statut === 'en_cours' && (
-          <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
-            <p>Génération en cours — {envoi.secondes} s</p>
-            {envoi.secondes > 60 && (
-              <p className="mt-1 text-xs text-slate-500">
-                Une génération prend généralement une à deux minutes. Ne fermez pas cette
-                page.
-              </p>
-            )}
+          <div className="mt-8 flex items-start gap-3 rounded-[2px] border border-trait bg-papier-eleve p-4 text-sm text-encre">
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-encre" />
+            <div>
+              <p>Génération en cours — {envoi.secondes} s</p>
+              {envoi.secondes > 60 && (
+                <p className="mt-1 text-xs text-encre-douce">
+                  Une génération prend généralement une à deux minutes. Ne fermez pas cette
+                  page.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
         {envoi.statut === 'echec' && (
-          <div className="space-y-1 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">
+          <div className="mt-8 space-y-1 rounded-[2px] border border-rouille/50 bg-rouille-fond/60 p-4 text-sm text-encre">
             <p>{envoi.message}</p>
             {envoi.coupure && (
-              <p className="text-xs">
+              <p className="text-xs text-encre-douce">
                 La génération a peut-être abouti côté serveur malgré cette coupure. Vos
                 saisies sont conservées.
               </p>
@@ -206,15 +223,16 @@ export function FormulaireRendu() {
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-slate-200 pt-4">
+        <div className="mt-10 flex items-center justify-between border-t border-trait pt-6">
           <button
             type="button"
             disabled={etat.etape === 1}
             onClick={() =>
               envoyer({ type: 'allerEtape', etape: etapeVoisine(etat.etape, -1) })
             }
-            className="rounded-lg px-4 py-2 text-sm text-slate-600 disabled:text-slate-300"
+            className="inline-flex items-center gap-1.5 text-sm text-encre-douce transition hover:text-encre disabled:cursor-not-allowed disabled:text-encre-douce/30"
           >
+            <IconeChevronGauche className="h-4 w-4" />
             Retour
           </button>
 
@@ -223,7 +241,7 @@ export function FormulaireRendu() {
               type="button"
               disabled={!peutEnvoyer(etat) || envoi.statut === 'en_cours'}
               onClick={lancerGeneration}
-              className="rounded-lg bg-slate-900 px-5 py-2 text-sm text-white disabled:bg-slate-300"
+              className="rounded-[3px] bg-encre px-6 py-2.5 font-sans text-sm font-semibold uppercase tracking-wide text-papier transition hover:bg-encre/90 disabled:cursor-not-allowed disabled:bg-papier-creux disabled:text-encre-douce/40"
             >
               {envoi.statut === 'en_cours' ? 'Génération…' : 'Lancer la génération'}
             </button>
@@ -234,11 +252,17 @@ export function FormulaireRendu() {
               onClick={() =>
                 envoyer({ type: 'allerEtape', etape: etapeVoisine(etat.etape, 1) })
               }
-              className="rounded-lg bg-slate-900 px-5 py-2 text-sm text-white disabled:bg-slate-300"
+              className="inline-flex items-center gap-2 rounded-[3px] bg-encre px-6 py-2.5 font-sans text-sm font-semibold uppercase tracking-wide text-papier transition hover:bg-encre/90 disabled:cursor-not-allowed disabled:bg-papier-creux disabled:text-encre-douce/40"
             >
               Continuer
+              <IconeChevronDroit className="h-4 w-4" />
             </button>
           )}
+        </div>
+
+        <div className="mt-6 flex items-center justify-between font-mono text-[0.65rem] uppercase tracking-widest text-encre-douce/70">
+          <span>Alpha No_Code</span>
+          <span>{etat.reference ? etat.reference : 'Sans référence'}</span>
         </div>
       </main>
     </ContexteFormulaireReact.Provider>

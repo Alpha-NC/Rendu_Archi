@@ -47,7 +47,7 @@ export function Etape4Environnement() {
         <div className="space-y-2">
           <label
             htmlFor="elements-a-retirer"
-            className="block text-sm font-medium text-slate-800"
+            className="block font-sans text-sm font-semibold uppercase tracking-wide text-encre"
           >
             Éléments à retirer
           </label>
@@ -59,7 +59,7 @@ export function Etape4Environnement() {
             onChange={(evenement) =>
               envoyer({ type: 'elementsARetirer', valeur: evenement.target.value })
             }
-            className="w-full rounded-lg border border-slate-300 p-2.5 text-sm text-slate-900"
+            className="w-full rounded-[2px] border border-trait bg-papier p-2.5 text-sm text-encre"
           />
         </div>
       </div>
@@ -72,11 +72,11 @@ export function Etape4Environnement() {
       />
 
       {eclairagesDemandes(etat.ciel) && (
-        <fieldset className="space-y-3 rounded-lg border border-slate-200 p-4">
-          <legend className="px-1 text-sm font-medium text-slate-800">
+        <fieldset className="space-y-3 rounded-[2px] border border-trait p-4">
+          <legend className="px-1 font-sans text-sm font-semibold uppercase tracking-wide text-encre">
             Éclairages à activer
           </legend>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-encre-douce">
             Sans éclairage, une ambiance de fin de journée donne un bâtiment éteint.
           </p>
           {cles.map((cle) => (

@@ -21,8 +21,11 @@ export function Etape1Identification() {
   return (
     <div className="space-y-8">
       <div className="space-y-2">
-        <label htmlFor="reference" className="block text-sm font-medium text-slate-800">
-          Référence du dossier <span className="text-rose-600">*</span>
+        <label
+          htmlFor="reference"
+          className="block font-sans text-sm font-semibold uppercase tracking-wide text-encre"
+        >
+          Référence du dossier <span className="text-rouille">*</span>
         </label>
         <input
           id="reference"
@@ -32,9 +35,9 @@ export function Etape1Identification() {
           onChange={(evenement) =>
             envoyer({ type: 'reference', valeur: evenement.target.value })
           }
-          className="w-full rounded-lg border border-slate-300 p-2.5 text-sm text-slate-900"
+          className="w-full rounded-[2px] border border-trait bg-papier p-2.5 text-sm text-encre"
         />
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-encre-douce">
           Elle nomme le dossier d&apos;archivage et permet de retrouver l&apos;historique
           des rendus.
         </p>

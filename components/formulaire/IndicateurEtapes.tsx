@@ -14,33 +14,75 @@ const TITRES: Record<Etape, string> = {
 }
 
 const ETAPES: Etape[] = [1, 2, 3, 4, 5, 6, 7]
+const DERNIER_INDEX = ETAPES.length - 1
+
+function pourcentage(index: number): number {
+  return (index / DERNIER_INDEX) * 100
+}
 
 export function IndicateurEtapes() {
   const { etat, envoyer } = useFormulaire()
+  const progression = pourcentage(etat.etape - 1)
 
   return (
-    <nav aria-label="Étapes" className="flex flex-wrap gap-1.5">
-      {ETAPES.map((etape) => {
-        const atteinte = etape <= etat.etapeMax
-        const courante = etape === etat.etape
-        return (
-          <button
-            key={etape}
-            type="button"
-            disabled={!atteinte}
-            onClick={() => envoyer({ type: 'allerEtape', etape })}
-            className={`rounded-full px-3 py-1 text-xs transition ${
-              courante
-                ? 'bg-slate-900 text-white'
-                : atteinte
-                  ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  : 'bg-slate-50 text-slate-400'
-            }`}
-          >
-            {etape}. {TITRES[etape]}
-          </button>
-        )
-      })}
+    <nav aria-label="Étapes">
+      <div className="relative h-4 px-2">
+        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-trait" />
+        <div
+          className="absolute left-0 top-1/2 h-px -translate-y-1/2 bg-encre transition-[width] duration-300 ease-out"
+          style={{ width: `${progression}%` }}
+        />
+        {ETAPES.map((etape, index) => {
+          const atteinte = etape <= etat.etapeMax
+          const courante = etape === etat.etape
+          return (
+            <button
+              key={etape}
+              type="button"
+              disabled={!atteinte}
+              aria-current={courante ? 'step' : undefined}
+              title={`${etape}. ${TITRES[etape]}`}
+              onClick={() => envoyer({ type: 'allerEtape', etape })}
+              style={{ left: `${pourcentage(index)}%` }}
+              className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border transition disabled:cursor-not-allowed ${
+                courante
+                  ? 'h-3.5 w-3.5 border-encre bg-encre'
+                  : atteinte
+                    ? 'h-2.5 w-2.5 border-encre bg-papier hover:scale-125'
+                    : 'h-2.5 w-2.5 border-trait bg-papier'
+              }`}
+            >
+              <span className="sr-only">
+                {etape}. {TITRES[etape]}
+                {courante ? ' (étape actuelle)' : ''}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="relative mt-2 h-4 px-2">
+        {ETAPES.map((etape, index) => {
+          const atteinte = etape <= etat.etapeMax
+          const courante = etape === etat.etape
+          return (
+            <span
+              key={etape}
+              aria-hidden="true"
+              style={{ left: `${pourcentage(index)}%` }}
+              className={`absolute -translate-x-1/2 font-mono text-[0.6rem] tracking-wide tabular-nums ${
+                courante
+                  ? 'text-encre'
+                  : atteinte
+                    ? 'text-encre-douce'
+                    : 'text-encre-douce/50'
+              }`}
+            >
+              {String(etape).padStart(2, '0')}
+            </span>
+          )
+        })}
+      </div>
     </nav>
   )
 }

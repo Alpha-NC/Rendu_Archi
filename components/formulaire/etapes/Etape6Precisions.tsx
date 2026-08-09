@@ -17,7 +17,10 @@ export function Etape6Precisions() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <label htmlFor="precisions" className="block text-sm font-medium text-slate-800">
+        <label
+          htmlFor="precisions"
+          className="block font-sans text-sm font-semibold uppercase tracking-wide text-encre"
+        >
           Précisions complémentaires
         </label>
         <textarea
@@ -28,21 +31,23 @@ export function Etape6Precisions() {
           onChange={(evenement) =>
             envoyer({ type: 'precisions', valeur: evenement.target.value })
           }
-          className="w-full rounded-lg border border-slate-300 p-2.5 text-sm text-slate-900"
+          className="w-full rounded-[2px] border border-trait bg-papier p-2.5 text-sm text-encre"
         />
       </div>
 
       {nonCalibres.length > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <p className="text-sm text-amber-900">Textures non calibrées</p>
-          <ul className="mt-2 space-y-1 text-xs text-amber-800">
+        <div className="rounded-[2px] border border-ocre/50 bg-ocre-fond/60 p-4">
+          <p className="font-sans text-sm font-semibold uppercase tracking-wide text-encre">
+            Textures non calibrées
+          </p>
+          <ul className="mt-2 space-y-1 text-xs text-encre-douce">
             {nonCalibres.map(({ categorie, terme }) => (
               <li key={categorie}>
                 {LIBELLE_CATEGORIE[categorie]} : {terme || '(à décrire)'}
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-amber-700">
+          <p className="mt-2 text-xs text-ocre">
             Elles sont enregistrées pour calibration et n&apos;entreront pas dans ce rendu.
             Décrivez ici l&apos;aspect attendu si c&apos;est important.
           </p>

@@ -12,7 +12,7 @@ export function Etape3Materiaux() {
 
   if (categories.length === 0) {
     return (
-      <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+      <p className="rounded-[2px] border border-trait bg-papier-eleve p-4 text-sm text-encre-douce">
         Aucun matériau à renseigner pour ce type de projet. Vous pouvez passer à
         l&apos;étape suivante.
       </p>
@@ -21,21 +21,25 @@ export function Etape3Materiaux() {
 
   if (erreurCatalogue) {
     return (
-      <div className="space-y-2 rounded-lg bg-rose-50 p-4 text-sm text-rose-700">
+      <div className="space-y-2 rounded-[2px] border border-rouille/50 bg-rouille-fond/60 p-4 text-sm text-encre">
         <p>Les matériaux n&apos;ont pas pu être chargés.</p>
-        <p className="text-xs">{erreurCatalogue}</p>
+        <p className="text-xs text-encre-douce">{erreurCatalogue}</p>
       </div>
     )
   }
 
   if (!catalogue) {
-    return <p className="text-sm text-slate-500">Chargement des matériaux…</p>
+    return (
+      <p className="font-mono text-xs uppercase tracking-widest text-encre-douce">
+        Chargement des matériaux…
+      </p>
+    )
   }
 
   return (
     <div className="space-y-6">
       {existantPropose && (
-        <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+        <p className="rounded-[2px] border border-trait bg-papier-eleve p-3 text-xs text-encre-douce">
           Ce projet reprend un bâti existant. Pour tout élément déjà visible sur la photo du
           site, choisissez « conserver l&apos;existant » plutôt qu&apos;un matériau du
           catalogue : il sera repris tel quel, sans réinterprétation.

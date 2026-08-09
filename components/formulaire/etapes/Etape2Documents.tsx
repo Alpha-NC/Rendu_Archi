@@ -48,7 +48,7 @@ export function Etape2Documents() {
           onChange={(valeur) => envoyer({ type: 'image', role: 'site', valeur })}
         />
         {enAxonometrie && etat.images.site && (
-          <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+          <p className="rounded-[2px] border border-trait bg-papier-eleve p-3 text-xs text-encre-douce">
             Le cadrage étant une axonométrie, aucun alignement n&apos;est possible avec la
             photo. Elle servira de référence d&apos;ambiance et de matériaux, pas
             d&apos;insertion.
@@ -59,7 +59,7 @@ export function Etape2Documents() {
       <div className="space-y-2">
         <label
           htmlFor="elements-a-preserver"
-          className="block text-sm font-medium text-slate-800"
+          className="block font-sans text-sm font-semibold uppercase tracking-wide text-encre"
         >
           Éléments à préserver absolument
         </label>
@@ -71,9 +71,9 @@ export function Etape2Documents() {
           onChange={(evenement) =>
             envoyer({ type: 'elementsAPreserver', valeur: evenement.target.value })
           }
-          className="w-full rounded-lg border border-slate-300 p-2.5 text-sm text-slate-900"
+          className="w-full rounded-[2px] border border-trait bg-papier p-2.5 text-sm text-encre"
         />
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-encre-douce">
           Nommez un par un les éléments secondaires à ne pas perdre. Ceux qui ne sont pas
           nommés risquent d&apos;être réinterprétés, même si la géométrie générale est
           respectée.

@@ -1,15 +1,23 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo_Narrow, Fragment_Mono, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const archivoNarrow = Archivo_Narrow({
+  variable: "--font-cotation",
   subsets: ["latin"],
+  weight: ["500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const sourceSerif = Source_Serif_4({
+  variable: "--font-papier",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
+const fragmentMono = Fragment_Mono({
+  variable: "--font-mesure",
+  subsets: ["latin"],
+  weight: ["400"],
 });
 
 export const metadata: Metadata = {
@@ -21,7 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${archivoNarrow.variable} ${sourceSerif.variable} ${fragmentMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

@@ -39,13 +39,15 @@ function Bloc({
 }) {
   const { envoyer } = useFormulaire()
   return (
-    <section className="rounded-lg border border-slate-200 p-4">
+    <section className="rounded-[2px] border border-trait p-4">
       <div className="flex items-baseline justify-between gap-4">
-        <h3 className="text-sm font-medium text-slate-800">{titre}</h3>
+        <h3 className="font-sans text-sm font-semibold uppercase tracking-wide text-encre">
+          {titre}
+        </h3>
         <button
           type="button"
           onClick={() => envoyer({ type: 'allerEtape', etape })}
-          className="text-xs text-slate-600 underline"
+          className="text-xs text-encre-douce underline underline-offset-2 transition hover:text-encre"
         >
           Modifier
         </button>
@@ -58,8 +60,10 @@ function Bloc({
 function Ligne({ cle, valeur }: { cle: string; valeur: string }) {
   return (
     <div className="flex gap-3">
-      <dt className="w-44 shrink-0 text-slate-500">{cle}</dt>
-      <dd className="text-slate-900">{valeur}</dd>
+      <dt className="w-44 shrink-0 font-mono text-[0.65rem] uppercase tracking-wide text-encre-douce">
+        {cle}
+      </dt>
+      <dd className="text-encre">{valeur}</dd>
     </div>
   )
 }

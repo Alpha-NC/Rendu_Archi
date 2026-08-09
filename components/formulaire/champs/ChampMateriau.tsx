@@ -46,11 +46,13 @@ export function ChampMateriau({
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-slate-800">{intitule}</label>
+      <label className="block font-sans text-sm font-semibold uppercase tracking-wide text-encre">
+        {intitule}
+      </label>
       <select
         value={valeurSelect}
         onChange={(evenement) => choisir(evenement.target.value)}
-        className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-900"
+        className="w-full rounded-[2px] border border-trait bg-papier p-2.5 text-sm text-encre"
       >
         <option value={VALEUR_VIDE}>Non renseigné</option>
         {existantPropose && (
@@ -74,9 +76,9 @@ export function ChampMateriau({
               setSaisieLibre(evenement.target.value)
               onChange({ origine: 'libre', terme: evenement.target.value })
             }}
-            className="w-full rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-sm text-slate-900"
+            className="w-full rounded-[2px] border border-ocre/50 bg-ocre-fond/60 p-2.5 text-sm text-encre"
           />
-          <p className="text-xs text-amber-700">
+          <p className="text-xs text-ocre">
             Texture non calibrée : elle sera enregistrée pour calibration et n&apos;entrera
             pas dans le rendu.
           </p>
@@ -84,7 +86,7 @@ export function ChampMateriau({
       )}
 
       {valeur?.origine === 'existant' && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-encre-douce">
           Le matériau sera repris tel qu&apos;il apparaît sur la photo du site.
         </p>
       )}

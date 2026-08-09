@@ -1,26 +1,69 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --papier: #f6f3ec;
+  --papier-eleve: #eee8da;
+  --papier-creux: #eae3d2;
+  --encre: #1b2a4a;
+  --encre-douce: #51618a;
+  --trait: #d8cfb8;
+  --trait-fort: #1b2a4a;
+  --rouille: #8a3a28;
+  --rouille-fond: #f1e0d7;
+  --ocre: #7c5e1e;
+  --ocre-fond: #ece1bf;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-papier: var(--papier);
+  --color-papier-eleve: var(--papier-eleve);
+  --color-papier-creux: var(--papier-creux);
+  --color-encre: var(--encre);
+  --color-encre-douce: var(--encre-douce);
+  --color-trait: var(--trait);
+  --color-trait-fort: var(--trait-fort);
+  --color-rouille: var(--rouille);
+  --color-rouille-fond: var(--rouille-fond);
+  --color-ocre: var(--ocre);
+  --color-ocre-fond: var(--ocre-fond);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-cotation);
+  --font-serif: var(--font-papier);
+  --font-mono: var(--font-mesure);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--papier);
+  color: var(--encre);
+  font-family: var(--font-serif);
+  position: relative;
+}
+
+/* Grain de papier : une texture discrète plutôt qu'un aplat mort. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.06  0 0 0 0 0.08  0 0 0 0 0.14  0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+#__next,
+body > div,
+main {
+  position: relative;
+  z-index: 1;
+}
+
+::selection {
+  background: var(--encre);
+  color: var(--papier);
+}
+
+:focus-visible {
+  outline: 2px solid var(--encre);
+  outline-offset: 2px;
 }
