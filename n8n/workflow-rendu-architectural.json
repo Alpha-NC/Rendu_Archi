@@ -16,7 +16,7 @@
         "path": "rendu-architectural",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "*"
+          "allowedOrigins": "https://rendu-archi.vercel.app"
         }
       }
     },
@@ -30,7 +30,7 @@
         60
       ],
       "parameters": {
-        "content": "## À vérifier avant mise en production\n\n`allowedOrigins` est à `*` pour faciliter les tests. Restreins-le au domaine réel du front (Vercel/Netlify) avant de sortir de la phase de calibration.",
+        "content": "## Origine restreinte\n\n`allowedOrigins` pointe sur `https://rendu-archi.vercel.app` (production Vercel) depuis le 2026-08-09. Si le domaine change (nouveau projet Vercel, domaine perso ajouté), penser à mettre à jour ici.",
         "height": 160,
         "width": 340,
         "color": 5
