@@ -37,7 +37,38 @@
       }
     },
     {
-      "id": "if-03",
+      "id": "code-03",
+      "name": "Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        300
+      ],
+      "notes": "SEUL nœud à modifier pour les identifiants. Ouvre-le, remplace les 4 'A_COMPLETER', enregistre — aucune autre manipulation nécessaire.",
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Remplace les 4 valeurs ci-dessous, puis enregistre le workflow.\n// Ne colle jamais ces valeurs réelles dans un fichier versionné (Git) :\n// si tu réexportes ce workflow, retire-les d'abord.\nconst config = {\n  supabaseUrl: 'A_COMPLETER', // ex. https://xxxxxxxx.supabase.co\n  supabaseServiceKey: 'A_COMPLETER', // clé service_role, PAS anon\n  falKey: 'A_COMPLETER', // clé API fal.ai\n  falModelEndpoint: 'A_COMPLETER', // slug du modèle, ex. fal-ai/xxx\n};\nreturn [{ json: { body: $json.body, config } }];"
+      }
+    },
+    {
+      "id": "note-04",
+      "name": "Note - identifiants",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        60
+      ],
+      "parameters": {
+        "content": "## Identifiants ici, nulle part ailleurs\n\nOuvre le nœud **Configuration** et remplace les 4 `A_COMPLETER`. Tous les autres nœuds y font référence — pas besoin de toucher au serveur n8n ni à ses variables d'environnement.",
+        "height": 160,
+        "width": 340,
+        "color": 5
+      }
+    },
+    {
+      "id": "if-05",
       "name": "Action = get_materiaux ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -55,7 +86,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "id": "if-03-cond",
+              "id": "if-05-cond",
               "leftValue": "={{ $json.body.action }}",
               "rightValue": "get_materiaux",
               "operator": {
@@ -69,7 +100,7 @@
       }
     },
     {
-      "id": "if-04",
+      "id": "if-06",
       "name": "Action = generate ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -87,7 +118,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "id": "if-04-cond",
+              "id": "if-06-cond",
               "leftValue": "={{ $json.body.action }}",
               "rightValue": "generate",
               "operator": {
@@ -101,7 +132,7 @@
       }
     },
     {
-      "id": "code-05",
+      "id": "code-07",
       "name": "Construire erreur - action indisponible",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -115,7 +146,7 @@
       }
     },
     {
-      "id": "http-06",
+      "id": "http-08",
       "name": "Supabase - lire matériaux valides",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -124,9 +155,10 @@
         140
       ],
       "notes": "Ne pas utiliser le nœud Supabase natif (bug 403 documenté). Headers posés directement ici, pas via une credential Header Auth partagée.",
+      "alwaysOutputData": true,
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/materiaux?select=id,terme,categorie&statut=eq.valide&order=categorie.asc,terme.asc",
+        "url": "={{ $('Configuration').item.json.config.supabaseUrl }}/rest/v1/materiaux?select=id,terme,categorie&statut=eq.valide&order=categorie.asc,terme.asc",
         "authentication": "none",
         "sendHeaders": true,
         "options": {},
@@ -134,11 +166,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+              "value": "={{ $(\"Configuration\").item.json.config.supabaseServiceKey }}"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+              "value": "=Bearer {{ $(\"Configuration\").item.json.config.supabaseServiceKey }}"
             }
           ]
         },
@@ -146,7 +178,7 @@
       }
     },
     {
-      "id": "code-07",
+      "id": "code-09",
       "name": "Grouper par catégorie",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -160,7 +192,7 @@
       }
     },
     {
-      "id": "respond-08",
+      "id": "respond-10",
       "name": "Répondre - matériaux",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
@@ -177,7 +209,7 @@
       }
     },
     {
-      "id": "code-09",
+      "id": "code-11",
       "name": "Valider la requête",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -191,7 +223,7 @@
       }
     },
     {
-      "id": "if-10",
+      "id": "if-12",
       "name": "Requête valide ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -209,7 +241,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "id": "if-10-cond",
+              "id": "if-12-cond",
               "leftValue": "={{ $json.valide }}",
               "rightValue": true,
               "operator": {
@@ -223,7 +255,7 @@
       }
     },
     {
-      "id": "code-11",
+      "id": "code-13",
       "name": "Construire erreur - requête invalide",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -237,7 +269,7 @@
       }
     },
     {
-      "id": "code-12",
+      "id": "code-14",
       "name": "Identifier matériaux catalogue",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -251,7 +283,7 @@
       }
     },
     {
-      "id": "http-13",
+      "id": "http-15",
       "name": "Supabase - lire fragments matériaux",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -259,10 +291,11 @@
         940,
         300
       ],
-      "notes": "L'id factice évite un `in.()` vide (rejeté par PostgREST) quand aucun matériau catalogue n'est sélectionné.",
+      "notes": "L'id factice évite un `in.()` vide (rejeté par PostgREST) quand aucun matériau catalogue n'est sélectionné. alwaysOutputData=true est indispensable : sans matériau catalogue sélectionné, cette requête renvoie 0 ligne (comportement normal), et sans ce réglage n8n arrête tout le flux d'items — Construire le prompt et tout ce qui suit, y compris Répondre, ne s'exécutent alors jamais. Bug reproduit en test réel le 2026-08-09.",
+      "alwaysOutputData": true,
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/materiaux?select=id,fragment_prompt&id=in.({{ $json.idsCatalogue.length ? $json.idsCatalogue.join(',') : '00000000-0000-0000-0000-000000000000' }})",
+        "url": "={{ $('Configuration').item.json.config.supabaseUrl }}/rest/v1/materiaux?select=id,fragment_prompt&id=in.({{ $json.idsCatalogue.length ? $json.idsCatalogue.join(',') : '00000000-0000-0000-0000-000000000000' }})",
         "authentication": "none",
         "sendHeaders": true,
         "options": {},
@@ -270,11 +303,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+              "value": "={{ $(\"Configuration\").item.json.config.supabaseServiceKey }}"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+              "value": "=Bearer {{ $(\"Configuration\").item.json.config.supabaseServiceKey }}"
             }
           ]
         },
@@ -282,7 +315,7 @@
       }
     },
     {
-      "id": "code-14",
+      "id": "code-16",
       "name": "Construire le prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -290,14 +323,14 @@
         1160,
         300
       ],
-      "notes": "BROUILLON — contient le texte système, les clauses mode_production et les blocs de style en première version. À calibrer avant mise en production (voir docs/n8n-setup.md).",
+      "notes": "SYSTÈME et STYLE = texte calibré V1 (anglais, tel quel, non traduit intentionnellement). MODE_PRODUCTION reste un brouillon à calibrer (concept V2 sans équivalent V1) — voir docs/n8n-setup.md.",
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ---------------------------------------------------------------------------\n// BROUILLON À VALIDER — voir docs/n8n-setup.md « Contenu à compléter ».\n// Ce contenu est un premier jet cohérent avec le PRD (§1.2, §1.3, §6) et les\n// règles de rédaction de docs/fragments-prompt.md, PAS le texte calibré du\n// workflow V1. Colle ici le texte réel si tu l'as déjà (pipeline inchangé\n// selon le PRD), sinon calibre celui-ci sur un dossier réel avant mise en\n// production, comme pour les fragments de ciel/pelouse/éclairages.\n// ---------------------------------------------------------------------------\n\nconst SYSTEME = `Tu produis une image photoréaliste d'un projet architectural à partir des vues fournies. Contrainte impérative, prioritaire sur toute autre considération : la géométrie de la vue de cadrage fait autorité et ne doit jamais être modifiée — formes, volumes, proportions, niveaux, ouvertures, toiture, implantation, cadrage et perspective restent strictement identiques à la vue fournie. Un résultat esthétiquement réussi mais géométriquement inexact constitue un échec, quelle que soit par ailleurs la qualité visuelle obtenue. Le rendu attendu est réaliste : aucun style illustratif, pictural ou stylisé, quel que soit le style demandé par ailleurs. Le style agit uniquement sur la lumière et la présentation, jamais sur l'architecture. N'invente, n'ajoute, ne supprime et ne déplace aucune ouverture, aucun volume, aucun élément secondaire. Un matériau ou un élément dont la nature n'est pas identifiable n'est pas interprété : il est reproduit tel qu'il apparaît, sans supposition.`;\n\nconst MODE_PRODUCTION = {\n  photomontage_controle: \"Intègre le projet directement sur la photographie du site fournie, en respectant exactement son point de vue, sa perspective et sa lumière d'origine. Les zones de la vue de cadrage sans contenu défini sont complétées par le contenu réel visible sur la photographie du site, jamais par un décor inventé ; un ciel seul reste acceptable en l'absence de tout élément environnant visible.\",\n  presentation_generative: \"Présente le projet dans un environnement cohérent inspiré de la photographie du site, sans chercher un alignement géométrique strict avec celle-ci : la photographie sert de référence de matières, de végétation et d'ambiance, pas de calque d'intégration.\",\n  retexturation_revit: \"Aucune photographie du site n'est fournie. Complète les zones vides de la vue de cadrage par un environnement extérieur plausible et sobre, cohérent avec le projet, sans effet de composition ni décor remarquable.\",\n};\n\nconst STYLE = {\n  photomontage_administratif: {\n    intro: \"Présentation sobre destinée à un usage administratif (permis de construire, dépôt réglementaire). Restitution fidèle et neutre, sans embellissement ni mise en scène.\",\n    suite: \"Matières rendues avec précision et sans effet décoratif ; profondeur de champ nette sur l'ensemble du projet ; finition photographique neutre, sans grain artistique ni vignettage.\",\n  },\n  presentation_client: {\n    intro: \"Présentation destinée à une réunion ou un avant-projet client. Restitution flatteuse mais crédible, qui met le projet en valeur sans s'éloigner du réalisme photographique.\",\n    suite: \"Matières rendues avec un relief soigné ; légère profondeur de champ recentrée sur le projet ; finition photographique nette et engageante.\",\n  },\n  commercial: {\n    intro: \"Présentation destinée à la communication institutionnelle ou commerciale. Restitution valorisante et soignée, tout en restant strictement photoréaliste.\",\n    suite: \"Matières rendues avec un relief marqué et une belle profondeur de champ ; finition proche d'une photographie d'architecture professionnelle, nette et contrastée.\",\n  },\n};\n\n// Fragments ci-dessous copiés tels quels depuis docs/fragments-prompt.md — ne\n// pas les reformuler ailleurs que dans ce fichier source.\nconst CIEL = {\n  reprendre_photo: \"La lumière, la direction du soleil, la douceur des ombres et la température de couleur sont reprises exactement de la photographie du site. Les ombres portées des éléments projetés tombent dans la même direction, avec la même longueur et la même densité que celles déjà visibles sur la photographie. Le ciel est celui de la photographie, avec sa texture nuageuse et sa profondeur atmosphérique propres. L'image entière doit paraître capturée en une seule prise de vue : même grain, même contraste, même dominante colorée du premier plan jusqu'à l'horizon.\",\n  degage: \"Ciel bleu franc et dégagé, plus soutenu au zénith et s'éclaircissant progressivement vers l'horizon, avec une profondeur atmosphérique perceptible. Soleil haut, lumière directe : ombres portées nettes, aux bords légèrement adoucis à mesure qu'elles s'éloignent de l'objet qui les projette, densité soutenue conservant du détail dans les zones sombres. Les surfaces claires gardent leur texture et leur gradation tonale sur toute leur étendue. Température de couleur neutre de plein jour.\",\n  legerement_voile: \"Ciel couvert d'un voile de nuages hauts et fins, laissant deviner la position du soleil sans disque nettement dessiné. Lumière directionnelle mais adoucie : les ombres portées restent lisibles, avec des bords diffus et une densité modérée. Contraste doux, gradation fine sur les surfaces courbes et sur le grain des enduits. Température de couleur neutre, très légèrement froide.\",\n  neutre_diffus: \"Lumière naturelle neutre et diffuse de ciel uniformément couvert. Aucune direction dominante : les ombres sont courtes et très douces, essentiellement des ombres de contact au pied des volumes, sous les débords de toiture et dans les feuillures des ouvertures. Ciel clair et uniformément lumineux, conservant une légère texture nuageuse. Contraste faible mais tonalité pleine, chaque matériau restant lisible dans son relief et sa texture propre.\",\n  fin_de_journee: \"Fin d'après-midi, soleil bas sur l'horizon. Lumière rasante et chaude, ambrée sans excès, qui révèle le relief des enduits, des tuiles et des pierres et allonge les ombres portées dans une direction unique et cohérente. Les façades exposées reçoivent une lumière dorée ; les façades opposées basculent dans une ombre légèrement bleutée, éclairée par la seule lumière du ciel. Ciel en dégradé, du bleu profond au zénith vers des tons chauds près de l'horizon, avec une texture nuageuse réelle. Contraste marqué, conservant du détail dans les hautes lumières comme dans les ombres.\",\n  crepuscule: \"Crépuscule, peu après le coucher du soleil. Le ciel conserve une luminosité résiduelle et se dégrade du bleu profond au zénith vers des tons orangés puis violacés près de l'horizon, avec une texture nuageuse réelle. Plus aucune lumière solaire directe : l'éclairage extérieur provient uniquement de la voûte céleste, doux et enveloppant, et des sources artificielles allumées. Les façades prennent une tonalité bleutée froide qui contraste avec la chaleur des éclairages. Équilibre d'exposition d'une photographie d'architecture à l'heure bleue : le ciel reste lisible, les zones éclairées ne sont pas brûlées, les zones sombres conservent leur détail.\",\n};\n\nconst ECLAIRAGES = {\n  margelles: \"Éclairage linéaire encastré en périphérie du bassin, sous le nez des margelles : lumière chaude et rasante qui souligne le tracé de la piscine et révèle la texture de la pierre en lumière frisante. Intensité discrète, sans halo débordant ni source visible.\",\n  sous_marin: \"Projecteurs immergés dans le bassin, lumière blanche légèrement froide diffusée dans la masse d'eau. L'eau devient translucide et lumineuse de l'intérieur, laissant voir le fond et les parois du bassin. Reflets ondulants portés sur les margelles et sur les surfaces claires les plus proches.\",\n  appliques_facade: \"Appliques murales allumées en façade, lumière chaude dirigée vers le haut et vers le bas, dessinant des cônes lumineux doux sur l'enduit et révélant son grain en lumière rasante. Halos contenus, dégradé progressif jusqu'à l'ombre, sans surexposition autour des sources.\",\n  interieur_visible: \"Éclairage intérieur allumé, visible à travers les baies et les fenêtres : lumière chaude, plus dense que l'ambiance extérieure, laissant deviner la profondeur des pièces sans en détailler le contenu. Les vitrages passent d'un aspect sombre et réfléchissant à une transparence lumineuse.\",\n};\n\nconst PELOUSE = {\n  telle_quelle: \"La pelouse et la végétation basse sont reprises fidèlement de la photographie du site : même hauteur d'herbe, même densité, mêmes nuances d'une zone à l'autre, y compris les irrégularités présentes.\",\n  tondue_soignee: \"Pelouse récemment tondue et régulièrement entretenue. Les brins d'herbe sont individuellement visibles, dressés avec une orientation naturellement variée, de hauteur régulière, avec de petites ombres douces entre eux à courte distance. Vert sain et homogène, dont les variations de ton d'une zone à l'autre restent légères et contenues. Couverture continue et dense jusqu'aux bordures.\",\n  fleurie: \"Pelouse d'agrément légèrement fleurie, dans le registre de la prairie entretenue. Les brins d'herbe restent individuellement visibles, de hauteur régulière, dans un vert sain dont les variations de ton restent contenues. Quelques marguerites et petites fleurs blanches et jaunes émergent au-dessus de l'herbe, dispersées en petits groupes irréguliers plutôt qu'en semis uniforme. L'ensemble reste manifestement entretenu.\",\n};\n\nconst LABELS_CATEGORIE = {\n  toiture: 'toiture',\n  facade: 'façade',\n  volets: 'volets',\n  menuiseries: 'menuiseries',\n  margelles: 'margelles',\n  plage: 'plage de piscine',\n};\n\n// ---------------------------------------------------------------------------\n// Assemblage — logique tirée de docs/contrat-webhook-n8n.md et\n// docs/fragments-prompt.md §2 (précédence ciel / bloc de style).\n// ---------------------------------------------------------------------------\n\nconst requete = $('Webhook').item.json.body;\nconst fragmentsRows = $input.all().map((i) => i.json);\nconst fragmentsParId = Object.fromEntries(fragmentsRows.map((r) => [r.id, r.fragment_prompt]));\n\nconst sections = [];\nsections.push(['SYSTÈME', SYSTEME]);\nsections.push(['MODE DE PRODUCTION', MODE_PRODUCTION[requete.mode_production] ?? '']);\n\n// Style + lumière : le fragment de ciel remplace toujours le paragraphe\n// lumière du bloc de style (docs/fragments-prompt.md §2). Un seul bloc de\n// style par appel, jamais deux blocs parlant de lumière.\nconst styleBloc = STYLE[requete.style];\nif (styleBloc) {\n  sections.push(['STYLE', [styleBloc.intro, styleBloc.suite].join(' ')]);\n}\nconst cielFragment = CIEL[requete.environnement?.ciel];\nif (cielFragment) {\n  sections.push(['LUMIÈRE ET AMBIANCE', cielFragment]);\n}\n\n// Éclairages : uniquement si la question a été posée (objet non nul).\nconst eclairages = requete.environnement?.eclairages;\nif (eclairages) {\n  const allumes = Object.entries(eclairages)\n    .filter(([, actif]) => actif === true)\n    .map(([cle]) => ECLAIRAGES[cle])\n    .filter(Boolean);\n  if (allumes.length > 0) {\n    sections.push(['ÉCLAIRAGES ALLUMÉS', allumes.join(' ')]);\n  }\n}\n\n// Matériaux — jamais de matériau_libre ici, uniquement catalogue/existant.\nconst categories = ['toiture', 'facade', 'volets', 'menuiseries', 'margelles', 'plage'];\nconst materiauxTexte = [];\nfor (const c of categories) {\n  const selection = requete.materiaux ? requete.materiaux[c] : null;\n  if (!selection) continue;\n  const label = LABELS_CATEGORIE[c];\n  if (selection.origine === 'catalogue') {\n    const fragment = fragmentsParId[selection.id];\n    if (fragment) {\n      materiauxTexte.push(`${label} : ${fragment}.`);\n    } else {\n      // Aucune invention (PRD §6.1) : on signale plutôt que d'improviser.\n      materiauxTexte.push(`${label} : matériau non calibré (« ${selection.terme} »), aucune instruction de matière fournie — ne pas interpréter.`);\n    }\n  } else if (selection.origine === 'existant') {\n    materiauxTexte.push(`${label} : reprends exactement l'aspect visible sur la photographie du site pour cet élément, sans réinterprétation ni remplacement.`);\n  }\n}\nif (materiauxTexte.length > 0) {\n  sections.push(['MATÉRIAUX', materiauxTexte.join(' ')]);\n}\n\n// Environnement.\nconst environnementTexte = [];\nif (requete.environnement?.conserver_vegetation) {\n  environnementTexte.push(\"La végétation existante visible sur la photographie du site est conservée : mêmes essences, même implantation, même volume, avec une variation de couleur bornée et sans aspect irrégulier.\");\n}\nconst pelouseFragment = PELOUSE[requete.environnement?.aspect_pelouse];\nif (pelouseFragment) environnementTexte.push(pelouseFragment);\nconst elementsARetirer = (requete.environnement?.elements_a_retirer ?? '').trim();\nif (elementsARetirer) {\n  environnementTexte.push(`Retire de l'image les éléments suivants, sans modifier ni recomposer le reste de la scène : ${elementsARetirer}.`);\n}\nif (environnementTexte.length > 0) {\n  sections.push(['ENVIRONNEMENT', environnementTexte.join(' ')]);\n}\n\nconst elementsAPreserver = (requete.elements_a_preserver ?? '').trim();\nif (elementsAPreserver) {\n  sections.push(['ÉLÉMENTS À PRÉSERVER', `Conserve strictement les éléments suivants tels qu'ils apparaissent sur les vues fournies, sans les réinterpréter : ${elementsAPreserver}.`]);\n}\n\nconst precisions = (requete.precisions ?? '').trim();\nif (precisions) {\n  sections.push(['PRÉCISIONS', precisions]);\n}\n\nconst promptComplet = sections.map(([titre, texte]) => `[${titre}]\n${texte}`).join('\\n\\n');\n\nconst imageUrls = [requete.images.cadrage];\nif (requete.images.site) imageUrls.push(requete.images.site);\n\nconst payloadFal = {\n  prompt: promptComplet,\n  image_urls: imageUrls,\n  aspect_ratio: '4:3',\n  resolution: '2K',\n  seed: 42,\n};\n\nreturn [{\n  json: {\n    reference: requete.reference,\n    promptComplet,\n    payloadFal,\n  },\n}];"
+        "jsCode": "// ---------------------------------------------------------------------------\n// SYSTÈME et STYLE : texte calibré repris tel quel du workflow V1\n// (« Générateur de Rendu Archi - Evariste », n8n), en anglais dans le texte\n// d'origine — non traduit intentionnellement (cf. docs/n8n-setup.md).\n// MODE_PRODUCTION reste un brouillon : concept propre à V2, sans équivalent\n// direct en V1, à calibrer sur un dossier réel avant mise en production.\n// ---------------------------------------------------------------------------\n\nconst SYSTEME = `You are given two reference images. Identify their roles by content, not by upload order: one image is a 3D architectural render or CGI visualization — recognizable by clean synthetic lighting, uniform materials, and a computer-generated look. That image is the fixed geometric reference: preserve its building volumes, proportions, roof shape, and camera framing exactly. The other image is a real photograph of the actual site — recognizable by natural lighting, real textures, grain, and photographic imperfections. That image is the fixed environmental reference: preserve its real vegetation, neighboring structures, sky, and light conditions exactly as shown, never substituting an invented or generic setting. If only one image is a 3D render and no real photograph is provided, treat the render alone as the sole geometric and compositional reference.  STRICT ARCHITECTURAL PRESERVATION — NON-NEGOTIABLE, APPLIES TO EVERY REQUEST Use the 3D render image identified above — never the real photograph — as the fixed geometric and compositional reference. Do not modify, reinterpret, add, or remove: building volumes, roof shape and pitch, façade proportions, windows, doors, shutters, balconies, railings, pool shape and position, terrace layout, camera angle, framing, or perspective. Do not invent any architectural element, building, wall, fence, path, furniture, vehicle, or vegetation absent from either reference image. The camera position, angle, and framing are fixed to exactly match the first image: same distance, same angle, same extent of the building visible within the frame. Do not zoom out, reposition the camera, or reveal more of the building, its wings, or its floors than what the first image actually shows. Every part of the building visible in the first image — including balconies, doors, stone base, and all other architectural elements — must remain visible at the same position and scale in the output. Any area within this same frame that is empty, blank, or unrendered in the first image — sky, background, surroundings — is not part of the building and must be filled with the real environment shown in the second image (sky, vegetation, neighboring structures, light), never left blank and never filled with additional invented building elements. Filling these areas must never come at the cost of cropping, shrinking, or omitting any part of the building itself.  PHOTOGRAPHIC REALISM This preservation rule applies to geometry only. The rendering style itself must be fully transformed: completely replace the source render's CGI shading, flat synthetic materials, and studio-clean lighting with the qualities of a real photograph. A light filter or subtle enhancement over the original render is not acceptable — the surface treatment and light behavior must read as an actual photograph, not an improved 3D render. Produce output indistinguishable from a single real photograph. Never treat this as a \"3D\" or \"render\" task. The entire image — building and environment alike — must read as one single capture: same light direction, same shadows, same color temperature, same grain level throughout. No surface may appear smoother or more synthetic than the rest of the image. Natural photographic grain and depth of field consistent with a real lens. Natural contrast and tonal depth throughout: believable falloff from sunlit to shaded areas, soft-edged cast shadows, real depth between foreground and background. Never a flat, evenly-lit \"product render\" look. This is not the same as HDR or tone-mapped high-contrast style — keep contrast natural and photographic, never dramatic, oversaturated, or artificially punchy. Materials show natural tonal variation, never a uniform or plastic surface. Exterior wall render (stucco, plaster, or paint finish) shows visible surface grain, subtle patina, and natural tonal variation from weathering and light — never a flat, uniformly smooth 3D-model finish. Roof tiles show individual tile-to-tile variation in tone and slight surface irregularity, with visible texture at close range — never a single repeated flat color block. Painted shutters, window frames, and joinery show real paint texture, subtle wear, and material grain — never a flat vector-like color fill. This texture requirement applies even though the color and material identity of these elements — their hue, their material type — must stay exactly as in the reference: preserving what a surface is made of is not the same as preserving how smooth or synthetic it currently looks. Exposure on white and light-colored surfaces (façades, renders, trims) retains visible texture and subtle tonal gradation in every zone — never blown out to a flat, detail-less white. Default white balance is neutral daylight color temperature unless a specific time of day or lighting mood is explicitly requested — never a warm yellow or amber cast on surfaces that are actually white or light-grey. Low vegetation and lawn read as an actual photographed lawn, not a textured surface: grass blades have real three-dimensional structure, length, and volume, growing in slightly varied natural directions rather than a uniform combed or brushed pattern, with tiny soft shadows visible between individual blades at close range. The result must look like living grass growing from soil — never a flat printed pattern, a carpet-like weave, or a repeating texture applied to a flat green surface. Subtle tonal variation within a healthy green range — never patchy, blotchy, or showing large tan or brown discoloration either. Sky is a real photographic sky consistent with the lighting condition: natural cloud texture and atmospheric depth — never a flat gradient or synthetic backdrop. Water surfaces (pools, ponds) show realistic reflections, subtle surface ripples, and light refraction consistent with the surrounding light — never a flat, uniform, saturated color fill. Roof fascia boards, bargeboards, and soffits show the same paint texture, material grain, and subtle weathering as the rest of the building envelope — matching sheen and tonal variation with neighboring surfaces. Never a flat, single, untextured color fill on these elements, regardless of how small or secondary they appear in the frame.  CAMERA AND LENS Preserve the original viewpoint and framing exactly — same distance, same angle, same extent of the building within the frame. Do not reframe, zoom out, or extend the shot to show more of the building than the first image contains. Areas of the frame not occupied by the building are filled with real environment per the rule above, never left blank. Neutral 35-50mm architectural lens, no added distortion. Subtle depth of field. Physically accurate exposure with real dynamic range between highlights and shadows. Chromatic aberration kept extremely subtle. Natural lens imperfections. Realistic reflections on windows, with soft interior darkness behind the glazing.  QUALITY No CGI look. No plastic materials. No cartoonish lighting. No exaggerated lens effects.`;\n\nconst MODE_PRODUCTION = {\n  photomontage_controle: \"Intègre le projet directement sur la photographie du site fournie, en respectant exactement son point de vue, sa perspective et sa lumière d'origine. Les zones de la vue de cadrage sans contenu défini sont complétées par le contenu réel visible sur la photographie du site, jamais par un décor inventé ; un ciel seul reste acceptable en l'absence de tout élément environnant visible.\",\n  presentation_generative: \"Présente le projet dans un environnement cohérent inspiré de la photographie du site, sans chercher un alignement géométrique strict avec celle-ci : la photographie sert de référence de matières, de végétation et d'ambiance, pas de calque d'intégration.\",\n  retexturation_revit: \"Aucune photographie du site n'est fournie. Complète les zones vides de la vue de cadrage par un environnement extérieur plausible et sobre, cohérent avec le projet, sans effet de composition ni décor remarquable.\",\n};\n\nconst STYLE = {\n  photomontage_administratif: {\n    intro: \"ADMINISTRATIVE PHOTOMONTAGE STYLE — applies only when Photomontage administratif style is selected. Materials read as credible, believable photographic materials — natural tonal variation, no plastic or synthetic look — but treated with restraint: a light, discreet realism upgrade over the native Revit render, never the rich, close-up photographic detail used for a client presentation. The result should stay recognizably close to a polished Revit render, just made believable. Lawn and low vegetation: individually visible blades, subtle tonal variation within a uniform healthy green range — never patchy, blotchy, or showing large tan or brown discoloration. DEPTH: perfectly uniform sharpness across the entire image, foreground to background, including the neighboring context. Nothing may be softened or blurred — every visible element must remain independently verifiable. LIGHT: neutral, even natural light matching the provided site photograph exactly. No added warmth, no stylization, no artistic treatment.\",\n    suite: \"\",\n  },\n  presentation_client: {\n    intro: \"CLIENT PRESENTATION STYLE — applies only when Présentation client style is selected. Render every surface as if captured in a close-up real photograph, not as an enhanced 3D render. This applies equally to every material in the frame — roof tiles, rendered facade, stonework, joinery, paving, and low vegetation all receive the same tactile, close-up photographic detail. No single surface may look smoother, flatter, or more synthetic than the others. MATERIALS: rendered facade shows visible fine plaster grain, subtle natural tonal variation, no flat uniform color field; roof tiles show individual tile variation in tone and weathering, visible joints, no repeating pattern; stonework shows visible individual stones, natural color and texture variation, real shadow occlusion between stones; paving shows natural micro-imperfections, believable joints, no plastic sheen. Lawn and low vegetation: individually visible blades, subtle tonal variation within a uniform healthy green range — never patchy, blotchy, or showing large tan or brown discoloration. LIGHT: warm, directional natural light, noticeably warmer and softer than a neutral midday photograph — never a dramatic sunset. DEPTH: natural photographic depth of field, a slight, believable softening of the far background only — the building itself, the pool, and any element of the project stay fully sharp and richly detailed. SKY: clear, bright sky with slightly deeper natural color than a flat neutral midday photo.\",\n    suite: \"\",\n  },\n  commercial: {\n    intro: \"COMMERCIAL STYLE — applies only when Commercial style is selected. Produce a premium, editorial-quality architectural photograph, in the register of high-end real estate and residential architecture photography. LIGHTING QUALITY: directional, sculpted lighting that reveals the depth and texture of volumes and materials rather than flat frontal illumination; physically accurate global illumination, realistic ambient occlusion, controlled highlights, detailed and well-defined shadows, natural light falloff; elegant tonal range with no crushed blacks and no blown highlights; marked but controlled contrast. Lawn and low vegetation: individually visible blades, subtle tonal variation within a uniform healthy green range — never patchy, blotchy, or showing large tan or brown discoloration. MATERIALS AND FINISH: rich, deep color grading close to professional editorial photography; fine surface micro-detail across the whole image; realistic, refined reflections and light caustics on the pool water and any glazed surface; sophisticated, aspirational, but believable — never plastic, never oversaturated, never cartoonish.\",\n    suite: \"\",\n  },\n};\n\n// Fragments ci-dessous copiés tels quels depuis docs/fragments-prompt.md — ne\n// pas les reformuler ailleurs que dans ce fichier source.\nconst CIEL = {\n  reprendre_photo: \"La lumière, la direction du soleil, la douceur des ombres et la température de couleur sont reprises exactement de la photographie du site. Les ombres portées des éléments projetés tombent dans la même direction, avec la même longueur et la même densité que celles déjà visibles sur la photographie. Le ciel est celui de la photographie, avec sa texture nuageuse et sa profondeur atmosphérique propres. L'image entière doit paraître capturée en une seule prise de vue : même grain, même contraste, même dominante colorée du premier plan jusqu'à l'horizon.\",\n  degage: \"Ciel bleu franc et dégagé, plus soutenu au zénith et s'éclaircissant progressivement vers l'horizon, avec une profondeur atmosphérique perceptible. Soleil haut, lumière directe : ombres portées nettes, aux bords légèrement adoucis à mesure qu'elles s'éloignent de l'objet qui les projette, densité soutenue conservant du détail dans les zones sombres. Les surfaces claires gardent leur texture et leur gradation tonale sur toute leur étendue. Température de couleur neutre de plein jour.\",\n  legerement_voile: \"Ciel couvert d'un voile de nuages hauts et fins, laissant deviner la position du soleil sans disque nettement dessiné. Lumière directionnelle mais adoucie : les ombres portées restent lisibles, avec des bords diffus et une densité modérée. Contraste doux, gradation fine sur les surfaces courbes et sur le grain des enduits. Température de couleur neutre, très légèrement froide.\",\n  neutre_diffus: \"Lumière naturelle neutre et diffuse de ciel uniformément couvert. Aucune direction dominante : les ombres sont courtes et très douces, essentiellement des ombres de contact au pied des volumes, sous les débords de toiture et dans les feuillures des ouvertures. Ciel clair et uniformément lumineux, conservant une légère texture nuageuse. Contraste faible mais tonalité pleine, chaque matériau restant lisible dans son relief et sa texture propre.\",\n  fin_de_journee: \"Fin d'après-midi, soleil bas sur l'horizon. Lumière rasante et chaude, ambrée sans excès, qui révèle le relief des enduits, des tuiles et des pierres et allonge les ombres portées dans une direction unique et cohérente. Les façades exposées reçoivent une lumière dorée ; les façades opposées basculent dans une ombre légèrement bleutée, éclairée par la seule lumière du ciel. Ciel en dégradé, du bleu profond au zénith vers des tons chauds près de l'horizon, avec une texture nuageuse réelle. Contraste marqué, conservant du détail dans les hautes lumières comme dans les ombres.\",\n  crepuscule: \"Crépuscule, peu après le coucher du soleil. Le ciel conserve une luminosité résiduelle et se dégrade du bleu profond au zénith vers des tons orangés puis violacés près de l'horizon, avec une texture nuageuse réelle. Plus aucune lumière solaire directe : l'éclairage extérieur provient uniquement de la voûte céleste, doux et enveloppant, et des sources artificielles allumées. Les façades prennent une tonalité bleutée froide qui contraste avec la chaleur des éclairages. Équilibre d'exposition d'une photographie d'architecture à l'heure bleue : le ciel reste lisible, les zones éclairées ne sont pas brûlées, les zones sombres conservent leur détail.\",\n};\n\nconst ECLAIRAGES = {\n  margelles: \"Éclairage linéaire encastré en périphérie du bassin, sous le nez des margelles : lumière chaude et rasante qui souligne le tracé de la piscine et révèle la texture de la pierre en lumière frisante. Intensité discrète, sans halo débordant ni source visible.\",\n  sous_marin: \"Projecteurs immergés dans le bassin, lumière blanche légèrement froide diffusée dans la masse d'eau. L'eau devient translucide et lumineuse de l'intérieur, laissant voir le fond et les parois du bassin. Reflets ondulants portés sur les margelles et sur les surfaces claires les plus proches.\",\n  appliques_facade: \"Appliques murales allumées en façade, lumière chaude dirigée vers le haut et vers le bas, dessinant des cônes lumineux doux sur l'enduit et révélant son grain en lumière rasante. Halos contenus, dégradé progressif jusqu'à l'ombre, sans surexposition autour des sources.\",\n  interieur_visible: \"Éclairage intérieur allumé, visible à travers les baies et les fenêtres : lumière chaude, plus dense que l'ambiance extérieure, laissant deviner la profondeur des pièces sans en détailler le contenu. Les vitrages passent d'un aspect sombre et réfléchissant à une transparence lumineuse.\",\n};\n\nconst PELOUSE = {\n  telle_quelle: \"La pelouse et la végétation basse sont reprises fidèlement de la photographie du site : même hauteur d'herbe, même densité, mêmes nuances d'une zone à l'autre, y compris les irrégularités présentes.\",\n  tondue_soignee: \"Pelouse récemment tondue et régulièrement entretenue. Les brins d'herbe sont individuellement visibles, dressés avec une orientation naturellement variée, de hauteur régulière, avec de petites ombres douces entre eux à courte distance. Vert sain et homogène, dont les variations de ton d'une zone à l'autre restent légères et contenues. Couverture continue et dense jusqu'aux bordures.\",\n  fleurie: \"Pelouse d'agrément légèrement fleurie, dans le registre de la prairie entretenue. Les brins d'herbe restent individuellement visibles, de hauteur régulière, dans un vert sain dont les variations de ton restent contenues. Quelques marguerites et petites fleurs blanches et jaunes émergent au-dessus de l'herbe, dispersées en petits groupes irréguliers plutôt qu'en semis uniforme. L'ensemble reste manifestement entretenu.\",\n};\n\nconst LABELS_CATEGORIE = {\n  toiture: 'toiture',\n  facade: 'façade',\n  volets: 'volets',\n  menuiseries: 'menuiseries',\n  margelles: 'margelles',\n  plage: 'plage de piscine',\n};\n\n// ---------------------------------------------------------------------------\n// Assemblage — logique tirée de docs/contrat-webhook-n8n.md et\n// docs/fragments-prompt.md §2 (précédence ciel / bloc de style).\n// ---------------------------------------------------------------------------\n\nconst requete = $('Webhook').item.json.body;\nconst fragmentsRows = $input.all().map((i) => i.json);\nconst fragmentsParId = Object.fromEntries(fragmentsRows.map((r) => [r.id, r.fragment_prompt]));\n\nconst sections = [];\nsections.push(['SYSTÈME', SYSTEME]);\nsections.push(['MODE DE PRODUCTION', MODE_PRODUCTION[requete.mode_production] ?? '']);\n\n// Style + lumière : le fragment de ciel remplace toujours le paragraphe\n// lumière du bloc de style (docs/fragments-prompt.md §2). Un seul bloc de\n// style par appel, jamais deux blocs parlant de lumière.\nconst styleBloc = STYLE[requete.style];\nif (styleBloc) {\n  sections.push(['STYLE', [styleBloc.intro, styleBloc.suite].join(' ')]);\n}\nconst cielFragment = CIEL[requete.environnement?.ciel];\nif (cielFragment) {\n  sections.push(['LUMIÈRE ET AMBIANCE', cielFragment]);\n}\n\n// Éclairages : uniquement si la question a été posée (objet non nul).\nconst eclairages = requete.environnement?.eclairages;\nif (eclairages) {\n  const allumes = Object.entries(eclairages)\n    .filter(([, actif]) => actif === true)\n    .map(([cle]) => ECLAIRAGES[cle])\n    .filter(Boolean);\n  if (allumes.length > 0) {\n    sections.push(['ÉCLAIRAGES ALLUMÉS', allumes.join(' ')]);\n  }\n}\n\n// Matériaux — jamais de matériau_libre ici, uniquement catalogue/existant.\nconst categories = ['toiture', 'facade', 'volets', 'menuiseries', 'margelles', 'plage'];\nconst materiauxTexte = [];\nfor (const c of categories) {\n  const selection = requete.materiaux ? requete.materiaux[c] : null;\n  if (!selection) continue;\n  const label = LABELS_CATEGORIE[c];\n  if (selection.origine === 'catalogue') {\n    const fragment = fragmentsParId[selection.id];\n    if (fragment) {\n      materiauxTexte.push(`${label} : ${fragment}.`);\n    } else {\n      // Aucune invention (PRD §6.1) : on signale plutôt que d'improviser.\n      materiauxTexte.push(`${label} : matériau non calibré (« ${selection.terme} »), aucune instruction de matière fournie — ne pas interpréter.`);\n    }\n  } else if (selection.origine === 'existant') {\n    materiauxTexte.push(`${label} : reprends exactement l'aspect visible sur la photographie du site pour cet élément, sans réinterprétation ni remplacement.`);\n  }\n}\nif (materiauxTexte.length > 0) {\n  sections.push(['MATÉRIAUX', materiauxTexte.join(' ')]);\n}\n\n// Environnement.\nconst environnementTexte = [];\nif (requete.environnement?.conserver_vegetation) {\n  environnementTexte.push(\"La végétation existante visible sur la photographie du site est conservée : mêmes essences, même implantation, même volume, avec une variation de couleur bornée et sans aspect irrégulier.\");\n}\nconst pelouseFragment = PELOUSE[requete.environnement?.aspect_pelouse];\nif (pelouseFragment) environnementTexte.push(pelouseFragment);\nconst elementsARetirer = (requete.environnement?.elements_a_retirer ?? '').trim();\nif (elementsARetirer) {\n  environnementTexte.push(`Retire de l'image les éléments suivants, sans modifier ni recomposer le reste de la scène : ${elementsARetirer}.`);\n}\nif (environnementTexte.length > 0) {\n  sections.push(['ENVIRONNEMENT', environnementTexte.join(' ')]);\n}\n\nconst elementsAPreserver = (requete.elements_a_preserver ?? '').trim();\nif (elementsAPreserver) {\n  sections.push(['ÉLÉMENTS À PRÉSERVER', `Conserve strictement les éléments suivants tels qu'ils apparaissent sur les vues fournies, sans les réinterpréter : ${elementsAPreserver}.`]);\n}\n\nconst precisions = (requete.precisions ?? '').trim();\nif (precisions) {\n  sections.push(['PRÉCISIONS', precisions]);\n}\n\nconst promptComplet = sections.map(([titre, texte]) => `[${titre}]\n${texte}`).join('\\n\\n');\n\nconst imageUrls = [requete.images.cadrage];\nif (requete.images.site) imageUrls.push(requete.images.site);\n\nconst payloadFal = {\n  prompt: promptComplet,\n  image_urls: imageUrls,\n  aspect_ratio: '4:3',\n  resolution: '2K',\n  seed: 42,\n};\n\nreturn [{\n  json: {\n    reference: requete.reference,\n    promptComplet,\n    payloadFal,\n  },\n}];"
       }
     },
     {
-      "id": "note-15",
+      "id": "note-17",
       "name": "Note - contenu à calibrer",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -306,14 +339,14 @@
         60
       ],
       "parameters": {
-        "content": "## Contenu à calibrer\n\nLe prompt système, les 3 clauses `mode_production` et les 3 blocs `style` dans ce nœud sont un premier jet, pas le texte déjà calibré du workflow V1. Si tu as ce texte (le PRD dit le pipeline de génération inchangé), colle-le ici. Sinon, calibre-le sur un dossier réel comme les fragments de ciel/pelouse/éclairages (déjà repris tels quels de docs/fragments-prompt.md).",
+        "content": "## Contenu partiellement calibré\n\nLe prompt système et les 3 blocs `style` viennent du workflow V1 (« Générateur de Rendu Archi - Evariste »), collés tels quels, en anglais — non traduits intentionnellement, pour ne pas risquer d'altérer un texte déjà calibré en production. Les 3 clauses `mode_production` restent un brouillon FR : ce découpage n'existe pas en V1, à calibrer sur un dossier réel avant mise en production.",
         "height": 200,
         "width": 420,
         "color": 5
       }
     },
     {
-      "id": "http-16",
+      "id": "http-18",
       "name": "Supabase - créer matériaux à calibrer",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -324,7 +357,7 @@
       "notes": "POST d'un tableau vide si aucun matériau libre — à vérifier que PostgREST l'accepte silencieusement sur ton instance ; sinon entourer d'un nœud IF sur la longueur du tableau.",
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/materiaux",
+        "url": "={{ $(\"Configuration\").item.json.config.supabaseUrl }}/rest/v1/materiaux",
         "authentication": "none",
         "sendHeaders": true,
         "options": {},
@@ -332,11 +365,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+              "value": "={{ $(\"Configuration\").item.json.config.supabaseServiceKey }}"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+              "value": "=Bearer {{ $(\"Configuration\").item.json.config.supabaseServiceKey }}"
             },
             {
               "name": "Prefer",
@@ -350,7 +383,7 @@
       }
     },
     {
-      "id": "http-17",
+      "id": "http-19",
       "name": "Soumettre à fal.ai",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -361,7 +394,7 @@
       "notes": "FAL_MODEL_ENDPOINT = slug exact du modèle Nano Banana Pro déjà utilisé en V1 (ex. 'fal-ai/xxx'). À vérifier avant premier test — voir docs/n8n-setup.md.",
       "parameters": {
         "method": "POST",
-        "url": "=https://queue.fal.run/{{ $env.FAL_MODEL_ENDPOINT }}",
+        "url": "=https://queue.fal.run/{{ $(\"Configuration\").item.json.config.falModelEndpoint }}",
         "authentication": "none",
         "sendHeaders": true,
         "options": {},
@@ -369,7 +402,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Key {{ $env.FAL_KEY }}"
+              "value": "=Key {{ $(\"Configuration\").item.json.config.falKey }}"
             },
             {
               "name": "Content-Type",
@@ -383,7 +416,7 @@
       }
     },
     {
-      "id": "code-18",
+      "id": "code-20",
       "name": "Initialiser le compteur",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -397,7 +430,7 @@
       }
     },
     {
-      "id": "wait-19",
+      "id": "wait-21",
       "name": "Attendre",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
@@ -405,14 +438,14 @@
         2040,
         300
       ],
-      "webhookId": "wait-hook-20",
+      "webhookId": "wait-hook-22",
       "parameters": {
         "amount": 5,
         "unit": "seconds"
       }
     },
     {
-      "id": "http-21",
+      "id": "http-23",
       "name": "Vérifier le statut fal.ai",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -430,7 +463,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Key {{ $env.FAL_KEY }}"
+              "value": "=Key {{ $(\"Configuration\").item.json.config.falKey }}"
             }
           ]
         },
@@ -438,7 +471,7 @@
       }
     },
     {
-      "id": "code-22",
+      "id": "code-24",
       "name": "Lire le statut",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -452,7 +485,7 @@
       }
     },
     {
-      "id": "if-23",
+      "id": "if-25",
       "name": "Génération terminée ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -470,7 +503,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "id": "if-23-cond",
+              "id": "if-25-cond",
               "leftValue": "={{ $json.status }}",
               "rightValue": "COMPLETED",
               "operator": {
@@ -484,7 +517,7 @@
       }
     },
     {
-      "id": "if-24",
+      "id": "if-26",
       "name": "Trop de tentatives ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -502,7 +535,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "id": "if-24-cond",
+              "id": "if-26-cond",
               "leftValue": "={{ $json.tentative }}",
               "rightValue": 40,
               "operator": {
@@ -516,7 +549,7 @@
       }
     },
     {
-      "id": "code-25",
+      "id": "code-27",
       "name": "Construire erreur - délai dépassé",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -530,7 +563,7 @@
       }
     },
     {
-      "id": "http-26",
+      "id": "http-28",
       "name": "Récupérer le résultat fal.ai",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -548,7 +581,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Key {{ $env.FAL_KEY }}"
+              "value": "=Key {{ $(\"Configuration\").item.json.config.falKey }}"
             }
           ]
         },
@@ -556,7 +589,7 @@
       }
     },
     {
-      "id": "code-27",
+      "id": "code-29",
       "name": "Évaluer le résultat",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -571,7 +604,7 @@
       }
     },
     {
-      "id": "if-28",
+      "id": "if-30",
       "name": "Image exploitable ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -589,7 +622,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "id": "if-28-cond",
+              "id": "if-30-cond",
               "leftValue": "={{ $json.imageExploitable }}",
               "rightValue": true,
               "operator": {
@@ -603,7 +636,7 @@
       }
     },
     {
-      "id": "code-29",
+      "id": "code-31",
       "name": "Construire erreur - génération sans image",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -617,7 +650,7 @@
       }
     },
     {
-      "id": "code-30",
+      "id": "code-32",
       "name": "Construire la ligne dossiers",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -632,7 +665,7 @@
       }
     },
     {
-      "id": "http-31",
+      "id": "http-33",
       "name": "Supabase - créer ligne dossiers",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -640,21 +673,28 @@
         3800,
         220
       ],
+      "notes": "responseFormat forcé à json : le Content-Type renvoyé par PostgREST (application/vnd.pgrst.object+json, imposé par le header Accept ci-dessous) n'est pas reconnu par l'autodétection de n8n, qui traiterait sinon le corps comme texte brut ({data: '...'}) — Construire la réponse lirait alors des champs undefined. Bug reproduit en test réel le 2026-08-09.",
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/dossiers",
+        "url": "={{ $(\"Configuration\").item.json.config.supabaseUrl }}/rest/v1/dossiers",
         "authentication": "none",
         "sendHeaders": true,
-        "options": {},
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+              "value": "={{ $(\"Configuration\").item.json.config.supabaseServiceKey }}"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+              "value": "=Bearer {{ $(\"Configuration\").item.json.config.supabaseServiceKey }}"
             },
             {
               "name": "Prefer",
@@ -672,7 +712,7 @@
       }
     },
     {
-      "id": "code-32",
+      "id": "code-34",
       "name": "Construire la réponse",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -686,7 +726,7 @@
       }
     },
     {
-      "id": "respond-33",
+      "id": "respond-35",
       "name": "Répondre - génération",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
@@ -703,7 +743,7 @@
       }
     },
     {
-      "id": "respond-34",
+      "id": "respond-36",
       "name": "Répondre - erreur métier",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
@@ -722,6 +762,17 @@
   ],
   "connections": {
     "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuration": {
       "main": [
         [
           {

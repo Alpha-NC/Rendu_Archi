@@ -80,7 +80,7 @@ describe('preselection du ciel', () => {
 })
 
 describe('materiaux', () => {
-  it('efface les materiaux des categories retirees par un changement de projet', () => {
+  it('conserve les materiaux renseignes quand le type de projet change', () => {
     let e = reduire(etat(), { type: 'typeProjet', valeur: 'extension' })
     e = reduire(e, {
       type: 'materiau',
@@ -90,7 +90,11 @@ describe('materiaux', () => {
     expect(e.materiaux.toiture).not.toBeNull()
 
     e = reduire(e, { type: 'typeProjet', valeur: 'piscine' })
-    expect(e.materiaux.toiture).toBeNull()
+    expect(e.materiaux.toiture).toEqual({
+      origine: 'catalogue',
+      id: 'a',
+      terme: 'Tuiles plates',
+    })
   })
 
   it('eteint un eclairage de bassin quand le projet n en a plus', () => {
@@ -169,7 +173,11 @@ describe('restauration', () => {
 
     const e = reduire(etat(), { type: 'restaurer', etat: pourri })
 
-    expect(e.materiaux.toiture).toBeNull()
+    expect(e.materiaux.toiture).toEqual({
+      origine: 'catalogue',
+      id: 'a',
+      terme: 'Tuiles plates',
+    })
     expect(e.materiaux.facade).toBeNull()
     expect(e.ciel).toBe('neutre_diffus')
     expect(e.eclairages.margelles).toBe(false)

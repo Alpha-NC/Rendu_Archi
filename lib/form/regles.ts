@@ -1,3 +1,4 @@
+import { CATEGORIES } from './types'
 import type {
   Categorie,
   Ciel,
@@ -57,40 +58,30 @@ export function stylePreselectionne(mode: ModeProduction, usage: Usage | null): 
   return 'presentation_client'
 }
 
-const MATERIAUX_BATI: Categorie[] = ['toiture', 'facade', 'volets', 'menuiseries']
-const MATERIAUX_PISCINE: Categorie[] = ['margelles', 'plage']
-
 /**
- * Categories de materiaux affichees selon le type de projet, dans l'ordre
- * d'affichage de l'etape 3.
- * Margelles et plage restent deux ouvrages distincts, jamais fusionnes.
+ * Categories de materiaux affichees a l'etape 3, dans l'ordre d'affichage.
+ * Les six categories sont toujours proposees, quel que soit le type de
+ * projet : ce qui determine si un materiau doit etre precise n'est pas le
+ * type coche mais ce qui est effectivement visible sur la vue de cadrage et
+ * la photo du site. Un projet piscine peut tres bien montrer une facade en
+ * arriere-plan ; un champ superflu se laisse simplement a « Non renseigne ».
  */
 export function champsMateriauxPour(typeProjet: TypeProjet | null): Categorie[] {
-  switch (typeProjet) {
-    case 'piscine':
-      return [...MATERIAUX_PISCINE]
-    case 'extension':
-    case 'restructuration':
-      return [...MATERIAUX_BATI]
-    case 'pool_house':
-      return [...MATERIAUX_BATI, ...MATERIAUX_PISCINE]
-    case 'terrasse':
-    case null:
-      return []
-  }
+  if (typeProjet === null) return []
+  return [...CATEGORIES]
 }
 
 /**
- * L'option « conserver l'existant » n'a de sens que lorsque la photographie
- * montre un bati existant que le projet reprend : extension et
- * restructuration. Le materiau est alors repris tel quel, jamais interprete.
+ * L'option « conserver l'existant » n'a de sens qu'en presence d'une
+ * photographie du site : c'est elle qui montre l'aspect reel a reprendre
+ * tel quel, quelle que soit la categorie de materiau ou le type de projet.
  */
 export function conservationExistantProposee(
   typeProjet: TypeProjet | null,
   images: ImagesFormulaire,
 ): boolean {
   if (!images.site) return false
-  return typeProjet === 'extension' || typeProjet === 'restructuration'
+  return typeProjet !== null
 }
 
 /**
