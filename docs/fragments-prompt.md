@@ -133,7 +133,44 @@ conservation de la végétation existante.
 
 ---
 
-## 6. Matériaux — volets
+## 6. Matériaux — toiture
+
+Table `materiaux`, catégorie `toiture`. Terre cuite et ardoise : le vocabulaire de
+patine reste léger, il décrit une réalité matérielle sans verser dans la dégradation.
+
+| `terme` | `fragment_prompt` |
+|---|---|
+| Tuiles plates terre cuite | toiture en tuiles plates terre cuite, pose à recouvrement régulier, teinte flammée du rouge orangé au brun variant d'une tuile à l'autre, relief marqué en lumière rasante, arêtiers et faîtage de même teinte |
+| Tuiles canal terre cuite | toiture en tuiles canal terre cuite, pose romaine à courants et couvrants alternés, teinte flammée du rouge orangé au brun variant d'une tuile à l'autre, ondulation régulière du profil, relief marqué en lumière rasante |
+| Tuiles mécaniques rouge vieilli | toiture en tuiles mécaniques à emboîtement, relief longitudinal régulier, teinte rouge sombre aux nuances brunes et orangées variant d'une tuile à l'autre, légère patine naturelle sur les zones exposées aux intempéries |
+| Ardoise naturelle | toiture en ardoise naturelle, pose en écailles à recouvrement régulier, teinte gris anthracite à reflets bleutés selon l'incidence de la lumière, surface clivée légèrement irrégulière, arêtiers et faîtage en zinc de même registre de gris |
+| Toiture terrasse gravillonnée | toiture terrasse gravillonnée, gravillons de calibre régulier en teinte gris clair à beige, répartition homogène sur l'ensemble de la surface, relevés d'étanchéité discrets en périphérie, acrotère en enduit de même teinte que la façade |
+| Toiture terrasse végétalisée | toiture terrasse végétalisée extensive, couvert végétal bas et dense de sedum aux teintes vertes variant du vert franc au vert-gris selon les zones, relief discret de la végétation, acrotère en enduit ou en couvertine métallique en périphérie |
+| Bac acier gris anthracite | toiture en bac acier nervuré, nervures longitudinales régulières, laquage mat gris anthracite RAL 7016, faîtage et rives de même teinte, surface lisse aux reflets doux sous la lumière rasante |
+| Zinc à joint debout | toiture en zinc à joint debout, joints verticaux réguliers marquant le rythme des lés, teinte gris zinc naturel aux reflets changeants selon l'incidence de la lumière, surface légèrement patinée, arêtiers et noues du même métal |
+
+---
+
+## 7. Matériaux — façade
+
+Table `materiaux`, catégorie `facade`. Enduits et bardages peints : aucun vocabulaire
+de vieillissement. Le bois grisé et la pierre restent des exceptions légitimes — c'est
+leur aspect réel, pas une dégradation.
+
+| `terme` | `fragment_prompt` |
+|---|---|
+| Enduit taloché blanc cassé | façade en enduit taloché finition talochée fine, teinte blanc cassé légèrement chaude, grain de surface discret et régulier, variations tonales douces d'une zone à l'autre selon l'exposition à la lumière |
+| Enduit taloché ocre/sable | façade en enduit taloché finition talochée fine, teinte ocre sable, grain de surface discret et régulier, variations tonales douces d'une zone à l'autre selon l'exposition à la lumière |
+| Enduit gratté pierre | façade en enduit gratté finition grattée fine, teinte pierre naturelle beige clair, texture rugueuse homogène révélant le grain des granulats en lumière rasante, variations tonales discrètes |
+| Enduit gris clair | façade en enduit taloché finition talochée fine, teinte gris clair, grain de surface discret et régulier, variations tonales douces d'une zone à l'autre selon l'exposition à la lumière |
+| Bardage bois naturel | façade en bardage bois à claire-voie, lames verticales régulières, teinte bois clair naturel au veinage apparent variant légèrement d'une lame à l'autre, léger relief entre les lames en lumière rasante |
+| Bardage bois grisé | façade en bardage bois à claire-voie, lames verticales régulières, teinte grisée naturelle homogène au veinage encore lisible, léger relief entre les lames en lumière rasante |
+| Pierre de pays apparente | façade en pierre de pays apparente, moellons de tailles irrégulières assemblés à joints beurrés, teinte gris-beige aux variations naturelles marquées d'une pierre à l'autre, relief prononcé en lumière rasante |
+| Bardage métallique anthracite | façade en bardage métallique à lames horizontales, laquage mat gris anthracite RAL 7016, joints d'assemblage fins et réguliers, surface lisse aux reflets doux sous la lumière rasante |
+
+---
+
+## 8. Matériaux — volets
 
 Table `materiaux`, catégorie `volets`. Surfaces peintes : aucun vocabulaire de
 vieillissement.
@@ -144,10 +181,32 @@ vieillissement.
 | Volets roulants aluminium blanc | volets roulants en aluminium laqué blanc, lames horizontales fines et régulières, jeu constant entre les lames, coffre intégré discret en linteau, surface mate et propre |
 | Volets roulants aluminium anthracite | volets roulants en aluminium laqué gris anthracite RAL 7016, lames horizontales fines et régulières, coffre intégré discret en linteau, finition mate absorbant la lumière sans reflet spéculaire |
 | Volets coulissants bois naturel | volets coulissants en bois naturel à claire-voie, lames verticales régulières laissant filtrer la lumière, teinte bois clair au veinage apparent, rail de guidage fin visible en partie haute |
+| Volets battants aluminium blanc | volets battants en aluminium à lames horizontales fixes, laquage opaque blanc satiné, cadre périphérique fin et régulier, pentures et ferrures visibles, gonds scellés en tableau |
+| Volets battants bois peint bleu | volets battants en bois peint à lames verticales assemblées, peinture opaque bleu satinée laissant transparaître le fil du bois sous la couche, pentures et ferrures visibles, gonds scellés en tableau |
+| Volets persiennés bois | volets persiennés en bois à lames horizontales orientables fixes, peinture opaque satinée laissant transparaître le fil du bois sous la couche, ombres portées régulières des lames sur le mur en lumière rasante |
+| Brise-soleil orientable aluminium | brise-soleil en aluminium à lames horizontales orientables, laquage mat gris anthracite, cadre périphérique fin, ombres portées régulières des lames selon leur orientation en lumière rasante |
 
 ---
 
-## 7. Matériaux — margelles
+## 9. Matériaux — menuiseries
+
+Table `materiaux`, catégorie `menuiseries`. Surfaces peintes ou laquées : aucun
+vocabulaire de vieillissement.
+
+| `terme` | `fragment_prompt` |
+|---|---|
+| Menuiseries aluminium anthracite | menuiseries en aluminium à profils fins, laquage mat gris anthracite RAL 7016, vitrages clairs aux reflets nets, joints d'assemblage discrets, poignées assorties |
+| Menuiseries aluminium blanc | menuiseries en aluminium à profils fins, laquage mat blanc, vitrages clairs aux reflets nets, joints d'assemblage discrets, poignées assorties |
+| Menuiseries aluminium gris clair | menuiseries en aluminium à profils fins, laquage mat gris clair RAL 7035, vitrages clairs aux reflets nets, joints d'assemblage discrets, poignées assorties |
+| Menuiseries aluminium noir mat | menuiseries en aluminium à profils fins, laquage mat noir profond, vitrages clairs aux reflets nets, joints d'assemblage discrets, poignées assorties |
+| Menuiseries bois naturel (chêne clair) | menuiseries en bois teinte chêne clair, veinage apparent sous vernis satiné, profils aux arêtes nettes, vitrages clairs aux reflets nets, quincaillerie discrète |
+| Menuiseries bois peint blanc | menuiseries en bois peint blanc satiné laissant transparaître le fil du bois sous la couche, profils aux arêtes nettes, vitrages clairs aux reflets nets, quincaillerie discrète |
+| Menuiseries PVC blanc | menuiseries en PVC blanc à profils fins, surface lisse et mate régulière, vitrages clairs aux reflets nets, joints d'assemblage discrets, poignées assorties |
+| Menuiseries mixte bois-aluminium | menuiseries mixtes bois-aluminium, parement intérieur bois teinte chêne clair au veinage apparent, parement extérieur aluminium laqué mat gris anthracite, profils fins, vitrages clairs aux reflets nets |
+
+---
+
+## 10. Matériaux — margelles
 
 Table `materiaux`, catégorie `margelles`. Pierre : le vocabulaire de vieillissement est
 ici légitime, il décrit une réalité matérielle.
@@ -158,10 +217,13 @@ ici légitime, il décrit une réalité matérielle.
 | Travertin | margelles en travertin, surface naturellement poreuse aux cavités caractéristiques, veinage horizontal du beige à l'ivoire, arêtes adoucies par le temps, joints fins, la pierre s'assombrissant légèrement là où l'eau la mouille |
 | Pierre naturelle bouchardée | margelles en pierre naturelle à finition bouchardée, surface régulièrement piquetée offrant un relief mat et antidérapant, teinte gris-beige aux variations naturelles marquées d'une pierre à l'autre, arêtes chanfreinées |
 | Béton lissé gris clair | margelles en béton lissé gris clair, surface mate et régulière aux très légères variations de teinte, arête vive légèrement chanfreinée, joints de fractionnement rectilignes |
+| Pierre naturelle grise | margelles en pierre naturelle grise à finition adoucie, surface régulière au grain fin, teinte gris-bleu aux variations naturelles discrètes d'un élément à l'autre, arêtes légèrement chanfreinées, joints fins |
+| Carrelage grès cérame imitation pierre | margelles en carrelage grès cérame imitation pierre, surface antidérapante à relief fin régulier, teinte beige clair homogène aux discrètes variations d'un élément à l'autre, joints fins et réguliers, arête droite légèrement adoucie |
+| Bois exotique (assorti à la plage) | margelles en lames de bois exotique, pose parallèle au bord du bassin, veinage apparent, teinte du miel au brun clair variant légèrement d'une lame à l'autre, arête légèrement adoucie |
 
 ---
 
-## 8. Matériaux — plage de piscine
+## 11. Matériaux — plage de piscine
 
 Table `materiaux`, catégorie `plage`.
 
@@ -171,12 +233,15 @@ Table `materiaux`, catégorie `plage`.
 | Lames bois exotique | plage de piscine en lames de bois exotique, pose parallèle à lames régulières, veinage apparent, teinte du miel au brun clair variant légèrement d'une lame à l'autre, espacement constant laissant voir l'ombre entre les lames |
 | Lames composite gris | plage de piscine en lames composite gris, surface rainurée mate et régulière, teinte uniforme aux très légères nuances, espacement constant entre les lames, aspect net et contemporain |
 | Béton désactivé | plage de piscine en béton désactivé, granulats apparents de calibre régulier affleurant en surface, teinte du gris clair au beige selon les granulats, joints de fractionnement rectilignes, surface mate et rugueuse au toucher |
+| Dalles grès cérame grand format | plage de piscine en dalles de grès cérame grand format, pose à joints alignés fins, surface mate légèrement structurée antidérapante, teinte gris clair homogène aux discrètes variations d'une dalle à l'autre |
+| Résine drainante | plage de piscine en résine drainante à granulats apparents, surface continue sans joint, teinte beige aux nuances de granulats variant légèrement, aspect mat et régulier |
+| Gazon synthétique | plage de piscine en gazon synthétique, brins individuellement visibles dressés dans des directions légèrement variées, vert sain homogène aux variations de teinte contenues, couverture dense et régulière jusqu'aux bordures |
 
 ---
 
-## 9. À valider avant mise en base
+## 12. À valider avant mise en base
 
-- **Les termes des trois catégories de matériaux sont des propositions.** Ils ont été
+- **Les termes des six catégories de matériaux sont des propositions.** Ils ont été
   choisis pour couvrir les cas courants, pas relevés sur des dossiers réels. Remplace,
   retire ou complète selon ce que tu rencontres effectivement. Les fragments suivent le
   terme : changer l'un demande de reprendre l'autre.
