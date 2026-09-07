@@ -4,30 +4,52 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**rendu-architectural** — Générateur de rendus architecturaux photoréalistes à partir d'exports Revit et d'une photo de site, avec boucle de correction par annotation. Remplace une interface Custom GPT (V1). Voir `docs/prd-generateur-rendu-v2.md` pour la spec complète.
+**rendu-architectural** — **RIF-App** : application conversationnelle qui génère des rendus architecturaux photoréalistes à partir d'exports Revit et d'une photo de site, avec boucle de correction par annotation, pour Évariste Blasco (architecte, Biarritz). Implémentation du **Framework RIF** (`rif-framework/`), pas un remplacement de celui-ci.
 
-Stack : Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 — **front seul**, aucun backend applicatif propre.
+Remplace le formulaire V2 (7 étapes, rejeté par le client comme « trop contraignant ») et prépare la bascule progressive depuis le Custom GPT V1 (« GPT RIF »), qui reste le filet de sécurité jusqu'en Phase 1.
 
-## Architecture — point critique
+Voir `docs/prd-generateur-rendu-v2.md` (V1.3) pour la spec complète et `rif-framework/Implementations/RIF-App/DECISIONS.md` pour les décisions d'architecture déjà tranchées (Phase 0A).
 
-Le front ne parle **qu'à un unique webhook n8n** (self-hosted, externe à ce dépôt). Toute la logique métier, le stockage (Supabase, tables `materiaux`/`dossiers`), l'appel fal.ai/Nano Banana Pro et l'archivage Google Drive vivent côté n8n, pas dans ce dépôt.
+Stack : Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · Supabase (Postgres + Auth + Storage), hébergé sur Vercel.
 
-- **Aucune clé d'API dans ce projet** — ni Supabase, ni fal.ai, ni Drive. Le front n'a même pas de client Supabase : il ne l'appelle jamais directement.
-- Un seul endpoint configuré via variable d'environnement (`NEXT_PUBLIC_N8N_WEBHOOK_URL`), routé côté n8n par un champ `action` dans le corps de la requête (`get_materiaux`, `generate`, `correct`, `regenerate`, `validate`, `get_dossier`).
-- Le polling fal.ai est géré entièrement côté n8n dans une seule exécution de workflow — le front envoie une requête et attend une réponse finale unique. Ne jamais implémenter de logique de polling côté client.
-- Accès protégé par un mot de passe unique partagé (pas de comptes, pas de rôles) — donc **pas de skill nextjs-supabase-auth ici**, c'est hors sujet pour ce projet.
+## Architecture — points critiques
+
+- **Backend applicatif propre**, contrairement à la V2 : ce dépôt contient l'authentification, la machine à états et les appels serveur (Route Handlers/Server Actions). Il n'y a **plus de n8n** dans le chemin de production de RIF-App — le webhook V2 (`keALNdFoFMNT1Sxk`) est abandonné.
+- **Authentification individuelle obligatoire** (Supabase Auth) + **Row Level Security** sur toutes les tables — plus de mot de passe unique partagé. Voir `middleware.ts`… en réalité `proxy.ts` (convention Next.js 16, migré depuis `middleware.ts`).
+- **fal.ai est appelé directement depuis ce backend** (`fal-ai/nano-banana-pro/edit`), sans service intermédiaire séparé — voir DECISIONS.md D-05.
+- **Le LLM ne pilote jamais directement une transition d'état ni un appel au moteur d'image.** Il propose ; seul le backend (`lib/rif/etat-machine.ts`) vérifie les préconditions et applique. Ne jamais dupliquer ces vérifications côté client ou les considérer suffisantes côté prompt seul.
+- **ProjectState** (`lib/rif/project-state.ts`) est la source de vérité opérationnelle, distincte de la conversation. Une révision confirmée est immuable ; toute modification crée une nouvelle révision. Une génération est impossible sans révision confirmée (critère d'acceptation §22 du PRD, testé dans `lib/rif/etat-machine.test.ts`).
+- **Aucune clé d'API dans ce dépôt** — Supabase (`service_role`), Anthropic/LLM et fal.ai restent des secrets serveur uniquement (`SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `FAL_KEY` — jamais préfixés `NEXT_PUBLIC_`).
+- **Choix du LLM multimodal non encore tranché** — voir `docs/decision-llm-multimodal.md` (recommandation provisoire : Claude Sonnet 5/Opus 5). Ne pas câbler l'orchestrateur LLM en dur sur un fournisseur avant confirmation.
+- Le Framework (`rif-framework/Framework/`) n'est **jamais modifié depuis le code applicatif** — c'est un non-objectif explicite du PRD (§25).
 
 ## Commands
 
 ```bash
-npm run dev     # dev server (localhost:3000)
-npm run build   # production build
-npm run lint    # ESLint
+npm run dev       # dev server (localhost:3000)
+npm run build     # production build
+npm run lint      # ESLint
+npm run test      # vitest run
+npm run test:watch
 ```
+
+## Ce qui existe déjà
+
+- `lib/rif/project-state.ts` — types TypeScript du ProjectState.
+- `lib/rif/etat-machine.ts` (+ `.test.ts`) — machine à états déterministe et préconditions de transition (PRD §8, §22).
+- `lib/supabase/{client,server}.ts` — clients Supabase (navigateur, serveur avec RLS, serveur `service_role`).
+- `app/connexion/page.tsx` — authentification individuelle (email + mot de passe Supabase Auth).
+- `proxy.ts` — rafraîchissement de session + garde d'accès sur toutes les routes hors `/connexion`.
+- `supabase/schema-rif-app.sql` — schéma complet (`dossiers`, `files`, `generations`, `quality_audits`, `events`, `profiles`) avec policies RLS, non encore exécuté sur un vrai projet Supabase.
 
 ## Ce qui reste à construire
 
-Rien n'est encore implémenté au-delà du scaffold Next.js par défaut. Voir `docs/prd-generateur-rendu-v2.md` §10 pour l'ordre d'implémentation recommandé (schéma Supabase et webhook n8n en premier, côté n8n — hors de ce dépôt — puis le formulaire 7 étapes ici).
+- Créer le projet Supabase réel et exécuter `supabase/schema-rif-app.sql` + créer le bucket de stockage privé (voir commentaire en fin de fichier SQL).
+- Trancher D-06 (LLM multimodal) et brancher l'orchestrateur conversationnel.
+- Étapes 1 à 5 du parcours (PRD §9) : dépôt des sources, contrôle initial, collecte progressive (ENG-004), fiche projet, génération.
+- Contrats `genererRenduFlux` / `corrigerRenduFlux` / `reprendreDepuisSources` (PRD §14).
+- Contrôle qualité et validation humaine distincts de la génération (PRD §15).
+- Voir `rif-framework/Implementations/RIF-App/DECISIONS.md` pour les décisions encore ouvertes (D-10 à D-13) et `docs/prd-generateur-rendu-v2.md` §23 pour le plan de déploiement (Phase 0B à venir).
 
 ## Env vars
 
