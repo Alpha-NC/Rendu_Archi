@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { creerClientNavigateur } from '@/lib/supabase/client'
+import { cibleRedirectionSure } from '@/lib/securite/redirection-sure'
 
 /**
  * Authentification individuelle (Supabase Auth) — remplace le mot de passe
@@ -43,7 +44,7 @@ function FormulaireConnexion() {
       return
     }
 
-    router.push(parametres.get('redirect') ?? '/')
+    router.push(cibleRedirectionSure(parametres.get('redirect')))
     router.refresh()
   }
 
