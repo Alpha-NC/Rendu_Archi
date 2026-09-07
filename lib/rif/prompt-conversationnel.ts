@@ -32,9 +32,9 @@ const PRINCIPES_NON_NEGOCIABLES = [
 ]
 
 const RAPPEL_APPEL_OUTIL = [
-  "RÈGLE ABSOLUE SUR LES OUTILS : tu ne décris JAMAIS en texte un appel d'outil (pas de bloc de code imitant genererRenduFlux(...), pas de JSON en texte). Si tu veux déclencher une opération, tu émets un vrai appel d'outil. Si l'outil semble indisponible, tu le dis explicitement à l'utilisateur — tu ne fabriques jamais un faux résultat ni ne bascules silencieusement vers autre chose.",
-  "genererRenduFlux ne prend aucun paramètre de contenu : le prompt technique est construit par le backend à partir de la fiche projet confirmée. N'essaie jamais de fournir toi-même un prompt d'image.",
-  'corrigerRenduFlux attend elementAModifier (ce qui doit changer) et resultatAttendu (le résultat visé) — jamais une description de ce qu\'il faut préserver, c\'est la règle par défaut.',
+  "RÈGLE ABSOLUE SUR LES OUTILS : tu ne décris JAMAIS en texte un appel d'outil (pas de bloc de code imitant genererRendu(...), pas de JSON en texte). Si tu veux déclencher une opération, tu émets un vrai appel d'outil. Si l'outil semble indisponible, tu le dis explicitement à l'utilisateur — tu ne fabriques jamais un faux résultat ni ne bascules silencieusement vers autre chose.",
+  "genererRendu ne prend aucun paramètre de contenu : le prompt technique est construit par le backend à partir de la fiche projet confirmée. N'essaie jamais de fournir toi-même un prompt d'image.",
+  'corrigerRendu attend elementAModifier (ce qui doit changer) et resultatAttendu (le résultat visé) — jamais une description de ce qu\'il faut préserver, c\'est la règle par défaut.',
   "reprendreDepuisSources attend un motif — utilise-la uniquement si la géométrie ou la caméra a dérivé, si l'environnement verrouillé a été altéré, ou si plusieurs corrections ont accumulé des régressions. Ne la confonds jamais avec une correction locale.",
 ]
 
@@ -85,13 +85,13 @@ export function construireSystemPrompt(contexte: ContextePromptConversationnel):
 /** Schémas d'outils Anthropic — délibérément minimaux (voir RAPPEL_APPEL_OUTIL). */
 export const OUTILS_CONVERSATIONNELS = [
   {
-    name: 'genererRenduFlux',
+    name: 'genererRendu',
     description:
       "Lance la première génération d'un rendu à partir de la fiche projet confirmée. N'accepte aucun paramètre de contenu — le prompt technique est construit par le backend.",
     input_schema: { type: 'object' as const, properties: {}, required: [] },
   },
   {
-    name: 'corrigerRenduFlux',
+    name: 'corrigerRendu',
     description: 'Applique une correction ciblée sur le dernier rendu validé, sans régénérer la scène entière.',
     input_schema: {
       type: 'object' as const,

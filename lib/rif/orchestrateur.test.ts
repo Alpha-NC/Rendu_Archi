@@ -154,7 +154,7 @@ describe('executerGenerationOuCorrection', () => {
     expect(generations.get('gen-1')?.patch?.status).toBe('failed')
   })
 
-  it("autorise corrigerRenduFlux depuis A_CORRIGER mais pas depuis PRÊT_À_GÉNÉRER", async () => {
+  it("autorise corrigerRendu depuis A_CORRIGER mais pas depuis PRÊT_À_GÉNÉRER", async () => {
     globalThis.fetch = vi.fn(async () => ({
       ok: true,
       headers: new Headers({ 'content-type': 'image/png' }),

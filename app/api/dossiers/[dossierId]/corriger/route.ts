@@ -9,7 +9,7 @@ import {
 } from '../../_lib/reponse'
 
 /**
- * POST /api/dossiers/[dossierId]/corriger — corrigerRenduFlux (PRD §14.2).
+ * POST /api/dossiers/[dossierId]/corriger — corrigerRendu (PRD §14.2).
  *
  * Réservée à une correction localisée sur un rendu existant fiable (état
  * À_CORRIGER). Ne modifie jamais la scène entière — voir D-09 : cette

@@ -7,7 +7,7 @@ import { verifierPrecondition } from './etat-machine'
  *
  * Répond au risque #1 du prémortem du 02.09.2026, désigné comme l'échec le
  * plus probable : le modèle décrit en texte l'appel qu'il « voudrait » faire
- * (souvent un bloc de code JSON `genererRenduFlux({...})`) sans jamais
+ * (souvent un bloc de code JSON `genererRendu({...})`) sans jamais
  * émettre de vrai `tool_use`. L'utilisateur croit une génération lancée qui
  * ne l'a jamais été, et ne le découvre qu'en cherchant un lien absent.
  *
@@ -22,8 +22,8 @@ import { verifierPrecondition } from './etat-machine'
  */
 
 export const OPERATIONS_RIF = [
-  'genererRenduFlux',
-  'corrigerRenduFlux',
+  'genererRendu',
+  'corrigerRendu',
   'reprendreDepuisSources',
 ] as const
 
@@ -60,7 +60,7 @@ export type ResultatAppelOutil =
  */
 function detecterAppelSimule(texte: string): OperationRif | null {
   for (const operation of OPERATIONS_RIF) {
-    // `genererRenduFlux(`, `"name": "genererRenduFlux"`, `genererRenduFlux({`…
+    // `genererRendu(`, `"name": "genererRendu"`, `genererRendu({`…
     const motif = new RegExp(`${operation}\\s*[({"']|["']${operation}["']`, 'i')
     if (motif.test(texte)) return operation
   }
@@ -120,8 +120,8 @@ export function autoriserOperation(
   projectState: ProjectState,
   contexte: Parameters<typeof verifierPrecondition>[3] = {},
 ): DecisionOperation {
-  // PRD §14.1 : genererRenduFlux est refusée hors de PRÊT_À_GÉNÉRER.
-  if (operation === 'genererRenduFlux') {
+  // PRD §14.1 : genererRendu est refusée hors de PRÊT_À_GÉNÉRER.
+  if (operation === 'genererRendu') {
     if (etatCourant !== 'PRET_A_GENERER') {
       return {
         autorisee: false,
@@ -138,7 +138,7 @@ export function autoriserOperation(
   }
 
   // PRD §14.2 : correction locale, réservée à un rendu existant fiable.
-  if (operation === 'corrigerRenduFlux') {
+  if (operation === 'corrigerRendu') {
     if (etatCourant !== 'A_CORRIGER') {
       return {
         autorisee: false,

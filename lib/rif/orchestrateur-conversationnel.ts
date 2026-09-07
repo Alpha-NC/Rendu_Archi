@@ -155,7 +155,7 @@ export async function executerTourConversationnel(
   // réel (ENG-002/003), jamais fourni par le modèle (PRD §9.5).
   const sourceFileIds = dossier.projectState.sources.map((s) => s.id)
 
-  if (analyse.operation === 'genererRenduFlux') {
+  if (analyse.operation === 'genererRendu') {
     const promptText = construirePromptGeneration(dossier.projectState)
     const resultat = await executerGenerationOuCorrection(depot, appelerFal, {
       dossierId: dossier.id,
@@ -165,16 +165,16 @@ export async function executerTourConversationnel(
       actorId: contexte.actorId,
       contexte: { usageAdministratif: dossier.usageAdministratif },
     })
-    return { type: 'operation', operation: 'genererRenduFlux', resultat }
+    return { type: 'operation', operation: 'genererRendu', resultat }
   }
 
-  if (analyse.operation === 'corrigerRenduFlux') {
+  if (analyse.operation === 'corrigerRendu') {
     const entree = analyse.entree as { elementAModifier?: unknown; resultatAttendu?: unknown } | undefined
     if (typeof entree?.elementAModifier !== 'string' || typeof entree?.resultatAttendu !== 'string') {
       await depot.journaliserEvenement(
         dossier.id,
         'operation_refusee',
-        { operation: 'corrigerRenduFlux', raison: 'Paramètres manquants ou invalides.' },
+        { operation: 'corrigerRendu', raison: 'Paramètres manquants ou invalides.' },
         contexte.actorId,
       )
       return { type: 'incident', message: 'La demande de correction est incomplète — précise ce qui doit changer et le résultat attendu.' }
@@ -191,7 +191,7 @@ export async function executerTourConversationnel(
       actorId: contexte.actorId,
       contexte: { usageAdministratif: dossier.usageAdministratif },
     })
-    return { type: 'operation', operation: 'corrigerRenduFlux', resultat }
+    return { type: 'operation', operation: 'corrigerRendu', resultat }
   }
 
   // reprendreDepuisSources

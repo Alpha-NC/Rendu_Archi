@@ -115,7 +115,7 @@ describe("executerTourConversationnel — appel simulé (prémortem #1)", () => 
   it("bloque et journalise un texte imitant un appel d'outil, sans jamais exécuter d'opération", async () => {
     const { depot, evenements } = depotMemoire(dossierBase)
     const appelerModele = vi.fn<AppelModele>(async () => ({
-      content: [{ type: 'text', text: 'Je lance : genererRenduFlux({})' }],
+      content: [{ type: 'text', text: 'Je lance : genererRendu({})' }],
     }))
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
@@ -131,12 +131,12 @@ describe("executerTourConversationnel — appel simulé (prémortem #1)", () => 
   })
 })
 
-describe('executerTourConversationnel — genererRenduFlux réel', () => {
+describe('executerTourConversationnel — genererRendu réel', () => {
   it("construit le prompt technique côté backend et exécute la génération", async () => {
     contexteFetchOk()
     const { depot } = depotMemoire(dossierBase)
     const appelerModele = vi.fn<AppelModele>(async () => ({
-      content: [{ type: 'tool_use', name: 'genererRenduFlux', input: {} }],
+      content: [{ type: 'tool_use', name: 'genererRendu', input: {} }],
     }))
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
@@ -148,7 +148,7 @@ describe('executerTourConversationnel — genererRenduFlux réel', () => {
 
     expect(resultat.type).toBe('operation')
     if (resultat.type === 'operation') {
-      expect(resultat.operation).toBe('genererRenduFlux')
+      expect(resultat.operation).toBe('genererRendu')
       expect(resultat.resultat.success).toBe(true)
     }
     // Le prompt envoyé à fal.ai vient de construirePromptGeneration, pas du modèle.
@@ -156,11 +156,11 @@ describe('executerTourConversationnel — genererRenduFlux réel', () => {
   })
 })
 
-describe('executerTourConversationnel — corrigerRenduFlux réel', () => {
+describe('executerTourConversationnel — corrigerRendu réel', () => {
   it('refuse proprement une correction aux paramètres incomplets, sans appeler fal.ai', async () => {
     const { depot, evenements } = depotMemoire({ ...dossierBase, etat: 'A_CORRIGER' })
     const appelerModele = vi.fn<AppelModele>(async () => ({
-      content: [{ type: 'tool_use', name: 'corrigerRenduFlux', input: { elementAModifier: 'Façade' } }],
+      content: [{ type: 'tool_use', name: 'corrigerRendu', input: { elementAModifier: 'Façade' } }],
     }))
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
@@ -181,7 +181,7 @@ describe('executerTourConversationnel — corrigerRenduFlux réel', () => {
       content: [
         {
           type: 'tool_use',
-          name: 'corrigerRenduFlux',
+          name: 'corrigerRendu',
           input: { elementAModifier: 'Teinte de la façade', resultatAttendu: 'Gris clair' },
         },
       ],

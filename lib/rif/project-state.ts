@@ -103,7 +103,7 @@ export interface ProjectState {
   /** Environnement à conserver, en plus des zones verrouillées. */
   environnement_a_conserver?: string[]
   /** Opérations autorisées dans l'état courant (préconditions backend). */
-  operations_autorisees?: Array<'genererRenduFlux' | 'corrigerRenduFlux' | 'reprendreDepuisSources'>
+  operations_autorisees?: Array<'genererRendu' | 'corrigerRendu' | 'reprendreDepuisSources'>
   lumiere?: ValeurTracee<string>
   locked: string[]
   interdictions?: string[]

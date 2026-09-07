@@ -9,7 +9,7 @@ import {
 } from '../../_lib/reponse'
 
 /**
- * POST /api/dossiers/[dossierId]/generer — genererRenduFlux (PRD §14.1).
+ * POST /api/dossiers/[dossierId]/generer — genererRendu (PRD §14.1).
  *
  * Réservée à une première génération. Refusée si le dossier n'est pas dans
  * l'état PRÊT_À_GÉNÉRER (revérifié côté backend par

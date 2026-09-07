@@ -51,7 +51,7 @@ const TRANSITIONS_AUTORISEES: Record<EtatDossier, EtatDossier[]> = {
   GENERATION_EN_COURS: ['CONTROLE_A_EXAMINER', 'ECHEC'],
   CONTROLE_A_EXAMINER: ['VALIDE', 'A_CORRIGER', 'A_REPRENDRE', 'SUSPENDU'],
   VALIDE: [],
-  A_CORRIGER: ['GENERATION_EN_COURS'], // inféré : via corrigerRenduFlux (§14.2)
+  A_CORRIGER: ['GENERATION_EN_COURS'], // inféré : via corrigerRendu (§14.2)
   A_REPRENDRE: ['SOURCES_CONTROLEES'], // inféré : via reprendreDepuisSources (§14.3)
   SUSPENDU: ['SOURCES_CONTROLEES', 'COLLECTE_EN_COURS'], // inféré : reprise après levée du blocage
   ECHEC: ['PRET_A_GENERER'], // inféré : nouvelle tentative traçable (§18.2)

@@ -33,12 +33,12 @@ export interface ParametresGenerationOuCorrection {
 }
 
 const OPERATION_PAR_TYPE: Record<'initial' | 'correction', OperationRif> = {
-  initial: 'genererRenduFlux',
-  correction: 'corrigerRenduFlux',
+  initial: 'genererRendu',
+  correction: 'corrigerRendu',
 }
 
 /**
- * Exécute `genererRenduFlux` ou `corrigerRenduFlux` — même déroulé
+ * Exécute `genererRendu` ou `corrigerRendu` — même déroulé
  * transactionnel pour les deux, seul le type et l'état de départ autorisé
  * diffèrent (D-09 : deux opérations distinctes, jamais confondues, mais
  * l'une n'est pas plus « privilégiée » que l'autre dans son exécution).

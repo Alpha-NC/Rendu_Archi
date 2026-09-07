@@ -88,7 +88,7 @@ Le schéma suit le PRD §10 et l'exemple `Exemples/PROJECT_STATE_EXEMPLE.json` :
 ## D-09 — Trois opérations distinctes, jamais confondues
 
 **Statut :** Accepted.
-`genererRenduFlux`, `corrigerRenduFlux` et `reprendreDepuisSources` (PRD §14) sont trois contrats d'API distincts avec des préconditions différentes. Aucune route ne doit permettre de déguiser une reprise en correction locale ou l'inverse.
+`genererRendu`, `corrigerRendu` et `reprendreDepuisSources` (PRD §14) sont trois contrats d'API distincts avec des préconditions différentes. Aucune route ne doit permettre de déguiser une reprise en correction locale ou l'inverse.
 
 ## Décisions encore ouvertes (issues du PRD §26, non couvertes ci-dessus)
 
