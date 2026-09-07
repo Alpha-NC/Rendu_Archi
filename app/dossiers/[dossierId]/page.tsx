@@ -3,6 +3,7 @@ import { creerClientServeur } from '@/lib/supabase/server'
 import { creerDepotSupabase } from '@/lib/rif/depot-supabase'
 import DepotSources from './DepotSources'
 import ConversationRif from './ConversationRif'
+import BoutonConfirmerFiche from './BoutonConfirmerFiche'
 
 export default async function PageDossier({ params }: { params: Promise<{ dossierId: string }> }) {
   const { dossierId } = await params
@@ -21,9 +22,12 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">
       <p className="font-mono text-xs uppercase tracking-widest text-encre-douce">{dossier.dossierRef}</p>
-      <h1 className="mt-1 font-sans text-xl font-semibold tracking-tight text-encre">
-        {dossier.etat.replace(/_/g, ' ')}
-      </h1>
+      <div className="mt-1 flex items-center justify-between">
+        <h1 className="font-sans text-xl font-semibold tracking-tight text-encre">
+          {dossier.etat.replace(/_/g, ' ')}
+        </h1>
+        {dossier.etat === 'FICHE_A_CONFIRMER' && <BoutonConfirmerFiche dossierId={dossier.id} />}
+      </div>
 
       <div className="mt-6 grid flex-1 grid-cols-1 gap-6 md:grid-cols-[240px_1fr]">
         <DepotSources dossierId={dossier.id} sources={dossier.projectState.sources} />
