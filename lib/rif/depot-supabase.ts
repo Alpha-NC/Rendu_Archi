@@ -54,6 +54,14 @@ export function creerDepotSupabase(
       }
     },
 
+    async mettreAJourProjectState(dossierId, projectState) {
+      const { error } = await client
+        .from('dossiers')
+        .update({ project_state: projectState, updated_at: new Date().toISOString() })
+        .eq('id', dossierId)
+      if (error) throw new Error(`Mise à jour du ProjectState impossible : ${error.message}`)
+    },
+
     async resolverUrlsSignees(fileIds) {
       if (fileIds.length === 0) return []
 

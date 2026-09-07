@@ -99,4 +99,32 @@ describe('autoriserOperation — revérification backend (PRD §11, §14)', () =
       true,
     )
   })
+
+  it('détecte aussi un appel simulé à mettreAJourFicheProjet (D-15)', () => {
+    const resultat = analyserReponseModele([
+      { type: 'text', text: 'mettreAJourFicheProjet({"materiaux": []})' },
+    ])
+    expect(resultat.genre).toBe('appel_simule_detecte')
+    if (resultat.genre === 'appel_simule_detecte') {
+      expect(resultat.operationEvoquee).toBe('mettreAJourFicheProjet')
+    }
+  })
+
+  it('autorise mettreAJourFicheProjet tant que la fiche est en collecte (D-15)', () => {
+    for (const etat of [
+      'BROUILLON',
+      'SOURCES_RECUES',
+      'SOURCES_CONTROLEES',
+      'COLLECTE_EN_COURS',
+      'FICHE_A_CONFIRMER',
+    ] as const) {
+      expect(autoriserOperation('mettreAJourFicheProjet', etat, etatConfirme).autorisee).toBe(true)
+    }
+  })
+
+  it('refuse mettreAJourFicheProjet une fois la révision engagée (D-15)', () => {
+    for (const etat of ['PRET_A_GENERER', 'GENERATION_EN_COURS', 'CONTROLE_A_EXAMINER', 'VALIDE'] as const) {
+      expect(autoriserOperation('mettreAJourFicheProjet', etat, etatConfirme).autorisee).toBe(false)
+    }
+  })
 })

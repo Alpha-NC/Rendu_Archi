@@ -90,6 +90,15 @@ Le schéma suit le PRD §10 et l'exemple `Exemples/PROJECT_STATE_EXEMPLE.json` :
 **Statut :** Accepted.
 `genererRendu`, `corrigerRendu` et `reprendreDepuisSources` (PRD §14) sont trois contrats d'API distincts avec des préconditions différentes. Aucune route ne doit permettre de déguiser une reprise en correction locale ou l'inverse.
 
+## D-15 — Extraction structurée du ProjectState via un quatrième outil
+
+**Statut :** Accepted — 07.09.2026.
+**Contexte :** le PRD ne spécifie aucun mécanisme pour faire passer les informations de la conversation dans le ProjectState structuré (§10). Sans mécanisme fiable, le risque est le même que celui déjà traité par la garde d'appel d'outil (D-06/appel-outil.ts) : une information donnée en conversation mais jamais réellement enregistrée, avec la même classe de conséquence que le prémortem #1.
+**Décision :** ajout d'un quatrième outil, `mettreAJourFicheProjet`, en plus des trois contrats du PRD §14 — soumis à la même garde anti-hallucination (`analyserReponseModele`/`OPERATIONS_RIF`, `lib/rif/appel-outil.ts`) que les trois opérations de génération. Le modèle propose une mise à jour minimale (valeur + statut `provisional`/`validated`) ; le backend (`lib/rif/extraction-project-state.ts`) complète seul les métadonnées de traçabilité exigées par le ProjectState (source_id, authority, editable, locked, validated_at) — le modèle décide QUOI, jamais COMMENT c'est tracé.
+**Règle de non-régression (choix d'implémentation, pas une règle citée du PRD) :** une valeur déjà `validated` n'est jamais dégradée par une mise à jour `provisional` ultérieure ; les mises à jour ignorées à ce titre ne sont jamais silencieuses, elles sont retournées et journalisées (`fiche_projet_mise_a_jour`).
+**Limite explicite :** cette opération ne touche jamais la `revision` du ProjectState — la révision n'avance qu'à la confirmation explicite de la fiche projet (PRD §9.4), dont le câblage (transition FICHE_À_CONFIRMER → PRÊT_À_GÉNÉRER avec incrément de révision) reste à faire.
+**Autorisation :** `mettreAJourFicheProjet` n'est licite que tant que la fiche n'est pas confirmée (`BROUILLON` à `FICHE_À_CONFIRMER`) — refusée à partir de `PRÊT_À_GÉNÉRER`.
+
 ## Décisions encore ouvertes (issues du PRD §26, non couvertes ci-dessus)
 
 - [ ] D-10 — limite maximale de variantes incluses par dossier ou par perspective.
@@ -107,3 +116,4 @@ En implémentant ENG-004 (`lib/rif/collecte-conditionnelle.ts`), ENG-004 lui-mê
 
 - 07.09.2026 — Création du registre, D-01 à D-09 formalisées, D-06 en cours d'arbitrage (voir `docs/decision-llm-multimodal.md`).
 - 07.09.2026 — D-06 tranchée (Claude Sonnet 5), D-14 ajoutée (clôture du plan V2), module de contrôle qualité et Route Handlers livrés, module de collecte conditionnelle (ENG-004) livré.
+- 07.09.2026 — Orchestrateur conversationnel livré ; renommage genererRenduFlux/corrigerRenduFlux → genererRendu/corrigerRendu ; D-15 ajoutée (extraction structurée du ProjectState via un quatrième outil).

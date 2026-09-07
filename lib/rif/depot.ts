@@ -45,6 +45,13 @@ export interface DepotDossiers {
   obtenirDossier(dossierId: string): Promise<DossierActuel | null>
 
   /**
+   * Persiste un ProjectState mis à jour (D-15, extraction-project-state.ts).
+   * N'incrémente jamais `revision` — la révision n'avance qu'à la
+   * confirmation explicite de la fiche projet (PRD §9.4), pas encore câblée.
+   */
+  mettreAJourProjectState(dossierId: string, projectState: ProjectState): Promise<void>
+
+  /**
    * Résout des IDs de fichiers internes en URLs signées temporaires
    * (PRD §12 : « Aucune URL publique permanente n'est utilisée »).
    */

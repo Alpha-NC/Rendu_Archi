@@ -15,6 +15,9 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async obtenirDossier(id) {
       return id === dossier.id ? dossier : null
     },
+    async mettreAJourProjectState(_id, projectState) {
+      dossier = { ...dossier, projectState }
+    },
     async resolverUrlsSignees(fileIds) {
       return fileIds.map((id) => `https://storage.test/${id}`)
     },
@@ -33,7 +36,7 @@ function depotMemoire(dossierInitial: DossierActuel) {
     },
   }
 
-  return { depot, evenements }
+  return { depot, evenements, obtenirDossierCourant: () => dossier }
 }
 
 const dossierBase: DossierActuel = {
@@ -217,5 +220,56 @@ describe('executerTourConversationnel — reprendreDepuisSources réel', () => {
     expect(resultat.type).toBe('operation')
     expect(falEspion).not.toHaveBeenCalled()
     expect(evenements.map((e) => e.type)).toContain('reprise_depuis_sources')
+  })
+})
+
+describe('executerTourConversationnel — mettreAJourFicheProjet (D-15)', () => {
+  it('persiste la mise à jour dans le ProjectState et journalise', async () => {
+    const { depot, evenements, obtenirDossierCourant } = depotMemoire({
+      ...dossierBase,
+      etat: 'COLLECTE_EN_COURS',
+    })
+    const appelerModele = vi.fn<AppelModele>(async () => ({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'mettreAJourFicheProjet',
+          input: {
+            materiaux: [{ element: 'facade_extension', valeur: 'enduit clair', statut: 'validated' }],
+          },
+        },
+      ],
+    }))
+
+    const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: { ...dossierBase, etat: 'COLLECTE_EN_COURS' },
+      historique: [],
+      nouveauMessage: 'La façade extension sera en enduit clair.',
+      actorId: 'user-1',
+    })
+
+    expect(resultat).toEqual({ type: 'fiche_mise_a_jour', champsModifies: ['materiaux'], ignores: [] })
+    expect(obtenirDossierCourant().projectState.materials.facade_extension).toMatchObject({
+      value: 'enduit clair',
+      status: 'validated',
+    })
+    expect(evenements.map((e) => e.type)).toContain('fiche_projet_mise_a_jour')
+  })
+
+  it('refuse une mise à jour de la fiche une fois la révision engagée (D-15)', async () => {
+    const { depot, evenements } = depotMemoire({ ...dossierBase, etat: 'GENERATION_EN_COURS' })
+    const appelerModele = vi.fn<AppelModele>(async () => ({
+      content: [{ type: 'tool_use', name: 'mettreAJourFicheProjet', input: { style: 'commercial' } }],
+    }))
+
+    const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: { ...dossierBase, etat: 'GENERATION_EN_COURS' },
+      historique: [],
+      nouveauMessage: 'Change le style en Commercial.',
+      actorId: 'user-1',
+    })
+
+    expect(resultat.type).toBe('incident')
+    expect(evenements[0].type).toBe('operation_refusee')
   })
 })

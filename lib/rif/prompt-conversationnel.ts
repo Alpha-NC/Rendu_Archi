@@ -36,6 +36,7 @@ const RAPPEL_APPEL_OUTIL = [
   "genererRendu ne prend aucun paramètre de contenu : le prompt technique est construit par le backend à partir de la fiche projet confirmée. N'essaie jamais de fournir toi-même un prompt d'image.",
   'corrigerRendu attend elementAModifier (ce qui doit changer) et resultatAttendu (le résultat visé) — jamais une description de ce qu\'il faut préserver, c\'est la règle par défaut.',
   "reprendreDepuisSources attend un motif — utilise-la uniquement si la géométrie ou la caméra a dérivé, si l'environnement verrouillé a été altéré, ou si plusieurs corrections ont accumulé des régressions. Ne la confonds jamais avec une correction locale.",
+  "mettreAJourFicheProjet enregistre une information dans la fiche projet — appelle-la à chaque donnée structurée obtenue, pas seulement à la toute fin. N'utilise 'validated' que si l'utilisateur a confirmé explicitement ; sinon 'provisional'.",
 ]
 
 function libellePrecisionTraitement(t: TraitementQuestion): string {
@@ -110,6 +111,61 @@ export const OUTILS_CONVERSATIONNELS = [
       type: 'object' as const,
       properties: { motif: { type: 'string', description: 'Pourquoi une reprise est nécessaire.' } },
       required: ['motif'],
+    },
+  },
+  {
+    name: 'mettreAJourFicheProjet',
+    description:
+      "Enregistre dans la fiche projet une information que l'utilisateur vient de donner ou de confirmer. À appeler dès qu'une donnée structurée est obtenue — ne garde jamais une information importante seulement dans le texte de la conversation. statut='validated' uniquement si l'utilisateur a explicitement confirmé ; 'provisional' pour une proposition ou une déduction non confirmée.",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        materiaux: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              element: { type: 'string', description: "Élément concerné, ex. 'facade_extension'." },
+              valeur: { type: 'string' },
+              statut: { type: 'string', enum: ['provisional', 'validated'] },
+            },
+            required: ['element', 'valeur', 'statut'],
+          },
+        },
+        geometrie: {
+          type: 'object',
+          properties: { valeur: { type: 'string' }, statut: { type: 'string', enum: ['provisional', 'validated'] } },
+          required: ['valeur', 'statut'],
+        },
+        implantation: {
+          type: 'object',
+          properties: { valeur: { type: 'string' }, statut: { type: 'string', enum: ['provisional', 'validated'] } },
+          required: ['valeur', 'statut'],
+        },
+        zoneIntervention: {
+          type: 'object',
+          properties: { valeur: { type: 'string' }, statut: { type: 'string', enum: ['provisional', 'validated'] } },
+          required: ['valeur', 'statut'],
+        },
+        lumiere: {
+          type: 'object',
+          properties: { valeur: { type: 'string' }, statut: { type: 'string', enum: ['provisional', 'validated'] } },
+          required: ['valeur', 'statut'],
+        },
+        environnementAConserver: { type: 'array', items: { type: 'string' } },
+        mode: {
+          type: 'string',
+          enum: ['retexturation_revit', 'photomontage_controle', 'presentation_generative'],
+        },
+        style: { type: 'string', enum: ['photomontage_administratif', 'presentation_client', 'commercial'] },
+        cameraCompatibility: {
+          type: 'string',
+          enum: ['Compatible', 'Approximative', 'Incompatible', 'Non evaluee'],
+        },
+        usage: { type: 'array', items: { type: 'string' } },
+        interdictions: { type: 'array', items: { type: 'string' } },
+      },
+      required: [],
     },
   },
 ] as const

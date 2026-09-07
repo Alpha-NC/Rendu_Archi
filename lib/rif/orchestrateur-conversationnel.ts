@@ -1,8 +1,9 @@
-import { analyserReponseModele, type BlocContenu } from './appel-outil'
+import { analyserReponseModele, autoriserOperation, type BlocContenu } from './appel-outil'
 import { determinerModeParDefaut, determinerStyleParDefaut } from './modes-styles'
 import { determinerParcoursCollecte } from './collecte-conditionnelle'
 import { construireSystemPrompt, OUTILS_CONVERSATIONNELS } from './prompt-conversationnel'
 import { construirePromptCorrection, construirePromptGeneration } from './prompt-technique'
+import { appliquerMiseAJourFicheProjet, type MiseAJourFicheProjet } from './extraction-project-state'
 import { executerGenerationOuCorrection, executerReprise, type ResultatOperation } from './orchestrateur'
 import type { DepotDossiers, DossierActuel } from './depot'
 import type { genererEtAttendre } from '../fal/client'
@@ -58,6 +59,7 @@ export type ResultatTour =
   | { type: 'message'; texte: string }
   | { type: 'operation'; operation: string; resultat: ResultatOperation }
   | { type: 'incident'; message: string }
+  | { type: 'fiche_mise_a_jour'; champsModifies: string[]; ignores: Array<{ champ: string; raison: string }> }
 
 /**
  * Calcule le contexte de branchement (mode/style résolus + plan de
@@ -194,9 +196,40 @@ export async function executerTourConversationnel(
     return { type: 'operation', operation: 'corrigerRendu', resultat }
   }
 
-  // reprendreDepuisSources
-  const entreeReprise = analyse.entree as { motif?: unknown } | undefined
-  const motif = typeof entreeReprise?.motif === 'string' ? entreeReprise.motif : 'Motif non précisé par le modèle.'
-  const resultat = await executerReprise(depot, { dossierId: dossier.id, actorId: contexte.actorId, motif })
-  return { type: 'operation', operation: 'reprendreDepuisSources', resultat }
+  if (analyse.operation === 'reprendreDepuisSources') {
+    const entreeReprise = analyse.entree as { motif?: unknown } | undefined
+    const motif = typeof entreeReprise?.motif === 'string' ? entreeReprise.motif : 'Motif non précisé par le modèle.'
+    const resultat = await executerReprise(depot, { dossierId: dossier.id, actorId: contexte.actorId, motif })
+    return { type: 'operation', operation: 'reprendreDepuisSources', resultat }
+  }
+
+  // mettreAJourFicheProjet (D-15) — la seule opération qui ne passe pas par
+  // orchestrateur.ts : elle ne touche ni fal.ai ni la machine à états
+  // GÉNÉRATION_EN_COURS, seulement le ProjectState lui-même.
+  const decisionExtraction = autoriserOperation('mettreAJourFicheProjet', dossier.etat, dossier.projectState)
+  if (!decisionExtraction.autorisee) {
+    await depot.journaliserEvenement(
+      dossier.id,
+      'operation_refusee',
+      { operation: 'mettreAJourFicheProjet', raison: decisionExtraction.raison },
+      contexte.actorId,
+    )
+    return {
+      type: 'incident',
+      message: decisionExtraction.raison ?? 'Mise à jour de la fiche projet non autorisée dans cet état.',
+    }
+  }
+
+  const miseAJour = (analyse.entree ?? {}) as MiseAJourFicheProjet
+  const { suivant, ignores } = appliquerMiseAJourFicheProjet(dossier.projectState, miseAJour, {
+    sourceId: `conversation:${dossier.id}`,
+  })
+  await depot.mettreAJourProjectState(dossier.id, suivant)
+  await depot.journaliserEvenement(
+    dossier.id,
+    'fiche_projet_mise_a_jour',
+    { champs: Object.keys(miseAJour), ignores },
+    contexte.actorId,
+  )
+  return { type: 'fiche_mise_a_jour', champsModifies: Object.keys(miseAJour), ignores }
 }

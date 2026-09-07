@@ -25,6 +25,12 @@ export const OPERATIONS_RIF = [
   'genererRendu',
   'corrigerRendu',
   'reprendreDepuisSources',
+  // Quatrième outil, absent du PRD §14 (qui n'en définit que trois) —
+  // ajouté pour résoudre l'extraction structurée du ProjectState,
+  // documenté en D-15 (DECISIONS.md). Soumis à la même garde : un texte
+  // qui prétend avoir mis à jour la fiche projet sans tool_use réel est
+  // tout aussi dangereux qu'un faux appel de génération.
+  'mettreAJourFicheProjet',
 ] as const
 
 export type OperationRif = (typeof OPERATIONS_RIF)[number]
@@ -150,10 +156,32 @@ export function autoriserOperation(
 
   // PRD §14.3 : reprise depuis les sources — opération distincte, jamais
   // présentée ni traitée comme une correction locale (D-09).
-  if (etatCourant !== 'A_REPRENDRE') {
+  if (operation === 'reprendreDepuisSources') {
+    if (etatCourant !== 'A_REPRENDRE') {
+      return {
+        autorisee: false,
+        raison: `Reprise depuis les sources impossible depuis l'état ${etatCourant}.`,
+      }
+    }
+    return { autorisee: true }
+  }
+
+  // D-15 : mettreAJourFicheProjet — autorisée tant que la fiche n'est pas
+  // encore confirmée. Une fois PRÊT_À_GÉNÉRER ou au-delà, le ProjectState
+  // est la révision immuable qui a servi ou va servir de base à une
+  // génération (PRD §10) ; le modifier silencieusement à ce stade romprait
+  // la traçabilité que la révision est censée garantir.
+  const ETATS_COLLECTE_OUVERTE: EtatDossier[] = [
+    'BROUILLON',
+    'SOURCES_RECUES',
+    'SOURCES_CONTROLEES',
+    'COLLECTE_EN_COURS',
+    'FICHE_A_CONFIRMER',
+  ]
+  if (!ETATS_COLLECTE_OUVERTE.includes(etatCourant)) {
     return {
       autorisee: false,
-      raison: `Reprise depuis les sources impossible depuis l'état ${etatCourant}.`,
+      raison: `Mise à jour de la fiche projet impossible depuis l'état ${etatCourant} — la révision est déjà engagée ou confirmée.`,
     }
   }
   return { autorisee: true }

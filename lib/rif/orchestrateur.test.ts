@@ -14,6 +14,9 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async obtenirDossier(id) {
       return id === dossier.id ? { ...dossier, projectState: { ...dossier.projectState } } : null
     },
+    async mettreAJourProjectState(_id, projectState) {
+      dossier = { ...dossier, projectState }
+    },
     async resolverUrlsSignees(fileIds) {
       return fileIds.map((id) => `https://storage.test/${id}?signed=1`)
     },
