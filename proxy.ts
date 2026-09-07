@@ -39,8 +39,20 @@ export async function proxy(requete: NextRequest) {
 
   const cheminPublic =
     requete.nextUrl.pathname.startsWith('/connexion') ||
-    requete.nextUrl.pathname.startsWith('/_next') ||
-    requete.nextUrl.pathname.startsWith('/api/auth')
+    requete.nextUrl.pathname.startsWith('/_next')
+
+  // Les routes API (ex. /api/dossiers/.../generer) ne redirigent jamais :
+  // un client programmatique doit recevoir un 401 JSON exploitable, pas une
+  // redirection vers une page HTML de connexion. Chaque Route Handler fait
+  // sa propre vérification via authentifierRequete() (PRD §17).
+  const cheminApi = requete.nextUrl.pathname.startsWith('/api/')
+
+  if (!user && cheminApi) {
+    return NextResponse.json(
+      { success: false, error: { code: 'non_authentifie', message: 'Authentification requise.' } },
+      { status: 401 },
+    )
+  }
 
   if (!user && !cheminPublic) {
     const urlConnexion = requete.nextUrl.clone()

@@ -39,18 +39,25 @@ npm run test:watch
 
 - `lib/rif/project-state.ts` — types TypeScript du ProjectState.
 - `lib/rif/etat-machine.ts` (+ `.test.ts`) — machine à états déterministe et préconditions de transition (PRD §8, §22).
+- `lib/rif/appel-outil.ts` (+ `.test.ts`) — garde d'appel d'outil : aucune opération ne part d'un texte parsé, seul un `tool_use` réel déclenche une action ; revérifie l'état du dossier côté backend.
+- `lib/fal/client.ts` (+ `.test.ts`) — client fal.ai (soumission + polling jusqu'à un état terminal, jamais un `IN_QUEUE` présenté comme un succès).
+- `lib/rif/controle-qualite.ts` (+ `.test.ts`) — grille LIB-002, verdict proposé (jamais autoritaire) et garde-fou d'export administratif (PRD §15.3).
+- `lib/rif/depot.ts` — interface d'accès aux données (dossiers/generations/files/events), indépendante de Supabase pour rester testable.
+- `lib/rif/orchestrateur.ts` (+ `.test.ts`) — exécute les trois opérations techniques (PRD §14) : journalisation transactionnelle (§18.1), appel fal.ai, rapatriement du rendu dans le stockage privé (§12), transition d'état. Logique pure, testée avec un dépôt en mémoire.
+- `lib/rif/depot-supabase.ts` — implémentation Supabase de `DepotDossiers` (non testée contre un vrai projet, aucun n'existe encore).
+- `app/api/dossiers/[dossierId]/{generer,corriger,reprendre}/route.ts` — Route Handlers HTTP, fins adaptateurs autour de l'orchestrateur : authentification, vérification de propriété (défense en profondeur au-delà de la RLS), validation du corps, appel de la logique métier.
 - `lib/supabase/{client,server}.ts` — clients Supabase (navigateur, serveur avec RLS, serveur `service_role`).
-- `app/connexion/page.tsx` — authentification individuelle (email + mot de passe Supabase Auth).
-- `proxy.ts` — rafraîchissement de session + garde d'accès sur toutes les routes hors `/connexion`.
+- `app/connexion/page.tsx` (+ `lib/securite/redirection-sure.ts`) — authentification individuelle (email + mot de passe Supabase Auth), redirection post-connexion validée contre l'open redirect.
+- `proxy.ts` — rafraîchissement de session + garde d'accès. Les routes `/api/*` reçoivent un 401 JSON si non authentifiées, jamais une redirection HTML — seules les pages redirigent vers `/connexion`.
 - `supabase/schema-rif-app.sql` — schéma complet (`dossiers`, `files`, `generations`, `quality_audits`, `events`, `profiles`) avec policies RLS, non encore exécuté sur un vrai projet Supabase.
 
 ## Ce qui reste à construire
 
-- Créer le projet Supabase réel et exécuter `supabase/schema-rif-app.sql` + créer le bucket de stockage privé (voir commentaire en fin de fichier SQL).
-- Trancher D-06 (LLM multimodal) et brancher l'orchestrateur conversationnel.
-- Étapes 1 à 5 du parcours (PRD §9) : dépôt des sources, contrôle initial, collecte progressive (ENG-004), fiche projet, génération.
-- Contrats `genererRenduFlux` / `corrigerRenduFlux` / `reprendreDepuisSources` (PRD §14).
-- Contrôle qualité et validation humaine distincts de la génération (PRD §15).
+- Créer le projet Supabase réel et exécuter `supabase/schema-rif-app.sql` + créer le bucket de stockage privé (voir commentaire en fin de fichier SQL) + définir `SUPABASE_STORAGE_BUCKET` si différent du nom par défaut (`rif-app-sources`).
+- Brancher l'orchestrateur conversationnel (dialogue + appel LLM Claude Sonnet 5 avec les outils `genererRenduFlux`/`corrigerRenduFlux`/`reprendreDepuisSources`, dont les réponses passent par `lib/rif/appel-outil.ts::analyserReponseModele` avant tout déclenchement).
+- Étapes 1 à 4 du parcours (PRD §9) : dépôt des sources, contrôle initial, collecte progressive (ENG-004), fiche projet — la construction du `promptText` et de `sourceFileIds` attendus par les Route Handlers vient de là, pas encore écrite.
+- Écran de contrôle qualité (interface humaine au-dessus de `lib/rif/controle-qualite.ts`) — le module calcule un verdict proposé, il manque l'UI où Évariste enregistre le verdict humain.
+- Les trois Route Handlers appellent `depot-supabase.ts`, jamais testé contre un vrai projet — à valider en Phase 0B dès qu'un projet Supabase existe.
 - Voir `rif-framework/Implementations/RIF-App/DECISIONS.md` pour les décisions encore ouvertes (D-10 à D-13) et `docs/prd-generateur-rendu-v2.md` §23 pour le plan de déploiement (Phase 0B à venir).
 
 ## Env vars
