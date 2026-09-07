@@ -26,6 +26,9 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async enregistrerFichierSource() {
       return { id: 'file-source-1', storageKey: 'test/source-1' }
     },
+    async enregistrerAuditQualite() {
+      return { id: 'audit-1' }
+    },
     async resolverUrlsSignees(fileIds) {
       return fileIds.map((id) => `https://storage.test/${id}?signed=1`)
     },
@@ -117,6 +120,7 @@ describe('executerGenerationOuCorrection', () => {
 
     expect(resultat.success).toBe(true)
     expect(resultat.generationId).toBe('gen-1')
+    expect(resultat.imageUrl).toBe('https://storage.test/file-resultat-1?signed=1')
     expect(obtenirEtatCourant()).toBe('CONTROLE_A_EXAMINER')
     expect(generations.get('gen-1')?.patch).toMatchObject({
       status: 'succeeded',

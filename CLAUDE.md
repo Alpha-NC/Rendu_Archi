@@ -62,11 +62,14 @@ npm run test:watch
 - `app/dossiers/page.tsx` + `BoutonNouveauDossier.tsx` — liste des dossiers, création.
 - `app/dossiers/[dossierId]/page.tsx` + `DepotSources.tsx` + `ConversationRif.tsx` — page de dossier : dépôt de sources (3 slots repris du prototype de référence archivé) et chat. `ConversationRif` ne renvoie au serveur que du texte à chaque tour (jamais les blocs `tool_use`/`tool_result` bruts) — le ProjectState, recalculé et injecté dans le prompt système à chaque tour, porte la mémoire structurée réelle.
 - `app/page.tsx` redirige vers `/dossiers`.
+- `app/api/dossiers/[dossierId]/generations/[generationId]/audit/route.ts` + `VerdictQualite.tsx` — enregistre le verdict HUMAIN (PRD §15.1) après une génération/correction et transitionne le dossier (`VALIDE`/`A_CORRIGER`/`A_REPRENDRE`/`SUSPENDU`). C'est le seul champ que lit `autoriserExportAdministratif` — jamais un verdict calculé.
+- `executerGenerationOuCorrection` (`lib/rif/orchestrateur.ts`) renvoie maintenant `imageUrl` (URL signée du rendu) sur succès — nécessaire pour l'afficher avant de voter.
 
 ## Ce qui reste à construire
 
 - Créer le projet Supabase réel et exécuter `supabase/schema-rif-app.sql` + créer le bucket de stockage privé (voir commentaire en fin de fichier SQL) + définir `SUPABASE_STORAGE_BUCKET` si différent du nom par défaut (`rif-app-sources`).
-- Aucune fiche projet visuelle ni écran de contrôle qualité — seuls le dépôt de sources et le chat existent côté interface.
+- Aucune fiche projet visuelle — seuls le dépôt de sources, le chat et le verdict qualité (inline, sans grille détaillée LIB-002) existent côté interface.
+- Le rapport détaillé par critère (grille LIB-002 des 15 critères) n'est pas rempli — `POST .../generations/[id]/audit` n'enregistre que le verdict global humain, pas de `report` ligne par ligne. `lib/rif/controle-qualite.ts::calculerVerdictPropose` reste inutilisé côté serveur (aucun appel multimodal ne remplit encore un rapport).
 - Détection automatique du rôle d'un fichier déposé (PRD §9.1) — pour l'instant, l'utilisateur choisit lui-même le slot.
 - Persistance de l'historique de conversation (PRD §13.5) — la route `/message` est aujourd'hui sans état côté serveur, le client renvoie l'historique à chaque appel.
 - Boucle multi-tour complète : `orchestrateur-conversationnel.ts` exécute un tour et une opération, mais ne renvoie pas encore automatiquement le `tool_result` au modèle pour obtenir un message de clôture en langage naturel.

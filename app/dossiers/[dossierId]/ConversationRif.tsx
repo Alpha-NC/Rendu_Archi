@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import VerdictQualite from './VerdictQualite'
 
 /**
  * Historique tel que renvoyé au serveur à chaque tour. Simplification
@@ -19,6 +20,9 @@ interface TourHistorique {
 interface MessageAffiche {
   auteur: 'utilisateur' | 'assistant' | 'systeme'
   texte: string
+  /** Présent seulement quand une génération/correction vient de réussir (PRD §9.6). */
+  generationId?: string
+  imageUrl?: string
 }
 
 export default function ConversationRif({ dossierId }: { dossierId: string }) {
@@ -30,19 +34,35 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
   const [enCours, setEnCours] = useState(false)
   const zoneMessages = useRef<HTMLDivElement>(null)
 
-  function resumerTour(tour: unknown): string {
-    if (!tour || typeof tour !== 'object') return 'Réponse inattendue.'
-    const t = tour as { type: string; texte?: string; message?: string; operation?: string; resultat?: { success: boolean; error?: { message: string } }; champsModifies?: string[] }
-    if (t.type === 'message') return t.texte ?? ''
-    if (t.type === 'incident') return `⚠️ ${t.message}`
+  function resumerTour(tour: unknown): Pick<MessageAffiche, 'texte' | 'generationId' | 'imageUrl'> {
+    if (!tour || typeof tour !== 'object') return { texte: 'Réponse inattendue.' }
+    const t = tour as {
+      type: string
+      texte?: string
+      message?: string
+      operation?: string
+      resultat?: { success: boolean; generationId?: string; imageUrl?: string; error?: { message: string } }
+      champsModifies?: string[]
+    }
+    if (t.type === 'message') return { texte: t.texte ?? '' }
+    if (t.type === 'incident') return { texte: `⚠️ ${t.message}` }
     if (t.type === 'operation') {
-      if (t.resultat?.success) return `✅ ${t.operation} exécutée.`
-      return `❌ ${t.operation} a échoué : ${t.resultat?.error?.message ?? 'raison inconnue'}.`
+      if (t.resultat?.success) {
+        // PRD §9.6 : après une génération/correction, le rendu doit entrer
+        // en contrôle qualité — jamais déclaré conforme automatiquement.
+        const enControle = t.operation === 'genererRendu' || t.operation === 'corrigerRendu'
+        return {
+          texte: `✅ ${t.operation} exécutée.${enControle ? ' Contrôle qualité requis ci-dessous.' : ''}`,
+          generationId: enControle ? t.resultat.generationId : undefined,
+          imageUrl: enControle ? t.resultat.imageUrl : undefined,
+        }
+      }
+      return { texte: `❌ ${t.operation} a échoué : ${t.resultat?.error?.message ?? 'raison inconnue'}.` }
     }
     if (t.type === 'fiche_mise_a_jour') {
-      return `📋 Fiche projet mise à jour (${(t.champsModifies ?? []).join(', ') || 'aucun champ'}).`
+      return { texte: `📋 Fiche projet mise à jour (${(t.champsModifies ?? []).join(', ') || 'aucun champ'}).` }
     }
-    return 'Réponse inattendue.'
+    return { texte: 'Réponse inattendue.' }
   }
 
   async function envoyer() {
@@ -70,11 +90,11 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
       }
 
       const resume = resumerTour(corps.tour)
-      setMessages((prev) => [...prev, { auteur: 'assistant', texte: resume }])
+      setMessages((prev) => [...prev, { auteur: 'assistant', ...resume }])
       setHistorique((prev) => [
         ...prev,
         { role: 'user', content: texte },
-        { role: 'assistant', content: resume },
+        { role: 'assistant', content: resume.texte },
       ])
     } catch {
       setMessages((prev) => [...prev, { auteur: 'systeme', texte: '⚠️ Connexion impossible.' }])
@@ -101,6 +121,9 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
             }
           >
             {m.texte}
+            {m.generationId && (
+              <VerdictQualite dossierId={dossierId} generationId={m.generationId} imageUrl={m.imageUrl} />
+            )}
           </div>
         ))}
         {enCours && <p className="text-xs italic text-encre-douce">Le RIF réfléchit…</p>}

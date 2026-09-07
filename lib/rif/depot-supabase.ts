@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
   DepotDossiers,
   DossierActuel,
+  ParametresAuditQualite,
   ParametresFichierResultat,
   ParametresFichierSource,
   ParametresNouveauDossier,
@@ -222,6 +223,24 @@ export function creerDepotSupabase(
 
       if (error || !data) throw new Error(`Enregistrement de la source impossible : ${error?.message}`)
       return { id: data.id, storageKey }
+    },
+
+    async enregistrerAuditQualite(params: ParametresAuditQualite) {
+      const { data, error } = await client
+        .from('quality_audits')
+        .insert({
+          generation_id: params.generationId,
+          checklist_version: params.checklistVersion,
+          verdict_human: params.verdictHuman,
+          reserves: params.reserves,
+          validated_by: params.validatedBy,
+          validated_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+
+      if (error || !data) throw new Error(`Enregistrement de l'audit qualité impossible : ${error?.message}`)
+      return { id: data.id }
     },
 
     async transitionnerDossier(dossierId, versEtat) {

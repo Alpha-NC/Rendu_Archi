@@ -23,6 +23,9 @@
  *    verdict proposé.
  */
 
+/** Version de la checklist appliquée (PRD §13.4 : `checklist_version`). */
+export const LIB_002_VERSION = 'LIB-002 V1.4'
+
 /** Grille commune LIB-002 §3 — 15 critères, aucun ajout non documenté. */
 export const CRITERES_CONTROLE = [
   'cadrage',

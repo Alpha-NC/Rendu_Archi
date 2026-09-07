@@ -1,5 +1,6 @@
 import type { ProjectState, RoleSource } from './project-state'
 import type { EtatDossier } from './etat-machine'
+import type { VerdictControle } from './controle-qualite'
 
 /**
  * Interface d'accès aux données du dossier — sépare la logique métier
@@ -57,6 +58,14 @@ export interface ParametresFichierSource {
   mimeType: string
 }
 
+export interface ParametresAuditQualite {
+  generationId: string
+  checklistVersion: string
+  verdictHuman: VerdictControle
+  reserves?: string
+  validatedBy: string
+}
+
 export interface DepotDossiers {
   creerDossier(params: ParametresNouveauDossier): Promise<{ id: string; dossierRef: string }>
 
@@ -101,6 +110,14 @@ export interface DepotDossiers {
    * fois le rôle confirmé.
    */
   enregistrerFichierSource(params: ParametresFichierSource): Promise<{ id: string; storageKey: string }>
+
+  /**
+   * Persiste le verdict humain (PRD §15.1, §15.3) — la seule écriture qui
+   * compte pour le garde-fou d'export (lib/rif/controle-qualite.ts). Le
+   * verdict proposé, s'il existe, n'est qu'indicatif : voir
+   * autoriserExportAdministratif, qui ne lit jamais ce champ.
+   */
+  enregistrerAuditQualite(params: ParametresAuditQualite): Promise<{ id: string }>
 
   transitionnerDossier(dossierId: string, versEtat: EtatDossier): Promise<void>
 

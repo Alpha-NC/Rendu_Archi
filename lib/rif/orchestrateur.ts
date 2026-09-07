@@ -151,7 +151,10 @@ export async function executerGenerationOuCorrection(
     parametres.actorId,
   )
 
-  return { success: true, generationId }
+  // URL signée pour que l'appelant (interface de contrôle qualité) puisse
+  // afficher le rendu — sans ça, impossible de juger quoi que ce soit.
+  const [imageUrl] = await depot.resolverUrlsSignees([fichierResultat.id])
+  return { success: true, generationId, imageUrl }
 }
 
 export interface ParametresReprise {
