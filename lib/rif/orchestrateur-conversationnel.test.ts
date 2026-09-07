@@ -12,11 +12,20 @@ function depotMemoire(dossierInitial: DossierActuel) {
   let dossier = { ...dossierInitial }
 
   const depot: DepotDossiers = {
+    async creerDossier() {
+      throw new Error('Non utilisé dans ces tests.')
+    },
+    async listerDossiers() {
+      return [{ id: dossier.id, dossierRef: 'RIF-TEST', etat: dossier.etat }]
+    },
     async obtenirDossier(id) {
       return id === dossier.id ? dossier : null
     },
     async mettreAJourProjectState(_id, projectState) {
       dossier = { ...dossier, projectState }
+    },
+    async enregistrerFichierSource() {
+      return { id: 'file-source-1', storageKey: 'test/source-1' }
     },
     async resolverUrlsSignees(fileIds) {
       return fileIds.map((id) => `https://storage.test/${id}`)
@@ -41,6 +50,7 @@ function depotMemoire(dossierInitial: DossierActuel) {
 
 const dossierBase: DossierActuel = {
   id: 'd-1',
+  dossierRef: 'RIF-TEST',
   ownerId: 'user-1',
   etat: 'PRET_A_GENERER',
   projectState: {

@@ -58,11 +58,16 @@ npm run test:watch
 - `app/connexion/page.tsx` (+ `lib/securite/redirection-sure.ts`) — authentification individuelle (email + mot de passe Supabase Auth), redirection post-connexion validée contre l'open redirect.
 - `proxy.ts` — rafraîchissement de session + garde d'accès. Les routes `/api/*` reçoivent un 401 JSON si non authentifiées, jamais une redirection HTML — seules les pages redirigent vers `/connexion`.
 - `supabase/schema-rif-app.sql` — schéma complet (`dossiers`, `files`, `generations`, `quality_audits`, `events`, `profiles`) avec policies RLS, non encore exécuté sur un vrai projet Supabase.
+- `app/api/dossiers/route.ts` (GET liste, POST création) et `app/api/dossiers/[dossierId]/sources/route.ts` (dépôt d'une source, PRD §9.1) — le rôle est choisi explicitement par l'utilisateur au dépôt (slot dans l'UI), pas détecté automatiquement depuis le contenu du fichier.
+- `app/dossiers/page.tsx` + `BoutonNouveauDossier.tsx` — liste des dossiers, création.
+- `app/dossiers/[dossierId]/page.tsx` + `DepotSources.tsx` + `ConversationRif.tsx` — page de dossier : dépôt de sources (3 slots repris du prototype de référence archivé) et chat. `ConversationRif` ne renvoie au serveur que du texte à chaque tour (jamais les blocs `tool_use`/`tool_result` bruts) — le ProjectState, recalculé et injecté dans le prompt système à chaque tour, porte la mémoire structurée réelle.
+- `app/page.tsx` redirige vers `/dossiers`.
 
 ## Ce qui reste à construire
 
 - Créer le projet Supabase réel et exécuter `supabase/schema-rif-app.sql` + créer le bucket de stockage privé (voir commentaire en fin de fichier SQL) + définir `SUPABASE_STORAGE_BUCKET` si différent du nom par défaut (`rif-app-sources`).
-- Aucune interface (`app/dossiers/...`) : le chat, le dépôt de sources, la fiche projet et l'écran de contrôle qualité restent à écrire au-dessus des Route Handlers déjà en place.
+- Aucune fiche projet visuelle ni écran de contrôle qualité — seuls le dépôt de sources et le chat existent côté interface.
+- Détection automatique du rôle d'un fichier déposé (PRD §9.1) — pour l'instant, l'utilisateur choisit lui-même le slot.
 - Persistance de l'historique de conversation (PRD §13.5) — la route `/message` est aujourd'hui sans état côté serveur, le client renvoie l'historique à chaque appel.
 - Boucle multi-tour complète : `orchestrateur-conversationnel.ts` exécute un tour et une opération, mais ne renvoie pas encore automatiquement le `tool_result` au modèle pour obtenir un message de clôture en langage naturel.
 - La confirmation explicite de la fiche projet (PRD §9.4) et l'incrément de `revision` qui l'accompagne ne sont pas câblés — `mettreAJourFicheProjet` (D-15) alimente le ProjectState brouillon mais rien ne fait encore avancer `FICHE_À_CONFIRMER → PRÊT_À_GÉNÉRER`.

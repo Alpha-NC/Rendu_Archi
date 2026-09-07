@@ -41,11 +41,21 @@ export interface ValeurTracee<T> {
   confidence?: number
 }
 
+/**
+ * PRD §9.1 : « Les rôles pris en charge sont au minimum : revit_view,
+ * site_photo, axonometry, annotated_source, material_reference,
+ * existing_building_photo, render et annotated_render. » Liste complète —
+ * ne pas réduire à un sous-ensemble arbitraire.
+ */
 export type RoleSource =
   | 'revit_view'
   | 'site_photo'
+  | 'axonometry'
+  | 'annotated_source'
   | 'material_reference'
-  | 'autre'
+  | 'existing_building_photo'
+  | 'render'
+  | 'annotated_render'
 
 export interface SourceDossier {
   id: string

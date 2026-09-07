@@ -3,9 +3,12 @@ import type {
   DepotDossiers,
   DossierActuel,
   ParametresFichierResultat,
+  ParametresFichierSource,
+  ParametresNouveauDossier,
   ParametresNouvelleGeneration,
   PatchGeneration,
 } from './depot'
+import { creerProjectStateVide } from './project-state'
 import type { EtatDossier } from './etat-machine'
 
 /**
@@ -31,10 +34,55 @@ export function creerDepotSupabase(
   bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'rif-app-sources',
 ): DepotDossiers {
   return {
+    async creerDossier(params: ParametresNouveauDossier) {
+      const dossierRef = `RIF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random()
+        .toString(36)
+        .slice(2, 6)
+        .toUpperCase()}`
+
+      const { data, error } = await client
+        .from('dossiers')
+        .insert({
+          owner_id: params.ownerId,
+          dossier_ref: dossierRef,
+          workflow_state: 'BROUILLON',
+          // project_id posé après coup, une fois l'id réel du dossier connu
+          // (voir mise à jour ci-dessous) — creerProjectStateVide a besoin
+          // d'un identifiant que l'insertion seule peut fournir.
+          project_state: creerProjectStateVide('temp'),
+          project_state_revision: 0,
+          framework_version: params.frameworkVersion,
+          implementation_version: params.implementationVersion,
+        })
+        .select('id')
+        .single()
+
+      if (error || !data) throw new Error(`Création du dossier impossible : ${error?.message}`)
+
+      const { error: erreurMaj } = await client
+        .from('dossiers')
+        .update({ project_state: creerProjectStateVide(data.id) })
+        .eq('id', data.id)
+      if (erreurMaj) throw new Error(`Initialisation du ProjectState impossible : ${erreurMaj.message}`)
+
+      return { id: data.id, dossierRef }
+    },
+
+    async listerDossiers(ownerId) {
+      const { data, error } = await client
+        .from('dossiers')
+        .select('id, dossier_ref, workflow_state')
+        .eq('owner_id', ownerId)
+        .order('created_at', { ascending: false })
+
+      if (error || !data) return []
+      return data.map((d) => ({ id: d.id, dossierRef: d.dossier_ref, etat: d.workflow_state as EtatDossier }))
+    },
+
     async obtenirDossier(dossierId): Promise<DossierActuel | null> {
       const { data, error } = await client
         .from('dossiers')
-        .select('id, owner_id, workflow_state, project_state')
+        .select('id, dossier_ref, owner_id, workflow_state, project_state')
         .eq('id', dossierId)
         .maybeSingle()
 
@@ -43,6 +91,7 @@ export function creerDepotSupabase(
       const projectState = data.project_state as DossierActuel['projectState']
       return {
         id: data.id,
+        dossierRef: data.dossier_ref,
         ownerId: data.owner_id,
         etat: data.workflow_state as EtatDossier,
         projectState,
@@ -143,6 +192,36 @@ export function creerDepotSupabase(
 
       if (error || !data) throw new Error(`Enregistrement du fichier résultat impossible : ${error?.message}`)
       return { id: data.id }
+    },
+
+    async enregistrerFichierSource(params: ParametresFichierSource) {
+      const extension = params.originalName.split('.').pop() ?? 'bin'
+      // Nom technique nettoyé côté serveur (PRD §9.1) — l'utilisateur ne
+      // renomme jamais rien lui-même.
+      const safeName = `${params.roleDetecte}-${Date.now()}.${extension}`
+      const storageKey = `${params.ownerId}/${params.dossierId}/sources/${safeName}`
+
+      const { error: erreurUpload } = await client.storage
+        .from(bucket)
+        .upload(storageKey, params.contenu, { contentType: params.mimeType, upsert: false })
+      if (erreurUpload) throw new Error(`Envoi de la source vers le stockage privé impossible : ${erreurUpload.message}`)
+
+      const { data, error } = await client
+        .from('files')
+        .insert({
+          dossier_id: params.dossierId,
+          role_detected: params.roleDetecte,
+          original_name: params.originalName,
+          safe_name: safeName,
+          storage_key: storageKey,
+          mime_type: params.mimeType,
+          size_bytes: params.contenu.byteLength,
+        })
+        .select('id')
+        .single()
+
+      if (error || !data) throw new Error(`Enregistrement de la source impossible : ${error?.message}`)
+      return { id: data.id, storageKey }
     },
 
     async transitionnerDossier(dossierId, versEtat) {

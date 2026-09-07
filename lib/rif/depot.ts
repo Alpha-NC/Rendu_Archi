@@ -1,4 +1,4 @@
-import type { ProjectState } from './project-state'
+import type { ProjectState, RoleSource } from './project-state'
 import type { EtatDossier } from './etat-machine'
 
 /**
@@ -11,6 +11,7 @@ import type { EtatDossier } from './etat-machine'
 
 export interface DossierActuel {
   id: string
+  dossierRef: string
   ownerId: string
   etat: EtatDossier
   projectState: ProjectState
@@ -41,8 +42,28 @@ export interface ParametresFichierResultat {
   mimeType: string
 }
 
+export interface ParametresNouveauDossier {
+  ownerId: string
+  frameworkVersion: string
+  implementationVersion: string
+}
+
+export interface ParametresFichierSource {
+  dossierId: string
+  ownerId: string
+  roleDetecte: RoleSource
+  originalName: string
+  contenu: ArrayBuffer
+  mimeType: string
+}
+
 export interface DepotDossiers {
+  creerDossier(params: ParametresNouveauDossier): Promise<{ id: string; dossierRef: string }>
+
   obtenirDossier(dossierId: string): Promise<DossierActuel | null>
+
+  /** Dossiers dont l'utilisateur est propriétaire, les plus récents d'abord. */
+  listerDossiers(ownerId: string): Promise<Array<{ id: string; dossierRef: string; etat: EtatDossier }>>
 
   /**
    * Persiste un ProjectState mis à jour (D-15, extraction-project-state.ts).
@@ -71,6 +92,15 @@ export interface DepotDossiers {
    * fournisseur transitoire).
    */
   enregistrerFichierResultat(params: ParametresFichierResultat): Promise<{ id: string }>
+
+  /**
+   * Enregistre une source déposée par l'utilisateur (PRD §9.1) — étape 1,
+   * distincte de enregistrerFichierResultat (étape 5). N'inscrit pas encore
+   * la source dans le ProjectState : c'est l'appelant qui décide de
+   * l'ajouter à `sources` (souvent via mettreAJourFicheProjet, D-15) une
+   * fois le rôle confirmé.
+   */
+  enregistrerFichierSource(params: ParametresFichierSource): Promise<{ id: string; storageKey: string }>
 
   transitionnerDossier(dossierId: string, versEtat: EtatDossier): Promise<void>
 
