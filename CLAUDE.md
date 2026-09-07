@@ -20,7 +20,8 @@ Stack : Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · Supabase (Pos
 - **Le LLM ne pilote jamais directement une transition d'état ni un appel au moteur d'image.** Il propose ; seul le backend (`lib/rif/etat-machine.ts`) vérifie les préconditions et applique. Ne jamais dupliquer ces vérifications côté client ou les considérer suffisantes côté prompt seul.
 - **ProjectState** (`lib/rif/project-state.ts`) est la source de vérité opérationnelle, distincte de la conversation. Une révision confirmée est immuable ; toute modification crée une nouvelle révision. Une génération est impossible sans révision confirmée (critère d'acceptation §22 du PRD, testé dans `lib/rif/etat-machine.test.ts`).
 - **Aucune clé d'API dans ce dépôt** — Supabase (`service_role`), Anthropic/LLM et fal.ai restent des secrets serveur uniquement (`SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `FAL_KEY` — jamais préfixés `NEXT_PUBLIC_`).
-- **Choix du LLM multimodal non encore tranché** — voir `docs/decision-llm-multimodal.md` (recommandation provisoire : Claude Sonnet 5/Opus 5). Ne pas câbler l'orchestrateur LLM en dur sur un fournisseur avant confirmation.
+- **LLM multimodal : Claude Sonnet 5** (`claude-sonnet-5`) pour le dialogue, l'extraction du ProjectState et l'analyse des sources — décision D-06, voir `docs/decision-llm-multimodal.md`. Chaque génération doit enregistrer la version exacte du modèle utilisé (PRD §21).
+- **Un appel d'outil n'existe que sous forme de `tool_use` réel.** Le prémortem du 02.09.2026 identifie comme échec le plus probable un modèle qui *décrit en texte* l'appel qu'il voudrait faire (bloc de code JSON) sans jamais l'émettre — l'utilisateur croit alors une génération lancée qui ne l'est pas. Ne jamais déclencher une action à partir de texte parsé : voir `lib/rif/appel-outil.ts`.
 - Le Framework (`rif-framework/Framework/`) n'est **jamais modifié depuis le code applicatif** — c'est un non-objectif explicite du PRD (§25).
 
 ## Commands

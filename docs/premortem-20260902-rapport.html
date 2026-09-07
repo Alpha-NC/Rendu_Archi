@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Premortem — App conversationnelle RIF</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0a0e1a;
+    color: #E4E9F0;
+    font-family: 'Inter', sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  header { margin-bottom: 40px; }
+  .eyebrow { font-size: 12px; color: #6B7A99; font-family: 'IBM Plex Mono', monospace; margin-bottom: 10px; }
+  h1 { font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 30px; margin: 0 0 8px; color: #fff; }
+  .subtitle { color: #9AA7C2; font-size: 15px; max-width: 640px; }
+
+  .frame-box {
+    background: linear-gradient(135deg, rgba(214,90,58,0.12), rgba(124,92,196,0.10));
+    border: 1px solid rgba(214,90,58,0.35);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin: 28px 0 44px;
+    font-size: 14px;
+    color: #E4E9F0;
+  }
+  .frame-box strong { color: #F0A98A; }
+
+  .synthesis {
+    background: #10162A;
+    border: 1px solid #232C45;
+    border-radius: 14px;
+    padding: 32px;
+    margin-bottom: 48px;
+  }
+  .synthesis h2 {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 20px;
+    margin: 0 0 24px;
+    color: #fff;
+  }
+  .synth-item { margin-bottom: 22px; padding-left: 16px; border-left: 3px solid #2C3657; }
+  .synth-item:last-child { margin-bottom: 0; }
+  .synth-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .synth-item.likely .synth-label { color: #E2694F; }
+  .synth-item.dangerous .synth-label { color: #C4506B; }
+  .synth-item.assumption .synth-label { color: #7C9FE0; }
+  .synth-item.revised .synth-label { color: #4FBF9E; }
+  .synth-item.checklist .synth-label { color: #C9A94F; }
+  .synth-item p { margin: 0; font-size: 14.5px; color: #D3DAEC; }
+  .synth-item ol, .synth-item ul { margin: 8px 0 0; padding-left: 20px; font-size: 14px; color: #D3DAEC; }
+  .synth-item li { margin-bottom: 6px; }
+
+  .scope-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12.5px;
+    color: #6B7A99;
+    margin-bottom: 28px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .scope-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+    gap: 5px;
+    max-width: 340px;
+  }
+  .scope-dot { width: 34px; height: 6px; border-radius: 3px; background: #2C3657; }
+
+  h3.section-title {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 16px;
+    color: #fff;
+    margin: 0 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .count-badge {
+    background: #1C2440;
+    color: #9AA7C2;
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 12px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: #10162A;
+    border: 1px solid #232C45;
+    border-left-width: 4px;
+    border-radius: 10px;
+    padding: 22px;
+  }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+  .card-title { font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 14.5px; color: #fff; line-height: 1.4; }
+  .badges { display: flex; gap: 6px; flex-shrink: 0; }
+  .badge { font-size: 9.5px; font-family: 'IBM Plex Mono', monospace; padding: 3px 7px; border-radius: 4px; white-space: nowrap; }
+
+  .card-section { margin-top: 14px; }
+  .card-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7A99; margin-bottom: 5px; font-family: 'IBM Plex Mono', monospace; }
+  .card-text { font-size: 13px; color: #C4CCE0; }
+  .warning-list { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; color: #C4CCE0; }
+  .warning-list li { margin-bottom: 3px; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid #232C45;
+    font-size: 12px;
+    color: #5A6685;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">PREMORTEM · 02.09.2026</div>
+    <h1>App conversationnelle RIF — hors ChatGPT</h1>
+    <div class="subtitle">Remplacement de GPT RIF par une application maison (chat + LLM + Nano Banana Pro via fal.ai) pour la production de rendus photoréalistes destinés aux dossiers de permis de construire d'Evariste Blasco.</div>
+  </header>
+
+  <div class="frame-box">
+    <strong>Cadre du premortem :</strong> on est en mars 2027. Le lancement en production de cette app a échoué. Ce qui suit reconstruit, en partant de cet échec supposé déjà survenu, les 8 raisons les plus crédibles de sa mort — pas des risques génériques, des scénarios ancrés dans l'état réel du projet au 2 septembre 2026.
+  </div>
+
+  <div class="synthesis">
+    <h2>Synthèse</h2>
+
+    <div class="synth-item likely">
+      <div class="synth-label">Échec le plus probable</div>
+      <p><strong>La fiabilité de l'appel d'outil n'a jamais été confirmée.</strong> Le test précédent le lancement a produit un cas ambigu — texte imitant un appel d'outil réel suivi d'un refus fabriqué — jamais élucidé. C'est la même classe de symptôme que le bug qu'on cherchait à fuir en quittant ChatGPT, sauf que côté maison il n'y a ni log n8n ni GPT Builder pour le diagnostiquer.</p>
+    </div>
+
+    <div class="synth-item dangerous">
+      <div class="synth-label">Échec le plus dangereux</div>
+      <p><strong>Le contrôle qualité visuel post-génération n'a jamais tourné en conditions réelles hors ChatGPT.</strong> C'est la fonction censée protéger Evariste d'un rendu géométriquement faux déposé en mairie. Si elle sous-performe silencieusement, l'exposition n'est plus technique — elle devient professionnelle et réglementaire pour Evariste, et de crédibilité pour Alpha No_Code.</p>
+    </div>
+
+    <div class="synth-item assumption">
+      <div class="synth-label">L'hypothèse cachée</div>
+      <p>« Sortir de ChatGPT résout la fiabilité. » En réalité, quitter la plateforme élimine une classe de bug connue (toggle, timeout d'Action) mais en ouvre une nouvelle, jamais mesurée : fiabilité de l'appel d'outil, polling fal.ai, précision du contrôle visuel — rien de tout cela n'a été validé sur le nouveau stack avant la décision de « lancer la production ».</p>
+    </div>
+
+    <div class="synth-item revised">
+      <div class="synth-label">Plan révisé</div>
+      <ol>
+        <li>Vérifier immédiatement via le Network tab si le dernier appel d'outil était réel ou halluciné — bloquant avant tout développement supplémentaire.</li>
+        <li>Brancher le vrai polling fal.ai et générer 5 rendus réels de bout en bout, vérifiés manuellement un par un.</li>
+        <li>Auditer à l'œil (pas seulement via le modèle) le contrôle qualité automatique sur ces mêmes 5 dossiers, en comparant aux sources.</li>
+        <li>Sortir la clé fal.ai du code en variable d'environnement et ajouter une authentification minimale avant tout test avec de vraies données Evariste.</li>
+        <li>Chiffrer le coût réel par dossier (tokens API + fal.ai) sur ces 5 tests et le comparer aux 60 €/mois avant de considérer le prix acquis.</li>
+        <li>Documenter noir sur blanc la décision sur le plan V2 déterministe (arrêté, gelé, ou recyclé pour un autre module).</li>
+        <li>Faire tourner GPT RIF et la nouvelle app en parallèle sur les mêmes dossiers pendant la validation, avec un critère de bascule explicite (ex. 10 dossiers consécutifs sans écart de qualité constaté).</li>
+      </ol>
+    </div>
+
+    <div class="synth-item checklist">
+      <div class="synth-label">Checklist avant lancement</div>
+      <ul>
+        <li>Nature réelle du dernier appel d'outil confirmée (Network tab) — bloquant</li>
+        <li>5 rendus réels générés et vérifiés de bout en bout, polling inclus</li>
+        <li>Clé fal.ai hors du code, authentification minimale en place</li>
+        <li>Coût réel par dossier calculé et confronté aux 60 €/mois</li>
+        <li>Décision explicite sur le plan V2 déterministe (clôture ou pause documentée)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="scope-note">
+    8 raisons d'échec identifiées · analysées individuellement
+    <div class="scope-grid">
+      <div class="scope-dot" style="background:#E2694F"></div>
+      <div class="scope-dot" style="background:#D65A3A"></div>
+      <div class="scope-dot" style="background:#C4506B"></div>
+      <div class="scope-dot" style="background:#7C9FE0"></div>
+      <div class="scope-dot" style="background:#C9A94F"></div>
+      <div class="scope-dot" style="background:#4FBF9E"></div>
+      <div class="scope-dot" style="background:#8E8FA8"></div>
+      <div class="scope-dot" style="background:#7C5CC4"></div>
+    </div>
+  </div>
+
+  <h3 class="section-title">Analyse détaillée <span class="count-badge">8 scénarios</span></h3>
+
+  <div class="grid">
+
+    <div class="card" style="border-left-color:#E2694F">
+      <div class="card-top">
+        <div class="card-title">1 · L'appel d'outil n'a jamais été confirmé fiable</div>
+        <div class="badges">
+          <span class="badge" style="background:rgba(226,105,79,0.18);color:#F0A98A">Probabilité élevée</span>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Comment ça meurt</div>
+        <div class="card-text">Sur un vrai dossier, la génération échoue silencieusement deux fois sur cinq : le modèle décrit ce qu'il « voudrait » appeler en texte plutôt que d'émettre un vrai tool_use. Evariste croit un rendu lancé qui ne l'a jamais été, et le découvre en cherchant un lien absent. Même symptôme que le bug qu'on fuyait — sans les outils de diagnostic de n8n.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Hypothèse sous-jacente</div>
+        <div class="card-text">Que quitter ChatGPT élimine la classe de bug « outil pas appelé », alors qu'elle en déplace seulement la cause.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Signaux d'alerte</div>
+        <ul class="warning-list">
+          <li>Réponses API sans bloc tool_use alors qu'une génération était attendue</li>
+          <li>Taux d'échec silencieux &gt; 1 sur 10 sur des dossiers réels</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:#D65A3A">
+      <div class="card-top">
+        <div class="card-title">2 · Le polling fal.ai n'a jamais été validé de bout en bout</div>
+        <div class="badges">
+          <span class="badge" style="background:rgba(214,90,58,0.18);color:#F0A98A">Probabilité élevée</span>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Comment ça meurt</div>
+        <div class="card-text">Jour d'un dépôt urgent : l'app retourne un ID de soumission fal.ai au lieu de l'image, faute de boucle sur status_url. Evariste attend, rafraîchit, rien ne vient — exactement le blocage administratif que le projet devait éliminer.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Hypothèse sous-jacente</div>
+        <div class="card-text">Que le webhook n8n existant « doit déjà gérer ça » puisqu'il tourne depuis des mois, sans avoir relu le node HTTP Request.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Signaux d'alerte</div>
+        <ul class="warning-list">
+          <li>Réponse contenant status: "IN_QUEUE" ou un request_id sans image_url</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:#C4506B">
+      <div class="card-top">
+        <div class="card-title">3 · Le contrôle qualité visuel n'a jamais tourné en réel</div>
+        <div class="badges">
+          <span class="badge" style="background:rgba(196,80,107,0.20);color:#F2A9BB">Impact critique</span>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Comment ça meurt</div>
+        <div class="card-text">La toiture d'un rendu dérive subtilement de la vue Revit. Le contrôle, jamais testé sur ce type d'écart hors ChatGPT, classe « Conforme » par excès de confiance. Evariste, qui fait confiance à l'automatisme après quelques semaines sans incident, dépose le dossier tel quel.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Hypothèse sous-jacente</div>
+        <div class="card-text">Qu'un prompt bien écrit produit un jugement fiable, sans mesure du taux de faux négatifs réel.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Signaux d'alerte</div>
+        <ul class="warning-list">
+          <li>Un écart injecté volontairement dans un test n'est pas détecté</li>
+          <li>Aucun audit humain systématique sur les premiers rendus réels</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:#7C9FE0">
+      <div class="card-top">
+        <div class="card-title">4 · Evariste attend une parité stricte, pas une réinvention</div>
+        <div class="badges">
+          <span class="badge" style="background:rgba(124,159,224,0.18);color:#B7CCF2">Probabilité moyenne</span>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Comment ça meurt</div>
+        <div class="card-text">L'ordre des questions diverge légèrement de GPT RIF. Evariste juge l'outil sur sa fluidité, trouve la conversation « moins naturelle », et repasse par Photoshop « pour les dossiers urgents, en attendant que ce soit stabilisé » — une exception qui devient la norme.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Hypothèse sous-jacente</div>
+        <div class="card-text">Que porter le prompt presque verbatim suffit à préserver l'expérience perçue.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Signaux d'alerte</div>
+        <ul class="warning-list">
+          <li>Evariste questionne l'ordre ou la formulation des questions</li>
+          <li>Des rendus faits sous Photoshop réapparaissent en parallèle de l'app</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:#C9A94F">
+      <div class="card-top">
+        <div class="card-title">5 · Aucune infrastructure de production réelle</div>
+        <div class="badges">
+          <span class="badge" style="background:rgba(201,169,79,0.18);color:#E6D19A">Probabilité élevée</span>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Comment ça meurt</div>
+        <div class="card-text">Pas de log persistant, pas d'authentification, clé fal.ai copiée en clair depuis n8n. Un incident réseau plante une génération sans trace exploitable ; une facture fal.ai anormale révèle un usage non authentifié.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Hypothèse sous-jacente</div>
+        <div class="card-text">Que « ça marche en test » équivaut à « c'est prêt pour un usage réel exposé à internet ».</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Signaux d'alerte</div>
+        <ul class="warning-list">
+          <li>Aucune variable d'environnement pour les clés, aucun log consultable par dossier</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:#4FBF9E">
+      <div class="card-top">
+        <div class="card-title">6 · Le modèle à 60 €/mois n'a jamais été recalculé</div>
+        <div class="badges">
+          <span class="badge" style="background:rgba(79,191,158,0.18);color:#9EE8CE">Probabilité moyenne</span>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Comment ça meurt</div>
+        <div class="card-text">Six mois après, Alpha additionne les coûts réels : API LLM par conversation, fal.ai par génération et correction, hébergement. Le coût variable dépasse largement les 60 €/mois, sans qu'aucun ajustement n'ait été anticipé.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Hypothèse sous-jacente</div>
+        <div class="card-text">Que le prix calibré pour maintenir des Instructions ChatGPT reste valable pour opérer une app avec coûts d'inférence à l'usage.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Signaux d'alerte</div>
+        <ul class="warning-list">
+          <li>Aucun chiffre de coût par dossier n'existe avant le lancement</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:#8E8FA8">
+      <div class="card-top">
+        <div class="card-title">7 · Le plan V2 déterministe abandonné sans décision</div>
+        <div class="badges">
+          <span class="badge" style="background:rgba(142,143,168,0.18);color:#C7C8DA">Impact faible</span>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Comment ça meurt</div>
+        <div class="card-text">Le PRD, le prototype React et le schéma Supabase du plan déterministe restent dans un coin, ni fermés ni repris. Si le conversationnel bloque, il n'y a pas de plan B clair — juste deux projets à moitié faits.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Hypothèse sous-jacente</div>
+        <div class="card-text">Que la préférence exprimée par Evariste règle définitivement la question architecturale, sans qu'aucune des deux voies n'ait prouvé sa fiabilité.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Signaux d'alerte</div>
+        <ul class="warning-list">
+          <li>Personne ne peut dire en une phrase pourquoi le plan formulaire est arrêté</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:#7C5CC4">
+      <div class="card-top">
+        <div class="card-title">8 · Aucun filet de sécurité ni critère de bascule</div>
+        <div class="badges">
+          <span class="badge" style="background:rgba(124,92,196,0.20);color:#C7B4EE">Impact critique</span>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Comment ça meurt</div>
+        <div class="card-text">Sur l'élan de l'enthousiasme, Evariste bascule directement sur la nouvelle app pour son prochain dossier réel, échéance de dépôt serrée. Un des sept problèmes précédents survient, sans retour arrière rapide possible.</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Hypothèse sous-jacente</div>
+        <div class="card-text">Que « prometteur en test » équivaut à « prêt à remplacer l'outil de production actuel ».</div>
+      </div>
+      <div class="card-section">
+        <div class="card-label">Signaux d'alerte</div>
+        <ul class="warning-list">
+          <li>Aucun seuil ni date fixés avant de désactiver GPT RIF</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    Premortem exécuté le 02.09.2026 · Sujet : lancement en production de l'app conversationnelle RIF (hors ChatGPT) pour Alpha No_Code / Evariste Blasco · Méthode Gary Klein
+  </footer>
+
+</div>
+</body>
+</html>

@@ -42,8 +42,38 @@ Endpoint retenu (confirmé par inspection du workflow n8n V1 encore en productio
 
 ## D-06 — Choix du LLM multimodal
 
-**Statut :** En cours — voir `docs/decision-llm-multimodal.md`.
-Recommandation provisoire : Claude Sonnet 5 (avec bascule Opus 5 pour l'extraction ProjectState si nécessaire), à confirmer par mesure réelle en Phase 0B.
+**Statut :** Accepted — 07.09.2026.
+**Décision :** Claude Sonnet 5 (`claude-sonnet-5`) pour les trois rôles (dialogue, extraction structurée du ProjectState, analyse assistée des sources). Analyse comparative et chiffrage : `docs/decision-llm-multimodal.md`.
+**Conséquences :** secret serveur `ANTHROPIC_API_KEY` ; le coût réel par dossier reste à mesurer en Phase 0B (§20 du PRD) et peut motiver une bascule ponctuelle vers Opus 5 sur l'extraction, ou un modèle moins cher sur le dialogue simple — sans nouvelle décision structurante, tant que la fiabilité aux points critiques est préservée.
+**Rappel de gouvernance (PRD §21) :** une mise à jour du modèle déclenche les tests applicables avant mise en production, et chaque génération enregistre la version exacte du modèle utilisé.
+
+## D-14 — Clôture formelle du plan V2 déterministe
+
+**Statut :** Accepted — 07.09.2026.
+**Contexte :** le prémortem du 02.09.2026 identifie comme risque #7 le fait que le plan V2 (formulaire 7 étapes, prototype React, schéma Supabase, webhook n8n unique) soit « abandonné de fait sans décision formalisée » — laissant deux projets à moitié faits et aucun plan B lisible.
+**Décision :** le plan V2 déterministe est **arrêté**, pas gelé. Le code du formulaire a été retiré du dépôt (commit `d7fbf20`), le webhook n8n V2 (`keALNdFoFMNT1Sxk`) est abandonné, et l'ancien `supabase/schema.sql` est conservé en lecture seule à titre historique.
+**Motif, en une phrase :** le client a explicitement rejeté l'expérience formulaire comme « trop contraignante » ; poursuivre les deux voies en parallèle coûterait plus que la valeur d'un plan B dont l'ergonomie est déjà refusée.
+**Plan B réel :** ce n'est pas la V2, c'est **GPT RIF (V1), maintenu en production comme filet de sécurité** jusqu'au critère de sortie de la Phase 1 (PRD §23).
+**Éléments réutilisables :** le catalogue matériaux Supabase et les prompts de LIB-001 restent exploitables ; leur devenir est à documenter en Phase 0B (case déjà prévue au §23).
+
+---
+
+## Traçabilité du prémortem du 02.09.2026
+
+Le prémortem (`docs/premortem-20260902-transcript.md`, rapport : `docs/premortem-20260902-rapport.html`) est antérieur au PRD V1.3 et l'a largement nourri. État de couverture au 07.09.2026 :
+
+| # | Risque prémortem | Couverture |
+|---|---|---|
+| 1 | Fiabilité de l'appel d'outil jamais confirmée | **Ouvert** — à traiter dans l'orchestrateur (aucune action ne doit partir d'un texte imitant un appel d'outil) puis mesurer en Phase 0B |
+| 2 | Polling fal.ai jamais validé de bout en bout | **Ouvert** — Phase 0B, première case du §23 |
+| 3 | Contrôle qualité visuel jamais éprouvé en réel | **Ouvert** — PRD §15 le cadre (étape distincte, jeu annoté, validation humaine) ; la mesure reste à faire |
+| 4 | Attente de parité stricte avec GPT RIF | Cadré — PRD §22, dernier critère d'acceptation ; profil client `PROFIL_EVARISTE.md` |
+| 5 | Aucune infrastructure de production réelle | **Traité** — auth individuelle + RLS (D-03), secrets serveur, journalisation transactionnelle (PRD §18.1) |
+| 6 | 60 €/mois jamais recalculé | Cadré — PRD §20 ; chiffrage LLM fait (`docs/decision-llm-multimodal.md`), coût fal.ai à mesurer en Phase 0B |
+| 7 | Plan V2 abandonné sans décision | **Traité** — D-14 ci-dessus |
+| 8 | Aucun filet de sécurité ni critère de bascule | **Traité** — PRD §23 Phases 1 et 2 (GPT RIF maintenu, seuil de 10 dossiers consécutifs) |
+
+Les trois risques encore ouverts (#1, #2, #3) sont exactement ceux qui exigent une mesure réelle, pas une décision. Ils constituent le cœur de la Phase 0B.
 
 ## D-07 — ProjectState : structure de base
 

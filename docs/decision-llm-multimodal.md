@@ -1,6 +1,6 @@
 # Décision — Choix du LLM multimodal (RIF-App, §26 point 6 du PRD)
 
-Statut : **en cours d'arbitrage** — comparaison fournie le 07.09.2026, décision finale à consigner dans `rif-framework/Implementations/RIF-App/DECISIONS.md` une fois tranchée.
+Statut : **tranchée le 07.09.2026 — Claude Sonnet 5** (`claude-sonnet-5`) pour les trois rôles. Consignée en D-06 dans `rif-framework/Implementations/RIF-App/DECISIONS.md`. Ce document conserve la comparaison qui a mené à la décision.
 
 ## Rôle du LLM dans RIF-App
 
@@ -57,8 +57,9 @@ Hypothèses pour un dossier type (2 à 4 images sources + conversation de collec
 
 Cette recommandation reste à confirmer par la mesure réelle en **Phase 0B** (§23 : "brancher le véritable endpoint... mesurer les coûts réels"), qui peut aussi révéler qu'un mélange (ex. Claude pour l'extraction structurée + un modèle moins cher pour le simple dialogue de collecte) est plus économique sans sacrifier la fiabilité aux points critiques.
 
-## Décision à consigner
+## Décision retenue (07.09.2026)
 
-- [ ] Confirmer ou infirmer le choix Claude Sonnet 5 / Opus 5.
-- [ ] Décider si un seul modèle est utilisé pour les trois rôles (dialogue, extraction, contrôle) ou si un mélange est retenu.
-- [ ] Ajouter la clé API retenue aux secrets serveur (jamais dans ce dépôt — voir `.env.example` une fois la Phase 0A close).
+- [x] Claude Sonnet 5 confirmé.
+- [x] Un seul modèle pour les trois rôles (dialogue, extraction, contrôle) — pas de mélange en V1, pour éviter d'avoir à valider deux comportements distincts avant d'avoir mesuré quoi que ce soit.
+- [ ] Ajouter `ANTHROPIC_API_KEY` aux secrets serveur (Vercel + `.env.local`) — à faire par Alpha No_Code, jamais dans ce dépôt.
+- [ ] Mesurer le coût réel par dossier en Phase 0B et le confronter aux 60 €/mois (PRD §20, risque #6 du prémortem).
