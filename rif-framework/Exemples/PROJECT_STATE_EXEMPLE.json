@@ -1,0 +1,23 @@
+{
+  "project_id": "EXEMPLE-001",
+  "revision": 3,
+  "usage": ["presentation_client", "insertion_administrative"],
+  "sources": [
+    {"id": "src-1", "role_detected": "revit_view", "role_confirmed": "revit_view", "status": "valid"},
+    {"id": "src-2", "role_detected": "site_photo", "role_confirmed": "site_photo", "status": "valid"},
+    {"id": "src-3", "role_detected": "material_reference", "role_confirmed": "material_reference", "target": "facade_extension"}
+  ],
+  "camera_compatibility": "Compatible",
+  "mode": "Photomontage controle",
+  "style": "Photomontage administratif",
+  "materials": {
+    "facade_extension": {"value": "enduit mineral clair", "confidence": 0.91, "source_id": "src-3", "status": "validated"}
+  },
+  "localized_directives": [
+    {"source_id": "src-2", "action": "preserve", "target": "haie_ouest", "status": "validated", "remove_annotation_from_output": true}
+  ],
+  "locked": ["camera", "openings", "roof", "existing_environment"],
+  "variant_count": 3,
+  "canonical_result_id": null
+}
+
