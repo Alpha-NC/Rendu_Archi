@@ -42,6 +42,8 @@ npm run test:watch
 - `lib/rif/appel-outil.ts` (+ `.test.ts`) — garde d'appel d'outil : aucune opération ne part d'un texte parsé, seul un `tool_use` réel déclenche une action ; revérifie l'état du dossier côté backend.
 - `lib/fal/client.ts` (+ `.test.ts`) — client fal.ai (soumission + polling jusqu'à un état terminal, jamais un `IN_QUEUE` présenté comme un succès).
 - `lib/rif/controle-qualite.ts` (+ `.test.ts`) — grille LIB-002, verdict proposé (jamais autoritaire) et garde-fou d'export administratif (PRD §15.3).
+- `lib/rif/modes-styles.ts` (+ `.test.ts`) — sélection du mode (LIB-006 §5) et du style (LIB-005) par défaut ; ne devine jamais hors des cas documentés, retourne `'a_confirmer'`/`'suspendre'` sinon.
+- `lib/rif/collecte-conditionnelle.ts` (+ `.test.ts`) — moteur ENG-004 : une fois mode/style pressentis, détermine l'état (inchangée/réduite/convertie/retirée/inversée) de chacune des 8 questions du tronc commun. Combinaison non documentée par ENG-004 (Présentation générative) → aucune réduction, jamais d'invention de règle.
 - `lib/rif/depot.ts` — interface d'accès aux données (dossiers/generations/files/events), indépendante de Supabase pour rester testable.
 - `lib/rif/orchestrateur.ts` (+ `.test.ts`) — exécute les trois opérations techniques (PRD §14) : journalisation transactionnelle (§18.1), appel fal.ai, rapatriement du rendu dans le stockage privé (§12), transition d'état. Logique pure, testée avec un dépôt en mémoire.
 - `lib/rif/depot-supabase.ts` — implémentation Supabase de `DepotDossiers` (non testée contre un vrai projet, aucun n'existe encore).

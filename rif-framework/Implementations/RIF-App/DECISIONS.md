@@ -99,6 +99,11 @@ Le schéma suit le PRD §10 et l'exemple `Exemples/PROJECT_STATE_EXEMPLE.json` :
 
 ---
 
+## Note — dérive documentaire relevée (Framework, pas RIF-App)
+
+En implémentant ENG-004 (`lib/rif/collecte-conditionnelle.ts`), ENG-004 lui-même référence « REF-001 §9 » pour la règle de lumière suivant la photographie. Dans la version actuelle de REF-001 (01_REFERENTIEL_GENERAL.md), cette règle est en réalité au §6 (« Environnement et lumière ») ; le §9 actuel est « Confidentialité ». Numérotation vraisemblablement décalée par une révision antérieure de REF-001 sans mise à jour de la référence croisée dans ENG-004. Le code s'appuie sur le contenu réel (§6), pas sur le numéro cité. Signalé ici pour information — correction du Framework lui-même hors périmètre de RIF-App (non-objectif PRD §25).
+
 ## Historique
 
 - 07.09.2026 — Création du registre, D-01 à D-09 formalisées, D-06 en cours d'arbitrage (voir `docs/decision-llm-multimodal.md`).
+- 07.09.2026 — D-06 tranchée (Claude Sonnet 5), D-14 ajoutée (clôture du plan V2), module de contrôle qualité et Route Handlers livrés, module de collecte conditionnelle (ENG-004) livré.

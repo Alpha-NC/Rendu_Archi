@@ -58,6 +58,12 @@ export interface SourceDossier {
   target?: string
 }
 
+/** LIB-006 §2-4 — les trois modes de production, aucun autre n'existe. */
+export type ModeProduction = 'retexturation_revit' | 'photomontage_controle' | 'presentation_generative'
+
+/** LIB-005 — les trois styles de rendu actifs (V1.2 en a retiré deux). */
+export type StyleRendu = 'photomontage_administratif' | 'presentation_client' | 'commercial'
+
 export type ActionDirective = 'preserve' | 'modify' | 'remove' | 'clarify'
 
 /**
@@ -82,9 +88,11 @@ export interface ProjectState {
   revision: number
   usage: Array<'presentation_client' | 'insertion_administrative' | string>
   sources: SourceDossier[]
-  camera_compatibility: 'Compatible' | 'Incompatible' | 'A verifier'
-  mode?: string
-  style?: string
+  // PRD §9.2 : quatre valeurs, pas trois — corrigé ici (la valeur
+  // 'A verifier' initiale ne couvrait pas la distinction Approximative.
+  camera_compatibility: 'Compatible' | 'Approximative' | 'Incompatible' | 'Non evaluee'
+  mode?: ModeProduction
+  style?: StyleRendu
   /** Géométrie décrite et implantation — texte libre structuré en Phase 0B. */
   geometrie?: ValeurTracee<string>
   implantation?: ValeurTracee<string>
@@ -111,7 +119,7 @@ export function creerProjectStateVide(projectId: string): ProjectState {
     revision: 0,
     usage: [],
     sources: [],
-    camera_compatibility: 'A verifier',
+    camera_compatibility: 'Non evaluee',
     materials: {},
     localized_directives: [],
     locked: [],
