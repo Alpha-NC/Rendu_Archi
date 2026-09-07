@@ -1,450 +1,602 @@
-# PRD — Générateur de rendu V2
+# PRD — Application conversationnelle RIF (hors ChatGPT)
 
-Version : 1.0
-Date : 2026-08-07
-Auteur : Alpha No_Code
-Statut : à implémenter
+**Auteur :** Alpha_no_code
+**Client pilote :** Évariste Blasco — dessinateur, Biarritz
+**Version du PRD :** V1.3
+**Statut :** Draft révisé post-audit et retours terrain — en attente de validation de la Phase 0
+**Date de révision :** 07.09.2026
 
----
-
-## 1. Objet
-
-Application web permettant de produire un rendu photoréaliste à partir d'exports Revit et d'une photo de site, puis de le corriger par cycles successifs jusqu'à validation.
-
-Elle remplace l'interface Custom GPT de la V1. Le pipeline de génération (n8n → fal.ai / Nano Banana Pro) reste inchangé : seule la couche interface et la persistance sont nouvelles.
-
-### 1.1 Utilisateur
-
-Utilisateur unique, non technique. Il fournit des fichiers, renseigne des choix dans un formulaire, juge le résultat et demande des corrections. Il ne rédige pas de prompt et n'accède à aucune configuration technique.
-
-### 1.2 Contrainte fondamentale
-
-**La géométrie de la vue de cadrage fait autorité et ne doit jamais être modifiée** : formes, volumes, proportions, niveaux, ouvertures, toiture, implantation, cadrage, perspective.
-
-Un rendu esthétiquement réussi mais géométriquement faux est un échec. Cette contrainte prime sur toute recherche de réalisme ou de qualité visuelle.
-
-Elle doit être présente à trois endroits distincts :
-
-1. dans le prompt système fixe de génération ;
-2. répétée explicitement dans chaque prompt de correction — jamais supposée héritée du cycle précédent ;
-3. dans le contrôle après correction, qui est obligatoire et non contournable.
-
-### 1.3 Seconde exigence permanente
-
-Le rendu attendu est **réaliste**. Aucun style illustratif, pictural ou stylisé, quel que soit le style de rendu sélectionné. Le style agit sur la lumière et la présentation, jamais sur l'architecture.
+> Cette version intègre les conclusions du prémortem du 02.09.2026, de l'audit architectural du 06.09.2026 et des réunions de travail des 17.07, 04.08 et 12.08.2026. Elle sépare clairement le Framework RIF, son package d'implémentation, l'orchestration déterministe, l'interface conversationnelle et le profil propre à Évariste.
 
 ---
 
-## 2. Périmètre
+## 1. Résumé
 
-### 2.1 Dans le périmètre
+Créer une application conversationnelle propriétaire permettant à Évariste de produire, contrôler, corriger et valider des rendus architecturaux selon les règles du Rendering Intelligence Framework.
 
-- Formulaire web progressif en 7 étapes avec logique conditionnelle
-- Upload et transmission des fichiers image
-- Génération d'un rendu via le pipeline n8n existant
-- Boucle post-génération : validation, correction ciblée par annotation, nouvelle génération
-- Persistance Supabase : table `materiaux`, table `dossiers`
-- Archivage des fichiers sur Google Drive par référence de dossier
-- Point d'entrée unique côté n8n (webhook avec routage par `action`)
-- Protection d'accès par mot de passe unique
+L'application ne remplace pas le Framework RIF. Elle constitue une nouvelle implémentation du Framework, indépendante de ChatGPT. Le Custom GPT actuel reste une implémentation historique et un filet de sécurité temporaire pendant la phase de coexistence.
 
-### 2.2 Hors périmètre
+L'application combine :
 
-Ne pas implémenter, ne pas anticiper, ne pas préparer de structure pour :
+- une interface de chat en langage naturel ;
+- un état de projet structuré et persistant ;
+- un backend imposant les étapes, autorisations et blocages ;
+- un LLM multimodal pour dialoguer, analyser les sources et préparer les données ;
+- une génération via Nano Banana Pro sur fal.ai, sous réserve de validation de l'endpoint exact en Phase 0 ;
+- un contrôle qualité distinct de la génération ;
+- une validation humaine obligatoire avant tout export destiné à un usage administratif.
 
-- La collecte automatisée de données cadastrales ou PLU
-- Le calcul de surfaces et la vérification de conformité PLU
-- Le contrôle de poids et format des PDF de dépôt
-- Une table `profils` (presets de matériaux réutilisables)
-- Un agent IA de rédaction ou de vérification de prompt
-- Le masquage par inpainting (FLUX Fill) — reste au stade d'évaluation
-- Le renommage ou l'anonymisation automatique des fichiers — traité manuellement en amont
-- La gestion de comptes multi-utilisateurs, rôles ou permissions
+L'utilisateur n'a besoin ni d'un compte ChatGPT ni d'un abonnement ChatGPT. Il accède au service avec le compte propre à RIF-App.
 
-Toute demande relevant de ces sujets doit être signalée, pas implémentée.
+L'objectif est d'éliminer les limites observées avec le Custom GPT — déclenchement d'Action non fiable, timeout, concurrence avec la génération native et identifiants partagés — sans perdre l'expérience conversationnelle demandée par Évariste.
 
----
+## 2. Positionnement dans l'architecture RIF
 
-## 3. Architecture
+La séparation suivante est obligatoire :
 
-### 3.1 Vue d'ensemble
-
-```
-Front React (SPA statique)
-        │
-        │  HTTPS, un seul webhook, champ "action"
-        ▼
-n8n (self-hosted)
-        ├──► fal.ai / Nano Banana Pro   (génération et correction)
-        ├──► Supabase REST              (materiaux, dossiers)
-        └──► Google Drive               (archivage fichiers)
+```text
+Framework RIF
+  → règles métier et sources de vérité
+    → package d'implémentation RIF versionné
+      → orchestrateur applicatif déterministe
+        → interface conversationnelle et services techniques
 ```
 
-### 3.2 Principe d'isolation des secrets
+### 2.1 Framework RIF
 
-Le front ne contient aucune clé d'API. Les identifiants fal.ai, Supabase et Google Drive restent exclusivement côté n8n.
+Le Framework reste l'autorité sur la hiérarchie des sources, les modes de production, les styles de rendu, la collecte conditionnelle, les interdictions, la préparation des prompts, les corrections et la checklist de contrôle qualité.
 
-Le navigateur ne communique qu'avec le webhook n8n. Aucun appel direct du front vers fal.ai, Supabase ou Drive n'est autorisé, y compris en développement.
+Le PRD ne modifie aucune règle stable du Framework. Toute évolution structurelle du Framework suit le processus **Backlog → ADR → nouvelle version**.
 
-### 3.3 Hébergement
+### 2.2 Package d'implémentation RIF
 
-- Front : hébergement statique (Vercel, Netlify ou Cloudflare Pages), déploiement depuis le dépôt Git
-- Aucun serveur applicatif propre à maintenir
-- HTTPS obligatoire
+L'application consomme un package figé et identifiable contenant les versions compatibles des modules RIF nécessaires à son fonctionnement. Elle ne doit pas dépendre d'un « prompt patché » non traçable.
 
-### 3.4 Point d'entrée n8n
+Chaque génération enregistre au minimum la version du Framework, du package d'implémentation, du prompt système, du modèle conversationnel et du moteur d'image.
 
-Un webhook unique. Le corps de la requête contient toujours un champ `action` routé en interne par un node Switch.
+### 2.3 Contrainte propre à RIF-App V1
 
-| `action` | Rôle |
+Une vue Revit exploitable est obligatoire dans cette application V1. Cette obligation constitue une contrainte du produit destiné à Évariste, et non une nouvelle règle universelle du Framework.
+
+## 3. Contexte et problème
+
+Évariste produit actuellement ses rendus via GPT RIF, un Custom GPT relié à n8n et fal.ai. Cette implémentation souffre de pannes récurrentes ou difficilement observables : non-déclenchement de l'Action, timeout de la plateforme, concurrence avec le générateur d'images natif et gestion imparfaite des identifiants techniques.
+
+Évariste a testé et rejeté une alternative fondée sur un formulaire déterministe visible. Il attend une expérience conversationnelle simple, et non une succession de champs techniques.
+
+Le besoin n'est donc pas de supprimer le déterminisme, mais de le déplacer dans le backend :
+
+- l'utilisateur conserve une conversation naturelle ;
+- le système conserve un parcours strict, vérifiable et impossible à contourner ;
+- le chat n'est jamais la source de vérité du dossier.
+
+La logique de collecte conditionnelle ENG-004 doit être appliquée dès la V1 afin de réduire les questions inutiles tout en maintenant les validations indispensables.
+
+## 4. Principes non négociables
+
+1. **Le Framework gouverne l'application.** L'implémentation ne redéfinit pas silencieusement ses règles.
+2. **Le backend impose le parcours.** Le LLM ne peut ni sauter une étape ni lever seul un blocage.
+3. **Le ProjectState est la source de vérité opérationnelle.** Le fil de conversation n'a qu'un rôle d'interface et de preuve contextuelle.
+4. **Revit reste l'autorité géométrique.** La photographie reste l'autorité environnementale dans les cas prévus par le Framework.
+5. **L'application ne prétend pas garantir une fidélité que le moteur génératif ne peut démontrer.** Elle détecte, classe, bloque et fait valider.
+6. **La génération et son contrôle sont deux opérations distinctes.** L'auto-évaluation du modèle producteur ne suffit jamais à déclarer un rendu conforme.
+7. **Évariste valide volontairement tout rendu administratif avant export.** L'IA prépare ; le professionnel décide.
+8. **Toute opération est traçable.** Aucun rendu ne doit exister sans dossier, état, sources et versions techniques associés.
+9. **Chaque dossier est étanche.** Une tentative ratée, un autre projet ou une conversation antérieure ne peut influencer implicitement une génération.
+10. **Une référence matériau ne commande que l'apparence de l'élément ciblé.** Elle ne transmet jamais sa composition, sa géométrie, sa caméra ou son environnement.
+11. **Une annotation est une instruction, pas un contenu.** Ses marques servent à localiser une action et sont toujours absentes du rendu final.
+
+## 5. Objectifs et métriques de succès
+
+| Objectif | Métrique V1 |
 |---|---|
-| `get_materiaux` | Retourne les matériaux de statut `valide`, groupés par catégorie |
-| `generate` | Génère un rendu initial |
-| `correct` | Applique une correction ciblée sur un rendu existant |
-| `regenerate` | Relance une génération complète avec un seed différent |
-| `validate` | Passe un cycle au statut `valide` |
-| `get_dossier` | Retourne l'historique des cycles d'une référence |
+| Fiabilité d'orchestration | 0 échec silencieux sur 20 opérations consécutives ; chaque opération possède un statut terminal ou une erreur explicite |
+| Respect du parcours | 0 génération possible avant validation de la fiche projet et levée des blocages obligatoires |
+| Détection des défauts critiques | 100 % des défauts éliminatoires introduits dans le jeu de test de référence sont signalés avant export administratif |
+| Traçabilité | 100 % des générations reliées à leurs sources, ProjectState, versions, coûts et résultats de contrôle |
+| Parité d'usage perçue | Évariste juge la conversation aussi fluide ou plus fluide que GPT RIF lors d'un test comparatif |
+| Collecte conditionnelle | Réduction mesurée du nombre de questions sur au moins 5 dossiers représentatifs, sans perte d'information obligatoire |
+| Reprise de session | 100 % des dossiers de test reprennent sur le dernier état validé après fermeture ou rafraîchissement |
+| Isolation | 0 donnée, source ou instruction issue d'un autre dossier ou d'une tentative antérieure sur le jeu de tests croisés |
+| Fluidité | Sur un dossier standard, les sources et 2 à 3 lignes de contexte suffisent avant des confirmations ciblées |
+| Variantes | 100 % des variantes restent comparables, historisées et rattachées à la même révision d'état |
+| Viabilité économique | Coût complet par dossier mesuré : LLM, 2 à 3 variantes usuelles, corrections, stockage et support, confronté au tarif de 60 €/mois |
 
-Le front n'a jamais connaissance de plusieurs URL. Une seule est configurée, via variable d'environnement.
+Le critère de détection qualité est évalué sur un jeu de tests annoté manuellement. Il ne constitue pas une promesse d'absence absolue d'erreur sur tout futur projet.
 
-### 3.5 Contraintes techniques n8n
+## 6. Utilisateurs et responsabilités
 
-Ces points correspondent à des problèmes déjà rencontrés et résolus. Ils ne sont pas négociables.
+- **Utilisateur opérationnel : Évariste Blasco.** Dépose les sources, répond aux questions, confirme la fiche projet, examine le contrôle et valide ou refuse le rendu.
+- **Opérateur technique : Alpha_no_code.** Maintient l'application, les versions d'implémentation, la supervision, les tests et le support avec le SLA contractuel de 24 h.
+- **Administration instructrice.** Destinataire indirect du résultat ; elle n'interagit jamais avec l'application.
 
-- **Supabase** : utiliser le node HTTP Request vers l'API REST (PostgREST). Ne pas utiliser le node Supabase natif de n8n — bug 403 documenté et non résolu.
-- **Authentification Supabase** : headers `apikey` et `Authorization: Bearer` posés directement dans le node HTTP Request. Ne pas utiliser une credential Header Auth partagée — ces objets sont partagés entre workflows dupliqués et se contaminent mutuellement.
-- **Appels fal.ai** : le pattern asynchrone est obligatoire — POST, puis polling de `status_url` jusqu'à `COMPLETED`, puis récupération de `response_url`. Sans polling, la réponse ne contient qu'un accusé de soumission, pas d'image.
-- **Transmission des images** : encodage base64 en data URI dans le tableau `image_urls`. Ne pas utiliser les URL de stockage fal.ai, qui se sont révélées inaccessibles.
-- **Le polling est entièrement géré côté n8n**, dans une seule exécution de workflow. Le front envoie une requête et attend une réponse finale unique. Aucune logique de polling n'est implémentée côté client.
+Évariste reste responsable de la conformité réglementaire finale et de l'usage du document produit. L'application ne réalise aucun contrôle PLU ou réglementaire.
 
-### 3.6 Paramètres API fixes
+## 7. Périmètre V1
 
-Ces valeurs sont définies au niveau du corps de la requête HTTP, pas dans le texte du prompt. Les paramètres API priment sur toute instruction textuelle.
+### 7.1 Inclus
 
-| Paramètre | Valeur | Raison |
+- création et reprise d'un dossier ;
+- dépôt d'une vue Revit obligatoire ;
+- dépôt conditionnel d'une photographie du site ;
+- dépôt facultatif d'une axonométrie utilisée uniquement comme contrôle secondaire des volumes ;
+- dépôt groupé de plusieurs fichiers, détection assistée de leurs rôles et confirmation utilisateur ;
+- dépôt de sources annotées, photographies de matériaux et photographies du bâti existant ;
+- analyse initiale des sources et détection de données confidentielles visibles ;
+- pré-analyse des matériaux et contraintes avec provenance et niveau de confiance ;
+- qualification de la compatibilité des caméras ;
+- collecte conversationnelle avec ENG-004 ;
+- sélection du mode et du style selon le Framework, dont exclusion structurelle prévue par ADR-013 ;
+- construction et confirmation de la fiche projet ;
+- génération asynchrone via fal.ai ;
+- production de plusieurs variantes d'une même vue, comparaison et sélection d'un résultat canonique ;
+- contrôle qualité assisté et rapport par critère ;
+- correction ciblée ;
+- redémarrage depuis les sources originales lorsque la base n'est plus fiable ;
+- validation humaine avant export administratif ;
+- stockage privé, historique, journalisation et mesure des coûts ;
+- livraison par lien de téléchargement contrôlé et, si retenu, copie vers Drive.
+
+### 7.2 Hors périmètre
+
+- gestion de plusieurs organisations ou équipes ;
+- calcul de surfaces et conformité PLU ;
+- collecte cadastrale automatisée ;
+- compression ou contrôle de poids des PDF ;
+- traitement groupé de plusieurs vues en une seule génération ;
+- garantie automatisée de conformité réglementaire ;
+- bascule silencieuse vers un autre LLM ou moteur d'image.
+- fonctionnement hors connexion ; l'application est un service connecté avec reprise propre après perte réseau.
+
+## 8. Parcours déterministe du dossier
+
+Chaque dossier possède un état contrôlé par le backend :
+
+```text
+BROUILLON
+  → SOURCES_REÇUES
+  → SOURCES_CONTRÔLÉES
+  → COLLECTE_EN_COURS
+  → FICHE_À_CONFIRMER
+  → PRÊT_À_GÉNÉRER
+  → GÉNÉRATION_EN_COURS
+  → CONTRÔLE_À_EXAMINER
+  → VALIDÉ | À_CORRIGER | À_REPRENDRE | SUSPENDU | ÉCHEC
+```
+
+Une transition n'est autorisée que si ses préconditions sont satisfaites. Le LLM peut proposer une transition ; seul le backend l'applique.
+
+Les principales conditions bloquantes sont : vue Revit absente ou inexploitable, données confidentielles non traitées, incompatibilité majeure des caméras pour un usage administratif, information indispensable inconnue, contradiction avec une source autoritaire, fiche projet non confirmée et contrôle Non conforme pour un export administratif.
+
+## 9. Exigences fonctionnelles
+
+### 9.1 Étape 1 — Réception des documents
+
+- La vue Revit est obligatoire pour RIF-App V1.
+- La photographie du site est obligatoire pour un Photomontage contrôlé et pour tout usage administratif nécessitant une insertion réelle.
+- L'axonométrie est facultative et ne devient jamais une autorité de cadrage ou de perspective.
+- L'utilisateur peut déposer toutes les sources d'un dossier en une seule opération logique.
+- Les rôles pris en charge sont au minimum : `revit_view`, `site_photo`, `axonometry`, `annotated_source`, `material_reference`, `existing_building_photo`, `render` et `annotated_render`.
+- Le système propose automatiquement le rôle de chaque fichier puis demande une confirmation groupée ; seuls les cas ambigus sont traités individuellement.
+- La convention historique `image1_revit.jpg`, `image2_site.jpg`, etc. est acceptée mais n'est plus obligatoire. Le nom de fichier est un indice, jamais une autorité.
+- Le format, la taille, l'intégrité, la résolution et la lisibilité minimale sont contrôlés avant la collecte. La vue doit montrer suffisamment le bâtiment, notamment sa toiture et ses ouvertures.
+- Les fichiers sont stockés en privé et identifiés par des IDs internes.
+- Les noms techniques sont nettoyés côté serveur et les informations sensibles sont signalées sans imposer un renommage manuel à l'utilisateur.
+
+### 9.2 Étape 2 — Contrôle initial
+
+L'application établit et enregistre le rôle de chaque source, la source autoritaire par domaine et par élément, la présence éventuelle d'informations confidentielles, la compatibilité caméra (`Compatible`, `Approximative`, `Incompatible` ou `Non évaluée`), les ambiguïtés et blocages ainsi que les zones initialement modifiables et verrouillées.
+
+Elle pré-analyse les matériaux et les détails visibles. Chaque proposition comporte sa provenance et un niveau de confiance. Les matériaux rares, inconnus, peu lisibles ou contradictoires restent explicitement à confirmer.
+
+Une photographie de matériau est reliée à l'élément qu'elle documente. Son autorité est limitée à la nature, la teinte, la texture, la finition, le relief et le calepinage visible de cet élément.
+
+Une source annotée est convertie en directives localisées de type `conserver`, `supprimer`, `remplacer`, `corriger` ou `verrouiller`. Si la cible ou l'action n'est pas certaine, l'utilisateur confirme avant la suite. Les marques graphiques ne sont jamais intégrées au résultat.
+
+Une incompatibilité majeure en usage administratif suspend le parcours et demande une nouvelle vue ou une calibration.
+
+### 9.3 Étape 3 — Collecte progressive
+
+La collecte couvre les huit groupes du tronc commun :
+
+1. type de projet, phase et usage ;
+2. mode de production et implantation ;
+3. éléments architecturaux intouchables ;
+4. matériaux existants conservés ou modifiés ;
+5. environnement à conserver, supprimer ou améliorer ;
+6. orientation ou ambiance lumineuse ;
+7. style de rendu ;
+8. personnages, véhicules et mobilier.
+
+ENG-004 détermine si chaque question est inchangée, réduite, convertie en confirmation, retirée ou complétée. Les règles de branchement sont appliquées par l'orchestrateur et non laissées à la seule initiative du LLM.
+
+Le parcours nominal commence par les sources et une description libre courte de deux ou trois lignes. L'application récapitule ce qu'elle a compris, propose les rôles et matériaux détectés, puis ne questionne que les informations indispensables inconnues, ambiguës, contradictoires ou soumises à validation obligatoire.
+
+Le type de projet est un champ ouvert avec suggestions ; il ne peut être limité à une liste fermée. La référence du dossier est générée automatiquement et peut être renommée sans bloquer le parcours.
+
+### 9.4 Étape 4 — Fiche projet
+
+La fiche affiche les données validées et provisoires, la hiérarchie des sources, le mode et le style, les zones modifiables et verrouillées, les matériaux et leurs références limitées, les directives issues d'annotations, les éléments intouchables, les suppressions et ajouts autorisés, les interdictions et les éventuelles réserves.
+
+Une action explicite d'Évariste est obligatoire pour passer à `PRÊT_À_GÉNÉRER`.
+
+### 9.5 Étape 5 — Génération
+
+- Une seule opération technique peut être active par dossier, mais une opération peut demander plusieurs variantes bornées d'une même vue.
+- Le backend construit la requête à partir du ProjectState confirmé et du package RIF versionné.
+- Le LLM ne peut pas appeler librement le moteur avec un prompt non validé par le backend.
+- Le polling se poursuit jusqu'à un état terminal : succès, échec ou timeout.
+- Le résultat est enregistré avant d'être présenté comme disponible.
+- Chaque variante reçoit son propre identifiant, coût, audit et lien vers la même révision immuable. Aucun essai précédent n'est injecté implicitement dans la requête.
+
+### 9.6 Après génération
+
+Le rendu entre obligatoirement dans l'état `CONTRÔLE_À_EXAMINER`. Il n'est jamais déclaré conforme sur la seule base de la réponse du moteur d'image.
+
+Le rapport compare le rendu aux sources sur le cadrage, la perspective, les volumes, les ouvertures, la toiture, l'implantation, le terrain, l'environnement, les matériaux, la lumière, les éléments secondaires et la confidentialité.
+
+Chaque critère reçoit l'état `Conforme`, `Réserve`, `Non conforme` ou `Non applicable`, conformément à LIB-002.
+
+Lorsque plusieurs variantes existent, l'interface permet de les comparer, de consulter leurs réserves et d'en sélectionner explicitement une comme résultat canonique. Une sélection ultérieure ne supprime pas l'historique.
+
+## 10. ProjectState — source de vérité opérationnelle
+
+Le ProjectState est un objet structuré distinct de la conversation. Chaque donnée significative contient, selon son type :
+
+- `value` : valeur courante ;
+- `status` : `provisional`, `validated`, `rejected` ou `unknown` ;
+- `source_id` : document, utilisateur ou règle à l'origine de la valeur ;
+- `authority` : domaine d'autorité applicable ;
+- `editable` et `locked` ;
+- `validated_by` et `validated_at` ;
+- `notes` : ambiguïté ou réserve éventuelle.
+
+Le ProjectState contient au minimum l'identité et l'usage du dossier, les sources et leurs rôles détectés et confirmés, la compatibilité caméra, le mode et le style, la géométrie décrite, l'implantation, la zone d'intervention, les matériaux par élément avec provenance et confiance, les références matériau limitées, les directives localisées, l'environnement à conserver, les opérations autorisées, la lumière, les zones verrouillées, les interdictions, les validations, les réserves et le résultat canonique éventuel.
+
+Le prompt final est toujours généré depuis une version immuable du ProjectState confirmé. Une modification ultérieure crée une nouvelle révision.
+
+## 11. Architecture technique cible
+
+```text
+Frontend
+  chat + dépôt de sources + fiche projet + écran de contrôle
+
+Backend applicatif
+  authentification + sessions + machine à états + règles de transition
+
+RIF Core / package d'implémentation versionné
+  collecte ENG-004 + modes + styles + prompt + corrections + contrôle
+
+LLM multimodal
+  dialogue + extraction structurée + analyse assistée des sources
+
+Services de production
+  génération fal.ai + stockage privé + contrôle + export
+
+Supabase
+  ProjectState + événements + générations + audits + coûts
+```
+
+Le LLM reçoit uniquement les outils autorisés pour l'état courant. Les préconditions sont revérifiées côté backend à chaque appel ; masquer un outil au modèle ne constitue pas à lui seul une protection suffisante.
+
+## 12. Stockage et transport des fichiers
+
+- Les sources et rendus sont stockés dans un bucket privé.
+- La base relationnelle ne contient que leurs identifiants et métadonnées.
+- Le backend résout les IDs internes en contenu ou en URL signée temporaire selon les contraintes du fournisseur.
+- Aucune URL publique permanente n'est utilisée.
+- Le base64 n'est utilisé que lorsqu'il est nécessaire et compatible avec les limites de taille ; il n'est pas une obligation générale.
+- Les liens de téléchargement sont temporaires ou soumis à authentification.
+- La perte de connexion n'autorise aucune génération locale ou implicite ; l'interface conserve l'état connu, signale le mode hors ligne et réconcilie l'opération au retour du réseau.
+- Une éventuelle copie Drive intervient après enregistrement du rendu canonique et ne constitue pas la source de vérité.
+
+## 13. Modèle de données minimal
+
+### 13.1 Table `dossiers`
+
+| Champ | Type | Description |
 |---|---|---|
-| `aspect_ratio` | `4:3` | Préserve le cadrage des exports Revit |
-| `resolution` | `2K` | Le 1K par défaut est insuffisant pour le détail des tuiles, façades et volets |
-| `seed` | `42` en génération | Stabilité pendant la phase de calibration |
-| `seed` | aléatoire en régénération | Sans quoi deux « nouvelles générations » produiraient une image identique |
+| `id` | uuid | Identifiant interne |
+| `owner_id` | uuid | Utilisateur autorisé |
+| `dossier_ref` | text | Référence générée automatiquement, modifiable et non bloquante |
+| `workflow_state` | text | État déterministe courant |
+| `project_state` | jsonb | État projet structuré courant |
+| `project_state_revision` | integer | Révision de l'état |
+| `framework_version` | text | Version du Framework utilisée |
+| `implementation_version` | text | Version du package RIF-App |
+| `created_at`, `updated_at` | timestamp | Horodatage |
 
-### 3.7 Point de vigilance à valider
+### 13.2 Table `files`
 
-Le bundle de correction transporte jusqu'à 4 images en base64, contre 2 aujourd'hui en génération. Le fonctionnement à 2 images est validé ; le comportement à 4 (taille de payload, limites n8n et fal.ai) doit être vérifié concrètement lors de l'implémentation, et non supposé.
-
----
-
-## 4. Modèle de données
-
-Projet Supabase unique, deux tables.
-
-### 4.1 Table `materiaux`
-
-Liste de valeurs alimentant les menus déroulants du formulaire, et file d'attente de calibration.
-
-```sql
-create table materiaux (
-  id uuid primary key default gen_random_uuid(),
-  terme text not null,
-  categorie text not null check (categorie in ('toiture','facade','volets','menuiseries','margelles','plage')),
-  fragment_prompt text,
-  statut text not null default 'a_calibrer' check (statut in ('a_calibrer','valide','archive')),
-  dossier_origine text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-```
-
-Règles :
-
-- Seules les lignes `statut = 'valide'` alimentent les menus déroulants et la construction du prompt.
-- `fragment_prompt` reste `null` tant que le statut est `a_calibrer`. Il est rédigé manuellement lors de la revue de calibration.
-- Une saisie libre de l'utilisateur crée une ligne `a_calibrer`. Elle n'est jamais utilisée telle quelle pour construire un prompt, et n'apparaît jamais dans un menu déroulant.
-- L'application n'écrit jamais `statut = 'valide'`. Ce passage est manuel.
-
-### 4.2 Table `dossiers`
-
-Historique des cycles. **Une ligne par cycle**, pas une ligne par dossier.
-
-```sql
-create table dossiers (
-  id uuid primary key default gen_random_uuid(),
-  reference text not null,
-  statut text not null default 'en_cours' check (statut in ('en_cours','valide')),
-  cycle_type text check (cycle_type in ('generation','correction','regeneration')),
-  note text,
-  image_url text,
-  prompt text not null,
-  payload jsonb not null,
-  created_at timestamptz not null default now()
-);
-```
-
-Règles :
-
-- Une ligne est écrite par n8n **à chaque cycle**, immédiatement après réception de l'image générée — pas au moment de la validation. Les cycles non validés doivent rester tracés.
-- `prompt` contient le texte du prompt envoyé, lisible directement.
-- `payload` contient l'intégralité du corps envoyé à fal.ai : prompt système, seed, aspect_ratio, resolution, références d'images. Objectif : pouvoir reconstituer exactement ce qui a produit une image donnée.
-- `note` contient l'annotation utilisateur pour les cycles de type `correction`.
-- L'historique d'un dossier se lit en filtrant sur `reference`, trié par `created_at`.
-- L'action `validate` met `statut = 'valide'` sur la ligne du cycle concerné.
-
-### 4.3 Archivage Google Drive
-
-Un dossier par référence. Y sont déposés :
-
-- les fichiers d'origine (vue de cadrage, vue complémentaire, photo du site) ;
-- chaque image produite, à chaque cycle.
-
-`image_url` dans `dossiers` pointe vers le fichier Drive correspondant.
-
----
-
-## 5. Formulaire — parcours en 7 étapes
-
-Progressif : une étape à la fois. Les étapes déjà atteintes restent accessibles en arrière. L'état du formulaire persiste tant que la session est ouverte — une erreur ou un rechargement ne doit pas obliger à tout ressaisir.
-
-### Étape 1 — Identification
-
-| Champ | Type | Valeurs |
+| Champ | Type | Description |
 |---|---|---|
-| Type de projet | choix unique, obligatoire | Piscine, Extension, Restructuration, Terrasse, Pool house |
-| Usage du rendu | choix unique | Permis de construire, Présentation client, Les deux |
+| `id` | uuid | Identifiant interne |
+| `dossier_id` | uuid | Dossier propriétaire |
+| `role_detected`, `role_confirmed` | text | Rôle proposé puis rôle validé parmi les rôles pris en charge |
+| `original_name`, `safe_name` | text | Nom reçu et nom technique nettoyé |
+| `storage_key` | text | Référence privée de stockage |
+| `mime_type`, `size_bytes`, `checksum` | divers | Contrôle d'intégrité |
+| `created_at` | timestamp | Horodatage |
 
-Le type de projet conditionne l'affichage des champs des étapes suivantes. Il est obligatoire pour passer à l'étape 2.
+### 13.3 Table `generations`
 
-### Étape 2 — Documents
-
-| Champ | Type | Obligatoire |
+| Champ | Type | Description |
 |---|---|---|
-| Type de cadrage | Perspective / Axonométrie | oui |
-| Vue de cadrage | fichier image | oui |
-| Vue complémentaire | fichier image | non |
-| Photo réelle du site | fichier image | non |
+| `id` | uuid | Identifiant de l'opération |
+| `dossier_id` | uuid | Dossier concerné |
+| `type` | text | `initial`, `correction`, `restart_from_sources` |
+| `batch_id`, `variant_index` | divers | Groupe de variantes et position dans ce groupe |
+| `status` | text | `queued`, `running`, `succeeded`, `failed`, `timed_out` |
+| `project_state_revision` | integer | Révision immuable utilisée |
+| `prompt_text` | text | Prompt technique effectivement envoyé |
+| `source_file_ids` | jsonb | Sources effectivement utilisées |
+| `result_file_id` | uuid | Rendu canonique produit |
+| `is_canonical` | boolean | Sélection humaine comme résultat courant |
+| `provider_request_id` | text | Référence technique fournisseur |
+| `cost_actual` | numeric | Coût réel de l'opération |
+| `started_at`, `completed_at` | timestamp | Horodatage |
 
-Règles :
+### 13.4 Table `quality_audits`
 
-- La **vue de cadrage** est la référence géométrique principale. Sans elle, la génération est impossible.
-- La **vue complémentaire** est l'autre type de vue (axonométrie si le cadrage est une perspective, et inversement). Elle sert de référence de volume additionnelle.
-- La **photo du site** est la référence de l'environnement réel : terrain, relief, accès, voisinage, végétation.
-- Si le cadrage est une **perspective**, la photo peut servir de calque d'intégration aligné.
-- Si le cadrage est une **axonométrie**, la photo ne sert que de référence d'ambiance et de matériaux : aucun alignement n'est possible avec une vue axonométrique. L'interface doit l'indiquer.
+Elle conserve le rapport par critère, le verdict proposé, la validation humaine, les réserves et la version de la checklist utilisée.
 
-### Étape 3 — Matériaux
+### 13.5 Table `events`
 
-Menus déroulants alimentés par `get_materiaux` (statut `valide` uniquement), affichés selon le type de projet.
+Journal append-only des transitions importantes, erreurs, confirmations et actions humaines. L'historique de conversation peut être stocké séparément, mais il ne remplace pas ce journal.
 
-| Champ | Affiché pour |
+### 13.6 Directives localisées et références matériau
+
+Elles peuvent être conservées dans le `project_state` ou dans des tables dédiées si la Phase 0 l'exige. Dans les deux cas, elles stockent la source, la cible, la zone ou le masque, l'action, la consigne, le statut de confirmation et le périmètre d'autorité.
+
+## 14. Contrats des opérations techniques
+
+### 14.1 `genererRenduFlux`
+
+Entrées minimales : `dossierId`, révision confirmée du ProjectState, IDs des sources autorisées, prompt construit par RIF Core, mode, style, nombre de variantes borné et version du package d'implémentation.
+
+L'opération est refusée si le dossier n'est pas dans l'état `PRÊT_À_GÉNÉRER`.
+
+### 14.2 `corrigerRenduFlux`
+
+Entrées minimales : rendu de base, sources nécessaires, correction ciblée, zones modifiables et verrouillées, éléments déjà validés et critères de non-régression.
+
+L'opération est réservée aux corrections localisées pour lesquelles le rendu existant reste une base fiable.
+
+### 14.3 `reprendreDepuisSources`
+
+Cette opération distincte est utilisée lorsque la géométrie ou la caméra a dérivé, l'environnement verrouillé a été altéré, plusieurs corrections ont accumulé des régressions ou le dernier rendu n'est plus une base fiable.
+
+Elle repart des sources originales et d'une nouvelle révision confirmée du ProjectState. Elle ne doit pas être présentée comme une correction locale.
+
+Les schémas techniques définitifs seront validés en Phase 0. L'ancien schéma OpenAPI de l'Action ChatGPT constitue une référence historique, pas une dépendance.
+
+## 15. Contrôle qualité et validation humaine
+
+### 15.1 Séparation des responsabilités
+
+Le contrôle qualité est exécuté dans une étape, un contexte et un enregistrement distincts de la génération. Il peut utiliser un modèle multimodal, des comparaisons assistées ou des contrôles déterministes, mais aucun verdict automatique ne remplace la validation d'Évariste pour un usage administratif.
+
+### 15.2 Jeu de tests de référence
+
+Le jeu de tests contient les cas LIB-003 applicables, des rendus conformes annotés, des rendus volontairement altérés, des défauts éliminatoires connus et le verdict humain attendu pour chaque critère.
+
+La Phase 0 mesure séparément la détection des défauts critiques, les faux verdicts `Conforme`, les réserves correctement remontées et la cohérence entre exécutions répétées.
+
+### 15.3 Garde-fou d'export
+
+Avant tout export administratif, l'interface affiche le rapport complet et exige une action volontaire d'Évariste. Un rendu `Non conforme`, `SUSPENDU` ou non contrôlé ne peut pas être exporté comme rendu administratif.
+
+Aucun rendu n'est marqué `utilisé`, `validé` ou `conforme` automatiquement.
+
+## 16. Corrections et non-régression
+
+- Une correction modifie uniquement l'élément explicitement demandé.
+- Les éléments déjà validés restent verrouillés.
+- Un audit de non-régression est exécuté après chaque correction.
+- Une annotation de correction est convertie en directive localisée ; cercle, flèche, surlignage et texte ne doivent jamais subsister dans la sortie.
+- Une correction locale échoue proprement si elle exige de modifier une source autoritaire ou une zone verrouillée.
+- Lorsque la base n'est plus fiable, le système propose `reprendreDepuisSources`.
+- L'historique conserve le lien entre rendu initial, corrections successives et éventuel redémarrage.
+
+Cette distinction résout l'apparente contradiction entre « ne jamais régénérer globalement lors d'une correction » et « repartir des sources lorsque le rendu a dérivé ».
+
+## 17. Sécurité et confidentialité
+
+- Authentification individuelle obligatoire avant tout dossier réel, même avec un seul utilisateur.
+- Sessions sécurisées et révocables.
+- Row Level Security activée et testée sur toutes les tables exposées côté client.
+- Autorisations vérifiées côté backend pour chaque dossier et fichier.
+- Clés LLM, fal.ai, stockage et Drive conservées exclusivement côté serveur dans des secrets d'environnement.
+- Aucun secret dans le frontend, le prompt, les logs accessibles à l'utilisateur ou le dépôt Git.
+- Buckets privés et liens temporaires.
+- Détection des noms, adresses, cartouches et références sensibles avant envoi à un fournisseur externe.
+- Politique de rétention et procédure de suppression documentées avant la Phase 1.
+- Conditions des fournisseurs concernant conservation, sous-traitance et entraînement vérifiées avant tout dossier réel.
+
+## 18. Journalisation, erreurs et reprise
+
+### 18.1 Journalisation transactionnelle
+
+Une ligne `generations` est créée avant l'appel fournisseur avec le statut `queued`, puis passe à `running` et à un état terminal. Ainsi, une panne après l'appel ne crée jamais de rendu orphelin ou d'opération invisible.
+
+Les écritures secondaires non critiques peuvent être différées, mais l'identité de l'opération et son statut ne le sont jamais.
+
+### 18.2 Messages d'erreur
+
+- L'erreur technique brute est conservée dans les logs internes avec un identifiant de corrélation.
+- Évariste reçoit un message clair et exploitable, sans secret, trace interne ou détail fournisseur sensible.
+- Le système ne devine jamais un résultat lorsque le fournisseur échoue.
+- Une relance crée une nouvelle tentative traçable et ne réutilise pas aveuglément une requête dont l'état est inconnu.
+
+### 18.3 Cas limites
+
+- Message d'attente visible après 15 secondes.
+- Timeout explicite après 3 minutes, sous réserve d'ajustement mesuré en Phase 0.
+- Reprise du polling si la page est rafraîchie pendant une génération.
+- Réconciliation avec le statut fournisseur avant toute relance après perte de connexion.
+- Upload invalide refusé avant la collecte.
+- Caméra incompatible affichée comme état bloquant dans l'interface.
+- Panne LLM affichée sans bascule silencieuse vers un autre modèle.
+
+## 19. Exigences non fonctionnelles
+
+- **Performance conversationnelle :** première réponse utile visée sous 5 secondes hors analyse lourde des images.
+- **Génération :** objectif sous 90 secondes en fonctionnement normal, mesure réelle en Phase 0.
+- **Résilience :** rafraîchir ou fermer le navigateur ne perd ni le dossier ni une génération en cours.
+- **Compatibilité :** Chrome, Edge et Safari récents sur ordinateur ; mobile hors exigence V1.
+- **Accessibilité minimale :** états, erreurs et actions compréhensibles sans dépendre uniquement d'une couleur.
+- **Observabilité :** erreurs d'API, timeouts, transitions refusées et coûts consultables par Alpha_no_code.
+- **Disponibilité :** aucun SLA 24/7 en V1 ; supervision active pendant les heures d'usage convenues.
+- **Connectivité :** service connecté uniquement ; perte réseau explicite, reprise et réconciliation obligatoires.
+
+## 20. Coûts et viabilité économique
+
+Les mesures sont réalisées par opération et agrégées par dossier : tokens et analyse multimodale du LLM, deux à trois variantes usuelles par perspective, corrections, reprises depuis les sources, stockage, transfert, services annexes et temps moyen de contrôle et de support Alpha_no_code.
+
+Le modèle commercial évoqué en réunion comprend 1 500 € de frais d'installation, payés à 50 % au démarrage et 50 % à l'approbation finale, puis 60 €/mois après une période de calibration de deux mois incluse, sans engagement fixe. Le contrat signé reste l'autorité en cas d'écart avec ce PRD.
+
+La décision économique ne repose pas uniquement sur le coût d'un appel d'image. Le coût complet observé est confronté au tarif de 60 €/mois avant la bascule complète.
+
+## 21. Supervision et gouvernance
+
+- Chaque erreur critique produit une alerte exploitable par Alpha_no_code.
+- Le solde de crédits fal.ai fait l'objet d'une alerte automatique sous un seuil défini ; il n'est plus vérifié uniquement par une recharge manuelle mensuelle sans supervision.
+- Chaque génération est rattachée aux versions exactes du Framework, du package, du prompt et des modèles.
+- Une mise à jour du Framework n'est jamais appliquée automatiquement à des dossiers en cours.
+- Toute version de l'application possède un changelog et un jeu de tests de non-régression.
+- Une mise à jour du LLM ou du moteur d'image déclenche les tests applicables avant mise en production.
+- Les décisions structurantes de cette application sont documentées sans modifier rétroactivement les règles gelées du Framework.
+- Le statut d'abonnement ChatGPT d'Évariste (gratuit ou payant) n'est pas une dépendance de ce PRD : ni RIF-App, ni son filet de sécurité de Phase 1 ne reposent sur une Action de Custom GPT. L'accès au modèle conversationnel et à la génération d'image passe uniquement par des appels API directs, hors du compte personnel ChatGPT d'Évariste. La limitation constatée le 04.08.2026 (comptes gratuits sans accès aux Actions) reste une cause racine historique documentée pour GPT RIF, sans effet sur l'architecture cible.
+
+## 22. Critères d'acceptation V1
+
+- [ ] 20 opérations consécutives sans échec silencieux.
+- [ ] Toutes les transitions interdites du parcours sont effectivement bloquées côté backend.
+- [ ] Une génération est impossible sans ProjectState confirmé.
+- [ ] 100 % des défauts éliminatoires du jeu de test annoté sont détectés avant export administratif.
+- [ ] Aucun rendu non contrôlé ou Non conforme ne peut être exporté comme administratif.
+- [ ] Correction locale et reprise depuis les sources sont deux opérations distinctes et testées.
+- [ ] Reprise de session et reprise du polling fonctionnelles après rafraîchissement.
+- [ ] Dépôt groupé, détection des rôles et confirmation des ambiguïtés fonctionnels sans convention de nommage obligatoire.
+- [ ] Pré-analyse des matériaux traçable et confirmable ; aucune valeur à faible confiance n'est imposée.
+- [ ] Les directives annotées sont correctement appliquées et aucune marque n'apparaît dans le rendu.
+- [ ] Une référence matériau ne modifie ni géométrie, ni caméra, ni environnement.
+- [ ] Trois variantes peuvent être comparées et une seule sélectionnée comme canonique sans perte d'historique.
+- [ ] Les tests croisés démontrent l'isolation entre dossiers et tentatives.
+- [ ] Toutes les générations sont traçables de bout en bout.
+- [ ] RLS et contrôles d'accès passent des tests positifs et négatifs.
+- [ ] Coût complet par dossier mesuré et documenté.
+- [ ] Évariste juge l'expérience au moins équivalente à GPT RIF.
+
+## 23. Plan de déploiement
+
+### Phase 0A — Décisions et socle architectural
+
+- [ ] Formaliser l'application comme implémentation du RIF, et non comme remplacement du Framework.
+- [ ] Définir et valider le schéma du ProjectState.
+- [ ] Définir la machine à états et ses préconditions.
+- [ ] Constituer le package d'implémentation RIF versionné.
+- [ ] Définir les contrats de génération, correction, reprise et contrôle.
+- [ ] Choisir l'hébergement, le stockage privé, l'authentification et la stratégie RLS.
+- [ ] Décider si fal.ai est appelé directement ou derrière un service contrôlé par Alpha_no_code.
+
+**Critère de sortie :** architecture approuvée, décisions enregistrées, aucun point de sécurité bloquant laissé implicite.
+
+### Phase 0B — Validation technique
+
+- [ ] Brancher le véritable endpoint fal.ai avec polling complet.
+- [ ] Réaliser au moins 5 dossiers techniques de bout en bout.
+- [ ] Exécuter les cas de défauts réels : mur inventé, ouverture déplacée, annexe surdimensionnée, sous-face non texturée, bord de terrasse blanc, calepinage décalé, margelles erronées, équipement inventé, annotation conservée et soleil impossible.
+- [ ] Vérifier la reprise après rafraîchissement et perte de connexion.
+- [ ] Valider le stockage privé et les liens temporaires.
+- [ ] Tester l'authentification, les autorisations et la RLS.
+- [ ] Mesurer les coûts réels.
+- [ ] Auditer manuellement les rendus contre les sources.
+- [ ] Exécuter le jeu de défauts connus.
+- [ ] Vérifier qu'aucun secret n'est exposé.
+- [ ] Documenter le devenir des éléments réutilisables du prototype déterministe antérieur.
+
+**Critère de sortie :** aucun échec silencieux, opérations traçables, blocages actifs, défauts critiques du jeu de test détectés et coût connu.
+
+### Phase 1 — Coexistence encadrée
+
+- Évariste utilise RIF-App sur des dossiers réels pendant une calibration pouvant aller jusqu'à deux mois, avec un premier jalon à 3 semaines ou 10 dossiers, au premier seuil atteint.
+- GPT RIF reste disponible comme filet de sécurité.
+- Alpha_no_code vérifie chaque rendu avant livraison à Évariste.
+- Les écarts, coûts, corrections et retours d'usage sont consignés.
+
+**Critère de sortie :** 10 dossiers consécutifs sans défaut éliminatoire non détecté, aucune régression majeure d'usage et viabilité économique confirmée.
+
+### Phase 2 — Bascule opérationnelle
+
+- RIF-App devient l'implémentation principale.
+- GPT RIF est conservé temporairement comme secours passif ou archivé selon la décision de fin de Phase 1.
+- Le support SLA 24 h est maintenu selon les conditions contractuelles validées.
+
+## 24. Risques principaux
+
+| Risque | Réponse produit |
 |---|---|
-| Toiture | tous sauf Piscine seule et Terrasse |
-| Façade | tous sauf Piscine seule et Terrasse |
-| Volets | tous sauf Piscine seule et Terrasse |
-| Menuiseries | tous sauf Piscine seule et Terrasse |
-| Margelles | Piscine, Pool house |
-| Plage de piscine | Piscine, Pool house |
+| Sortir de ChatGPT sans améliorer la fiabilité réelle | Mesures de Phase 0, machine à états et journalisation transactionnelle |
+| LLM qui saute une règle | Préconditions imposées par le backend |
+| Conversation et fiche projet divergentes | ProjectState autoritaire et révisions immuables |
+| Contrôle qualité trop confiant | Étape distincte, jeu annoté et validation humaine |
+| Dérive après corrections successives | Audit de non-régression et reprise depuis les sources |
+| Fuite de données ou de secrets | Auth, RLS, buckets privés, secrets serveur et messages nettoyés |
+| Coût incompatible avec 60 €/mois | Mesure du coût complet, variantes incluses, avant Phase 1 |
+| Contamination entre essais ou dossiers | Contexte reconstruit depuis une révision immuable et tests croisés d'isolation |
+| Référence matériau qui déforme le projet | Autorité limitée à l'apparence de l'élément explicitement ciblé |
+| Annotation reproduite dans le rendu | Conversion en directive structurée et contrôle éliminatoire |
+| Dépendance à un fournisseur | Versions enregistrées et aucune bascule silencieuse |
 
-**Margelles et plage sont deux champs distincts.** Ce sont deux matériaux différents dans la pratique, ils ne doivent pas être fusionnés.
+Le risque professionnel le plus grave reste un écart géométrique ou environnemental non détecté dans un rendu destiné à une procédure administrative. Aucun choix d'interface ou de modèle ne supprime ce risque ; les blocages, le contrôle et la validation humaine doivent le réduire et le rendre visible.
 
-Chaque champ propose en complément une saisie libre « Autre texture ». Comportement obligatoire :
+## 25. Non-objectifs
 
-- La valeur saisie est envoyée en création de ligne `materiaux` avec `statut = 'a_calibrer'` et `dossier_origine` renseigné.
-- Elle est affichée distinctement dans l'interface comme non calibrée.
-- Elle n'apparaît jamais dans le menu déroulant tant qu'elle n'est pas passée à `valide` manuellement.
+- Remplacer le jugement professionnel d'Évariste.
+- Certifier automatiquement la conformité architecturale ou réglementaire.
+- Modifier le Framework directement depuis l'application.
+- Masquer une erreur technique derrière un résultat approximatif.
+- Transformer l'expérience en formulaire visible et rigide.
+- Traiter plusieurs dossiers ou plusieurs vues en lot dans la V1.
 
-### Étape 4 — Environnement
+## 26. Décisions à formaliser avant la Phase 0B
 
-| Champ | Type |
-|---|---|
-| Conserver la végétation existante | interrupteur, activé par défaut |
-| Éléments à retirer | texte court |
-| Ciel | Dégagé / Légèrement voilé / Neutre |
+Les identifiants définitifs sont attribués dans le registre officiel des ADR. Les décisions candidates sont :
 
-### Étape 5 — Style de rendu
+1. création de RIF-App comme nouvelle implémentation officielle du Framework ;
+2. adoption d'un orchestrateur déterministe et du ProjectState comme source de vérité opérationnelle ;
+3. séparation entre génération, contrôle qualité et validation humaine ;
+4. distinction entre correction locale et reprise depuis les sources ;
+5. choix du stockage, du transport sécurisé des images et de la rétention ;
+6. choix du LLM multimodal et de l'endpoint exact du moteur d'image ;
+7. appel direct à fal.ai ou passage par un service intermédiaire Alpha_no_code ;
+8. stratégie économique si le coût complet observé est incompatible avec 60 €/mois ;
+9. limite maximale de variantes incluses par dossier ou par perspective ;
+10. format technique des masques et directives localisées ;
+11. modalités contractuelles finales, le contrat signé restant autoritaire.
 
-Choix unique parmi cinq valeurs. Le style agit sur la lumière et la présentation, jamais sur l'architecture.
+## 27. Annexes et dépendances
 
-| Style | Usage |
-|---|---|
-| Administratif simple | Déclaration préalable, étude interne |
-| Administratif soigné | Permis de construire — valeur par défaut |
-| Présentation client | Réunion, avant-projet |
-| Concours ou communication | Communication institutionnelle |
-| Photomontage administratif | Insertion sur photo réelle |
-
-Règles conditionnelles :
-
-- **Photomontage administratif est indisponible dès que le cadrage est une axonométrie**, quel que soit le moment où ce choix est fait. Si l'utilisateur sélectionne ce style puis revient changer le cadrage, le style doit basculer automatiquement sur Administratif soigné.
-- Usage « Présentation client » pré-sélectionne le style Présentation client ; les autres usages pré-sélectionnent Administratif soigné. Cette pré-sélection est écrasée dès que l'utilisateur choisit un style manuellement.
-
-### Étape 6 — Précisions libres
-
-Champ texte libre. Récapitulatif des matériaux non calibrés introduits à l'étape 3, s'il y en a.
-
-### Étape 7 — Fiche projet
-
-Récapitulatif de tous les choix, chacun avec un accès direct à l'étape correspondante pour modification. Bouton de lancement de la génération.
-
----
-
-## 6. Construction du prompt
-
-**Assemblage déterministe.** Aucun modèle de langage n'intervient dans la rédaction du prompt. Il s'agit d'une concaténation par gabarit, pas d'une décision.
-
-Composition :
-
-1. Le prompt système fixe, stocké côté n8n (node Set). Il porte notamment la contrainte de non-modification de la géométrie et le mandat de photoréalisme.
-2. Les fragments `fragment_prompt` des matériaux sélectionnés, tirés de `materiaux`.
-3. Les valeurs d'environnement, de ciel et de style.
-4. Le texte libre de l'étape 6.
-
-### 6.1 Règles de rédaction héritées de la calibration
-
-Ces règles proviennent de comportements observés et corrigés. Elles doivent être respectées.
-
-- **Ne jamais employer de vocabulaire de vieillissement ou de patine** pour les façades et les surfaces peintes : ces termes provoquent une dégradation excessive quel que soit le qualificatif employé. Ce vocabulaire reste acceptable pour la pierre.
-- **Toute mention de variation naturelle de couleur pour la végétation doit être bornée**, sans quoi le résultat produit un aspect irrégulier et maladif.
-- **Un seul bloc de style par appel.** Deux blocs de style contradictoires dans le même appel produisent des ambiances incohérentes d'une génération à l'autre.
-- **Les zones vides des vues Revit** doivent être comblées par le contenu réel issu de la photo du site. Ni laissées vides, ni remplies par du contenu inventé. Un ciel seul est acceptable quand aucun contexte environnant n'est visible.
-- **Aucune invention.** Un matériau inconnu n'est pas interprété : il est signalé ou laissé non spéculatif. Aucune ouverture, aucun volume, aucun élément secondaire n'est ajouté, supprimé ou déplacé.
-- La tension entre l'exigence de photoréalisme et l'interdiction d'inventer est un point de défaillance connu : elle doit être traitée explicitement dans le prompt, pas laissée implicite.
-
-### 6.2 Rôles des images en génération
-
-Deux rôles distincts, identifiés par le contenu visuel et non par l'ordre d'envoi :
-
-- **Vue de cadrage** : gouverne la géométrie.
-- **Photo du site** : gouverne l'environnement.
-
-Interdiction explicite de tirer les matériaux de la photo du site : les matériaux validés du projet priment sur ce que montre la photo.
+- `rif_chat_prototype.jsx` — prototype conversationnel de référence ;
+- `premortem-report-20260902-1403.html` — rapport prémortem ;
+- `premortem-transcript-20260902-1403.md` — transcription du prémortem ;
+- ENG-004 — `02B_COLLECTE_CONDITIONNELLE.md` ;
+- ENG-002 — `02A_PROMPT_SYSTEME.md` ;
+- ENG-003 — `03_PROMPTS_CORRECTIONS.md` ;
+- LIB-001 — `04_MATERIAUX.md` ;
+- LIB-002 — `05_CHECKLIST_CONTROLE.md` ;
+- LIB-003 — `06_CAS_DE_TEST.md` ;
+- LIB-005 — `04A_STYLES_DE_RENDU.md` ;
+- LIB-006 — `04B_MODES_DE_PRODUCTION.md` ;
+- registre officiel des ADR du Framework.
+- comptes rendus et transcriptions des réunions des 17.07, 04.08 et 12.08.2026.
 
 ---
 
-## 7. Boucle post-génération
+## Historique
 
-Après affichage du rendu, **trois issues possibles**, pas deux.
-
-### 7.1 Valider
-
-Acte explicite, pas une simple fermeture d'écran. Passe `statut = 'valide'` sur la ligne du cycle courant.
-
-L'enregistrement conservé doit permettre de retrouver : la version validée, la vue de cadrage de référence, la photo utilisée, les informations du projet, la date, le prompt et le payload complet.
-
-### 7.2 Corriger
-
-Active le mode annotation sur l'image affichée.
-
-L'utilisateur entoure une zone et saisit une note courte. Une correction ne peut pas être envoyée sans **au moins une zone annotée et une note**. Une demande de correction sans cible précise doit être refusée par l'interface.
-
-La note doit couvrir : l'élément concerné, le défaut constaté, le résultat attendu.
-
-**Bundle envoyé au moteur** — jusqu'à 4 images, chacune avec un rôle distinct explicitement assigné dans le prompt :
-
-| Image | Rôle |
-|---|---|
-| Rendu à corriger | Base à éditer |
-| Photo du site | Référence environnement et lumière |
-| Vue complémentaire (axonométrie) | Référence de volume |
-| Extrait de la zone annotée | Localisation précise du défaut |
-
-Si la vue complémentaire n'a pas été fournie, le bundle tombe à 3 images.
-
-**Point de vigilance obligatoire.** Le système à 2 images fonctionne parce qu'il n'y a que 2 rôles à distinguer. À 4 images, l'attribution des rôles devient plus fragile : le risque est que le moteur interprète l'extrait annoté comme une nouvelle géométrie à suivre plutôt que comme une zone à examiner. Les 4 rôles doivent être assignés explicitement dans le prompt, et ce comportement doit être testé sur un cas réel avant d'être considéré comme fiable.
-
-Le prompt de correction doit également :
-
-- rappeler explicitement la contrainte de non-modification de la géométrie ;
-- lister les éléments à préserver ;
-- ne modifier que ce qui est explicitement demandé.
-
-### 7.3 Nouvelle génération
-
-Relance le cycle complet depuis les données du formulaire, **avec un seed différent**. Ne repasse pas par la saisie du formulaire.
-
-À recommander lorsque le cadrage est faux, que plusieurs volumes sont incorrects, que la perspective est déformée, ou que les corrections successives ont dégradé l'image.
-
-### 7.4 Contrôle après correction
-
-Le moteur ne garantit pas que la modification reste confinée à la zone annotée. Le contrôle après correction est donc le mécanisme qui tient la promesse de non-modification de la géométrie. Il est **obligatoire et non contournable**.
-
-L'interface doit afficher **le nouveau résultat à côté de la dernière version validée**, pour permettre la comparaison. Le contrôle porte sur :
-
-1. la zone modifiée ;
-2. les éléments qui devaient être préservés ;
-3. la comparaison avec la version précédente ;
-4. la comparaison avec les références d'origine.
-
-La décision finale reste humaine dans tous les cas. Aucun rendu n'est déclaré final sans validation explicite.
-
----
-
-## 8. Sécurité et accès
-
-- Accès protégé par un mot de passe unique partagé. Pas de comptes, pas de rôles, pas d'inscription.
-- Implémentation au choix : protection native de la plateforme d'hébergement, ou vérification légère côté n8n posant un cookie.
-- Aucune clé d'API dans le code front, dans le dépôt, ou dans les variables exposées au navigateur.
-- L'URL du webhook n8n est fournie par variable d'environnement.
-
----
-
-## 9. Critères d'acceptation
-
-### Formulaire
-
-- [ ] Le type de projet est obligatoire avant l'étape 2.
-- [ ] Les champs Margelles et Plage n'apparaissent que pour Piscine et Pool house, et restent deux champs distincts.
-- [ ] Les menus déroulants ne contiennent que des matériaux de statut `valide`.
-- [ ] Une saisie libre crée une ligne `a_calibrer`, est visuellement distinguée, et n'entre jamais dans un menu déroulant ni dans un prompt.
-- [ ] Le style Photomontage administratif devient indisponible dès que le cadrage passe en axonométrie, y compris si le style avait été choisi avant.
-- [ ] Un retour en arrière ne perd aucune donnée saisie.
-
-### Génération
-
-- [ ] Aucune génération n'est possible sans vue de cadrage.
-- [ ] `aspect_ratio: 4:3` et `resolution: 2K` sont présents dans le corps de la requête fal.ai, pas dans le texte du prompt.
-- [ ] Le polling est effectué côté n8n ; le front reçoit une réponse unique contenant l'image.
-- [ ] Une ligne `dossiers` est créée à chaque cycle, y compris non validé, avec `prompt` et `payload` renseignés.
-
-### Boucle post-génération
-
-- [ ] Les trois actions Valider, Corriger et Nouvelle génération sont proposées après chaque génération.
-- [ ] Une correction sans zone annotée ou sans note est refusée.
-- [ ] Une nouvelle génération utilise un seed différent du cycle précédent.
-- [ ] Le résultat d'une correction est affiché à côté de la version précédente.
-- [ ] La validation passe la ligne du cycle concerné à `statut = 'valide'`.
-
-### Sécurité
-
-- [ ] Aucune clé fal.ai, Supabase ou Drive n'est présente côté front.
-- [ ] Le front n'appelle aucun service externe autre que le webhook n8n.
-- [ ] L'application est inaccessible sans le mot de passe.
-
-### Conformité au cadre
-
-- [ ] Aucune terminologie interne (RIF, codes ADR/TEST/BLG, noms de modules documentaires) n'apparaît dans l'interface ni dans un texte visible par l'utilisateur.
-- [ ] L'application n'écrit jamais `statut = 'valide'` dans `materiaux`.
-
----
-
-## 10. Ordre d'implémentation
-
-1. Schéma Supabase, deux tables, données de départ dans `materiaux`
-2. Webhook n8n unique avec routage `action`, et `get_materiaux`
-3. Formulaire 7 étapes, alimenté par `get_materiaux`
-4. `generate` : construction du prompt, appel fal.ai, écriture `dossiers`, dépôt Drive
-5. Écran post-génération avec les trois issues
-6. Mode annotation et `correct` — avec vérification du comportement à 4 images
-7. `regenerate` et `validate`
-8. Protection d'accès et déploiement
-
-Chaque étape doit être vérifiée sur un dossier réel avant de passer à la suivante.
-
----
-
-## 11. Points ouverts
-
-Ne pas traiter dans cette version. Consignés pour mémoire.
-
-- Comportement du moteur avec un bundle de 4 images en correction — à tester lors de l'étape 6.
-- Taille du payload base64 à 4 images — à mesurer.
-- Évaluation de l'inpainting par masque (FLUX Fill) comme alternative à la correction par annotation. Change de moteur, donc risque de rupture de cohérence visuelle avec le rendu d'origine : à ne pas intégrer sans comparaison côte à côte sur un cas réel.
-- Retrait de végétation existante : non résolu de façon fiable par le prompt seul.
+- **V1.0 — 02.09.2026 :** draft initial post-prémortem.
+- **V1.1 — 06.09.2026 :** clarification Framework/implémentation, ajout du ProjectState, orchestration déterministe, séparation du contrôle qualité, reprise depuis les sources, sécurité RLS, journalisation transactionnelle, transport privé des fichiers et critères d'acceptation renforcés.
+- **V1.2 — 06.09.2026 :** intégration des retours terrain : dépôt groupé, rôles étendus, pré-analyse matériau, annotations structurées, références matériau limitées, variantes comparables, isolation stricte, fonctionnement connecté explicite, tests de défauts réels et modèle commercial à 60 €/mois.
+- **V1.3 — 07.09.2026 :** ajout d'une alerte automatique de solde fal.ai en §21 ; clôture de la question du statut d'abonnement ChatGPT d'Évariste, sans effet sur l'architecture cible puisque ni RIF-App ni son filet de sécurité de Phase 1 ne dépendent d'une Action de Custom GPT.
