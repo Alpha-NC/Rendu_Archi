@@ -154,13 +154,28 @@ create policy "generations_supervision_lecture"
 -- 5. Quality audits — contrôle qualité distinct de la génération (PRD §13.4, §15)
 -- =========================================================================
 
+-- Vocabulaire de verdict aligné sur LIB-002 §6 (checklist officielle) et
+-- lib/rif/controle-qualite.ts — PAS un vocabulaire inventé indépendamment.
 create table if not exists quality_audits (
   id uuid primary key default gen_random_uuid(),
   generation_id uuid not null references generations (id) on delete cascade,
   checklist_version text not null,
   report jsonb not null default '[]'::jsonb,
-  verdict_proposed text check (verdict_proposed in ('conforme', 'non_conforme', 'reserve')),
-  verdict_human text check (verdict_human in ('conforme', 'non_conforme', 'reserve')),
+  verdict_proposed text check (
+    verdict_proposed in (
+      'validation', 'acceptable_avec_reserve', 'correction_ciblee',
+      'nouvelle_generation', 'production_suspendue'
+    )
+  ),
+  -- verdict_human est le SEUL champ consulté par le garde-fou d'export
+  -- (PRD §15.3) : voir autoriserExportAdministratif dans
+  -- lib/rif/controle-qualite.ts. verdict_proposed n'autorise jamais rien.
+  verdict_human text check (
+    verdict_human in (
+      'validation', 'acceptable_avec_reserve', 'correction_ciblee',
+      'nouvelle_generation', 'production_suspendue'
+    )
+  ),
   reserves text,
   validated_by uuid references auth.users (id),
   validated_at timestamptz,

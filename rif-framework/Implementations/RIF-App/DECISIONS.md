@@ -66,7 +66,7 @@ Le prémortem (`docs/premortem-20260902-transcript.md`, rapport : `docs/premorte
 |---|---|---|
 | 1 | Fiabilité de l'appel d'outil jamais confirmée | **Ouvert** — à traiter dans l'orchestrateur (aucune action ne doit partir d'un texte imitant un appel d'outil) puis mesurer en Phase 0B |
 | 2 | Polling fal.ai jamais validé de bout en bout | **Ouvert** — Phase 0B, première case du §23 |
-| 3 | Contrôle qualité visuel jamais éprouvé en réel | **Ouvert** — PRD §15 le cadre (étape distincte, jeu annoté, validation humaine) ; la mesure reste à faire |
+| 3 | Contrôle qualité visuel jamais éprouvé en réel | Cadré et outillé — `lib/rif/controle-qualite.ts` implémente la grille LIB-002 et le garde-fou d'export (§15.3) ; **reste ouvert** : la mesure réelle du taux de faux négatifs (Phase 0B) n'a pas encore de données |
 | 4 | Attente de parité stricte avec GPT RIF | Cadré — PRD §22, dernier critère d'acceptation ; profil client `PROFIL_EVARISTE.md` |
 | 5 | Aucune infrastructure de production réelle | **Traité** — auth individuelle + RLS (D-03), secrets serveur, journalisation transactionnelle (PRD §18.1) |
 | 6 | 60 €/mois jamais recalculé | Cadré — PRD §20 ; chiffrage LLM fait (`docs/decision-llm-multimodal.md`), coût fal.ai à mesurer en Phase 0B |
