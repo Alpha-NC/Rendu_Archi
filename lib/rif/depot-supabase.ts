@@ -120,18 +120,25 @@ export function creerDepotSupabase(
         throw new Error('Résolution des URLs signées impossible : fichiers introuvables.')
       }
 
-      const urls = await Promise.all(
-        data.map(async (fichier) => {
+      // `.in()` ne garantit AUCUN ordre de retour. Les appelants apparient
+      // les URLs par index avec leur liste d'entrée (rôle de chaque source,
+      // ordre des images envoyées au moteur) : mapper sur `data` étiquetterait
+      // la vue Revit comme photo de site. On réordonne sur fileIds.
+      const clesParId = new Map(data.map((f) => [f.id as string, f.storage_key as string]))
+
+      return await Promise.all(
+        fileIds.map(async (fileId) => {
+          const storageKey = clesParId.get(fileId)
+          if (!storageKey) throw new Error(`Fichier ${fileId} introuvable.`)
           const { data: signee, error: erreurSignature } = await client.storage
             .from(bucket)
-            .createSignedUrl(fichier.storage_key, URL_SIGNEE_DUREE_SECONDES)
+            .createSignedUrl(storageKey, URL_SIGNEE_DUREE_SECONDES)
           if (erreurSignature || !signee) {
-            throw new Error(`Impossible de signer l'URL du fichier ${fichier.id}.`)
+            throw new Error(`Impossible de signer l'URL du fichier ${fileId}.`)
           }
           return signee.signedUrl
         }),
       )
-      return urls
     },
 
     async creerGeneration(params: ParametresNouvelleGeneration) {

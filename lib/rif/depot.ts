@@ -84,6 +84,11 @@ export interface DepotDossiers {
   /**
    * Résout des IDs de fichiers internes en URLs signées temporaires
    * (PRD §12 : « Aucune URL publique permanente n'est utilisée »).
+   *
+   * CONTRAT : le tableau retourné suit l'ordre de `fileIds`, index par
+   * index. Les appelants apparient par position (rôle de chaque source,
+   * ordre des images envoyées au moteur) — un retour désordonné
+   * étiquetterait les sources les unes pour les autres.
    */
   resolverUrlsSignees(fileIds: string[]): Promise<string[]>
 
