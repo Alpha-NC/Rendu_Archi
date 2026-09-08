@@ -110,3 +110,43 @@ describe('construirePromptCorrection (ENG-003)', () => {
     expect(promptCorrection).toMatch(/Ne pas reconstruire la scène entière/)
   })
 })
+
+describe('Contraintes & Libertés dans le prompt (PRD §9.5)', () => {
+  const etatAvecLibertes = {
+    ...etatPhotomontageAdministratif(),
+    contraintes_libertes: {
+      piscine: { geometry_policy: 'locked' as const, freedom_level: 'creative' as const },
+      eau: { appearance_policy: 'creative' as const, freedom_level: 'creative' as const },
+      transats: { presence_policy: 'add_authorized' as const, scope: 'zone piscine' },
+    },
+  }
+
+  it('inscrit les contraintes structurelles et les libertés accordées', () => {
+    const prompt = construirePromptGeneration(etatAvecLibertes)
+    expect(prompt).toMatch(/CONTRAINTES STRUCTURELLES/)
+    expect(prompt).toMatch(/piscine \/ geometry_policy : locked/)
+    expect(prompt).toMatch(/LIBERTÉS CRÉATIVES ACCORDÉES/)
+    expect(prompt).toMatch(/eau \/ appearance_policy : creative/)
+    expect(prompt).toMatch(/transats : add_authorized \(zone : zone piscine\)/)
+  })
+
+  it("dit explicitement qu'aucune liberté n'est accordée quand la matrice est vide (§7.3)", () => {
+    const prompt = construirePromptGeneration(etatPhotomontageAdministratif())
+    expect(prompt).toMatch(/Aucun embellissement, aucun changement de lumière et aucun ajout ne sont autorisés/)
+    expect(prompt).toMatch(/toutes les propriétés sont traitées comme verrouillées/)
+  })
+
+  it('rappelle que toute liberté non listée est refusée', () => {
+    const prompt = construirePromptGeneration(etatAvecLibertes)
+    expect(prompt).toMatch(/Toute liberté non listée ici est refusée/)
+  })
+
+  it('porte les mêmes contraintes dans le prompt de correction', () => {
+    const prompt = construirePromptCorrection(etatAvecLibertes, {
+      elementAModifier: 'Teinte de la façade',
+      resultatAttendu: 'Gris clair',
+    })
+    expect(prompt).toMatch(/CONTRAINTES STRUCTURELLES/)
+    expect(prompt).toMatch(/piscine \/ geometry_policy : locked/)
+  })
+})

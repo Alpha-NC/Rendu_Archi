@@ -107,6 +107,23 @@ Le schéma suit le PRD §10 et l'exemple `Exemples/PROJECT_STATE_EXEMPLE.json` :
 **Bornes :** le modèle ne peut proposer que `SOURCES_CONTROLEES`, `COLLECTE_EN_COURS`, `FICHE_A_CONFIRMER` et `SUSPENDU` (§9.2, blocage majeur). `PRET_A_GENERER` est explicitement exclu — §9.4 exige une action volontaire d'Évariste. Les états de production (`GENERATION_EN_COURS`, `CONTROLE_A_EXAMINER`, `VALIDE`, `A_CORRIGER`, `A_REPRENDRE`, `ECHEC`) découlent des opérations et de l'audit qualité, jamais d'une proposition conversationnelle.
 **Exception mécanique :** `BROUILLON → SOURCES_REÇUES` se fait au dépôt de la première source, sans passer par le modèle — c'est un fait constaté (des sources sont arrivées), pas un jugement.
 
+## D-17 — Couche Contraintes & Libertés
+
+**Statut :** Accepted — 08.09.2026 (PRD V1.3 §9.4A, §24A).
+**Décision :** la matrice est portée par le ProjectState (`contraintes_libertes`, clé = élément) et gardée par `lib/rif/contraintes-libertes.ts`. Trois règles du PRD y sont implémentées littéralement :
+- §7.3 — « La liberté créative n'est jamais implicite » : une propriété absente de la matrice vaut `locked`, jamais libre. Le défaut est la fidélité.
+- §24A.4 — « la propriété la plus restrictive prévaut » : la politique effective est le minimum entre la politique déclarée et le `freedom_level` de l'élément.
+- §24A.1 — la géométrie d'un élément structurel (caméra, cadrage, perspective, silhouette, volumes, ouvertures, toiture, implantation, piscine, terrasse, annexe, environnement conservé) ne descend jamais sous `strict`, même si la matrice l'y autorise. Une demande d'embellissement ne peut donc pas desserrer une propriété structurelle.
+
+**Conséquence sur la génération :** `prompt-technique.ts` inscrit dans les deux prompts (génération et correction) les contraintes structurelles, les libertés réellement accordées et les présences autorisées, avec la mention explicite que toute liberté non listée est refusée — le moteur ne comble plus le silence par de l'invention.
+
+**Non fait :** le Generation Package structuré du §9.5 (objet portant prompt + sources + zones + directives + contraintes + libertés) n'existe pas encore comme structure ; les contraintes voyagent aujourd'hui dans le texte du prompt. À reprendre quand la matrice de capacités réelles de l'endpoint image (§23 Phase 0B) dira ce que le moteur sait consommer autrement que du texte.
+
+## D-18 — Divergence de nommage assumée avec le PRD V1.3
+
+**Statut :** Accepted — 08.09.2026.
+Le PRD V1.3 §14 nomme encore les opérations `genererRenduFlux` et `corrigerRenduFlux`. Le code utilise `genererRendu` et `corrigerRendu` depuis le commit `b2fecde`, sur demande explicite d'Alpha_no_code : le suffixe « Flux » prêtait à confusion avec le modèle Flux, qui n'est pas le moteur retenu (D-05 : `fal-ai/nano-banana-pro/edit`). La divergence est volontaire et connue ; à aligner dans une prochaine révision du PRD plutôt qu'à défaire dans le code.
+
 ## Décisions encore ouvertes (issues du PRD §26, non couvertes ci-dessus)
 
 - [ ] D-10 — limite maximale de variantes incluses par dossier ou par perspective.
@@ -127,3 +144,4 @@ En implémentant ENG-004 (`lib/rif/collecte-conditionnelle.ts`), ENG-004 lui-mê
 - 07.09.2026 — Orchestrateur conversationnel livré ; renommage genererRenduFlux/corrigerRenduFlux → genererRendu/corrigerRendu ; D-15 ajoutée (extraction structurée du ProjectState via un quatrième outil).
 - 07.09.2026 — Première interface (`app/dossiers/`) : liste et création de dossiers, dépôt de sources (rôle choisi par l'utilisateur, pas encore détecté automatiquement), chat connecté à l'orchestrateur conversationnel. Correction en cours de route : le dépôt d'une source n'inscrivait pas la source dans `project_state.sources`, rendant le dépôt invisible à la conversation comme à l'interface — corrigé dans `app/api/dossiers/[dossierId]/sources/route.ts`.
 - 08.09.2026 — D-16 ajoutée : `avancerParcours` débloque le parcours, qui ne sortait jamais de BROUILLON.
+- 08.09.2026 — PRD V1.3 adopté ; D-17 (Contraintes & Libertés) et D-18 (divergence de nommage) ajoutées.

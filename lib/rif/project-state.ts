@@ -74,6 +74,47 @@ export type ModeProduction = 'retexturation_revit' | 'photomontage_controle' | '
 /** LIB-005 — les trois styles de rendu actifs (V1.2 en a retiré deux). */
 export type StyleRendu = 'photomontage_administratif' | 'presentation_client' | 'commercial'
 
+/**
+ * Niveaux de la matrice Contraintes & Libertés (PRD §9.4A, §24A).
+ * Ordonnés du plus restrictif au plus permissif — cet ordre est la règle
+ * d'arbitrage du §24A.4 : « la propriété la plus restrictive prévaut ».
+ */
+export const NIVEAUX_POLITIQUE = ['locked', 'strict', 'controlled', 'creative'] as const
+export type NiveauPolitique = (typeof NIVEAUX_POLITIQUE)[number]
+
+/** PRD §9.4A : conservation, suppression ou ajout autorisé. */
+export type PolitiquePresence = 'conserve' | 'remove_authorized' | 'add_authorized'
+
+/**
+ * Politique d'un élément, propriété par propriété (PRD §4 principe 14 :
+ * « Une propriété est gouvernée indépendamment de l'objet qui la porte »).
+ * Exemple du §9.4A : une piscine peut avoir sa géométrie `locked`, son eau
+ * `creative` et son éclairage `controlled`.
+ */
+export interface PolitiqueElement {
+  geometry_policy?: NiveauPolitique
+  material_policy?: NiveauPolitique
+  lighting_policy?: NiveauPolitique
+  appearance_policy?: NiveauPolitique
+  presence_policy?: PolitiquePresence
+  /** Source faisant autorité pour la propriété concernée. */
+  source_authority?: string
+  freedom_level?: NiveauPolitique
+  /** Zone ou sous-partie concernée. */
+  scope?: string
+  authorized_by?: string
+  authorized_at?: string
+}
+
+/** Propriétés gouvernables par la matrice. */
+export const PROPRIETES_POLITIQUE = [
+  'geometry_policy',
+  'material_policy',
+  'lighting_policy',
+  'appearance_policy',
+] as const
+export type ProprietePolitique = (typeof PROPRIETES_POLITIQUE)[number]
+
 export type ActionDirective = 'preserve' | 'modify' | 'remove' | 'clarify'
 
 /**
@@ -112,6 +153,12 @@ export interface ProjectState {
   localized_directives: DirectiveLocalisee[]
   /** Environnement à conserver, en plus des zones verrouillées. */
   environnement_a_conserver?: string[]
+  /**
+   * Matrice Contraintes & Libertés par élément (PRD §9.4A, §10).
+   * Absente = aucune liberté accordée : le défaut est la fidélité stricte
+   * (§7.3 : « La liberté créative n'est jamais implicite »).
+   */
+  contraintes_libertes?: Record<string, PolitiqueElement>
   /** Opérations autorisées dans l'état courant (préconditions backend). */
   operations_autorisees?: Array<'genererRendu' | 'corrigerRendu' | 'reprendreDepuisSources'>
   lumiere?: ValeurTracee<string>

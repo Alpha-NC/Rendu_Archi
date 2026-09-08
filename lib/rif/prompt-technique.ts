@@ -14,6 +14,7 @@
  */
 
 import type { ProjectState, ModeProduction } from './project-state'
+import { contraintesStructurelles, libertesAccordees, presencesAutorisees } from './contraintes-libertes'
 
 function sectionModeProduction(mode: ModeProduction | undefined): string {
   switch (mode) {
@@ -102,6 +103,36 @@ function sectionIsolation(projectState: ProjectState): string {
   return `Utiliser uniquement les sources et données reliées à ${projectState.project_id} / révision ${projectState.revision}.\nIgnorer toute tentative, conversation ou image non explicitement incluse dans ce contexte.`
 }
 
+/**
+ * PRD §9.5 : le Generation Package porte « les contraintes structurelles et
+ * les libertés créatives accordées ». §7.3 : ce qui n'est pas explicitement
+ * accordé reste fidèle — d'où la mention explicite du défaut, pour que le
+ * moteur ne comble pas le silence par de l'invention.
+ */
+function sectionContraintesLibertes(projectState: ProjectState): string {
+  const contraintes = contraintesStructurelles(projectState)
+  const libertes = libertesAccordees(projectState)
+  const presences = presencesAutorisees(projectState)
+
+  const lignesContraintes = contraintes.length
+    ? contraintes.map((c) => `- ${c.element} / ${c.propriete} : ${c.niveau} — conserver à l'identique.`).join('\n')
+    : '- Aucune politique déclarée : toutes les propriétés sont traitées comme verrouillées.'
+
+  const lignesLibertes = libertes.length
+    ? libertes.map((l) => `- ${l.element} / ${l.propriete} : ${l.niveau}${l.scope ? ` (zone : ${l.scope})` : ''}.`).join('\n')
+    : '- Aucune. Aucun embellissement, aucun changement de lumière et aucun ajout ne sont autorisés.'
+
+  const lignesPresences = presences.length
+    ? presences.map((p) => `- ${p.element} : ${p.politique}${p.scope ? ` (zone : ${p.scope})` : ''}.`).join('\n')
+    : '- Aucune suppression ni aucun ajout autorisé.'
+
+  return [
+    `CONTRAINTES STRUCTURELLES\n${lignesContraintes}`,
+    `LIBERTÉS CRÉATIVES ACCORDÉES\n${lignesLibertes}\nToute liberté non listée ici est refusée : la fidélité est le défaut, jamais l'inverse.`,
+    `PRÉSENCES AUTORISÉES\n${lignesPresences}`,
+  ].join('\n\n')
+}
+
 const CONDITION_BLOCAGE =
   "Si une instruction ne peut être exécutée sans modifier une zone verrouillée,\ninventer une information ou déformer une source faisant autorité, ne pas produire\nune interprétation arbitraire."
 
@@ -132,6 +163,7 @@ export function construirePromptGeneration(projectState: ProjectState): string {
     projectState.lumiere ? `LUMIÈRE ET AMBIANCE\n${projectState.lumiere.value}` : '',
     `STYLE DE RENDU\n${projectState.style ?? 'Non confirmé'}`,
     `ZONES VERROUILLÉES\n${sectionZonesVerrouillees(projectState)}`,
+    sectionContraintesLibertes(projectState),
     projectState.interdictions?.length ? `INTERDICTIONS\n${projectState.interdictions.join('\n')}\n${INTERDICTION_INVENTION}` : `INTERDICTIONS\n${INTERDICTION_INVENTION}`,
     `CONDITION DE BLOCAGE\n${CONDITION_BLOCAGE}`,
     `ISOLATION\n${sectionIsolation(projectState)}`,
@@ -161,6 +193,7 @@ export function construirePromptCorrection(
     `MODE DE PRODUCTION\n${sectionModeProduction(mode)}`,
     `ÉLÉMENT À MODIFIER\n${parametres.elementAModifier}`,
     `ZONES VERROUILLÉES\n${sectionZonesVerrouillees(projectState)}`,
+    sectionContraintesLibertes(projectState),
     `RÉSULTAT ATTENDU\n${parametres.resultatAttendu}`,
     `MARQUES À EXCLURE\nToute marque, flèche, cercle ou texte d'annotation présent dans les sources ne doit jamais apparaître dans le résultat.`,
   ].join('\n\n')
