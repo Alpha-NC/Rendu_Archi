@@ -1,10 +1,10 @@
 # PRD — Application conversationnelle RIF (hors ChatGPT)
 
-**Auteur :** Alpha_no_code
-**Client pilote :** Évariste Blasco — dessinateur, Biarritz
-**Version du PRD :** V1.3
-**Statut :** Draft révisé post-audit et retours terrain — en attente de validation de la Phase 0
-**Date de révision :** 07.09.2026
+**Auteur :** Alpha_no_code  
+**Client pilote :** Évariste Blasco — dessinateur, Biarritz  
+**Version du PRD :** V1.3  
+**Statut :** Draft révisé — fidélité stricte et libertés créatives contrôlées  
+**Date de révision :** 08.09.2026
 
 > Cette version intègre les conclusions du prémortem du 02.09.2026, de l'audit architectural du 06.09.2026 et des réunions de travail des 17.07, 04.08 et 12.08.2026. Elle sépare clairement le Framework RIF, son package d'implémentation, l'orchestration déterministe, l'interface conversationnelle et le profil propre à Évariste.
 
@@ -22,8 +22,9 @@ L'application combine :
 - un état de projet structuré et persistant ;
 - un backend imposant les étapes, autorisations et blocages ;
 - un LLM multimodal pour dialoguer, analyser les sources et préparer les données ;
+- une couche **Contraintes & Libertés** définissant, par élément et par propriété, ce qui est verrouillé, contrôlé, modifiable ou créatif ;
 - une génération via Nano Banana Pro sur fal.ai, sous réserve de validation de l'endpoint exact en Phase 0 ;
-- un contrôle qualité distinct de la génération ;
+- un contrôle qualité distinct de la génération, incluant lorsque cela est techniquement possible des comparaisons déterministes entre sources et rendu ;
 - une validation humaine obligatoire avant tout export destiné à un usage administratif.
 
 L'utilisateur n'a besoin ni d'un compte ChatGPT ni d'un abonnement ChatGPT. Il accède au service avec le compte propre à RIF-App.
@@ -85,6 +86,9 @@ La logique de collecte conditionnelle ENG-004 doit être appliquée dès la V1 a
 9. **Chaque dossier est étanche.** Une tentative ratée, un autre projet ou une conversation antérieure ne peut influencer implicitement une génération.
 10. **Une référence matériau ne commande que l'apparence de l'élément ciblé.** Elle ne transmet jamais sa composition, sa géométrie, sa caméra ou son environnement.
 11. **Une annotation est une instruction, pas un contenu.** Ses marques servent à localiser une action et sont toujours absentes du rendu final.
+12. **Les propriétés autoritaires ne sont jamais laissées à l'interprétation générative.** Caméra, perspective, silhouette, volumes, ouvertures, toiture, implantation et toute autre propriété déclarée verrouillée doivent être conservés ; toute dérive détectée entraîne un rejet, une correction ciblée ou une reprise depuis les sources.
+13. **Créativité maximale dans les degrés de liberté autorisés, fidélité maximale partout ailleurs.** L'embellissement, la lumière, la végétation, le mobilier, les personnes, les véhicules ou tout autre enrichissement ne sont possibles que dans le périmètre explicitement accordé par le ProjectState.
+14. **Une propriété est gouvernée indépendamment de l'objet qui la porte.** Un même élément peut avoir une géométrie verrouillée, un matériau validé, une lumière contrôlée et une apparence secondaire libre.
 
 ## 5. Objectifs et métriques de succès
 
@@ -101,6 +105,9 @@ La logique de collecte conditionnelle ENG-004 doit être appliquée dès la V1 a
 | Fluidité | Sur un dossier standard, les sources et 2 à 3 lignes de contexte suffisent avant des confirmations ciblées |
 | Variantes | 100 % des variantes restent comparables, historisées et rattachées à la même révision d'état |
 | Viabilité économique | Coût complet par dossier mesuré : LLM, 2 à 3 variantes usuelles, corrections, stockage et support, confronté au tarif de 60 €/mois |
+| Fidélité structurelle | 0 dérive acceptée sur les critères absolus applicables : caméra, perspective, silhouette, volumes, ouvertures, toiture, implantation et environnement verrouillé |
+| Liberté créative contrôlée | 100 % des embellissements, changements de lumière et ajouts visibles rattachés à une autorisation explicite dans le ProjectState |
+| Conservation hors intervention | Aucune modification acceptée d'une zone déclarée verrouillée lors d'un Photomontage contrôlé |
 
 Le critère de détection qualité est évalué sur un jeu de tests annoté manuellement. Il ne constitue pas une promesse d'absence absolue d'erreur sur tout futur projet.
 
@@ -147,6 +154,16 @@ Le critère de détection qualité est évalué sur un jeu de tests annoté manu
 - garantie automatisée de conformité réglementaire ;
 - bascule silencieuse vers un autre LLM ou moteur d'image.
 - fonctionnement hors connexion ; l'application est un service connecté avec reprise propre après perte réseau.
+
+### 7.3 Doctrine de fidélité et liberté créative
+
+RIF-App distingue deux familles de propriétés.
+
+**Propriétés structurelles ou documentaires** : elles peuvent être déclarées `locked` ou `strict` et ne doivent pas dériver lors de la génération. Elles couvrent en priorité la caméra, la perspective, la silhouette, les volumes, les ouvertures, la toiture, l'implantation, les éléments environnementaux conservés et toute propriété explicitement validée.
+
+**Propriétés visuelles ou d'ambiance** : elles peuvent être `controlled` ou `creative` lorsqu'Évariste l'autorise. Elles couvrent notamment la qualité des matériaux, la lumière, l'ambiance, la végétation ajoutée, le mobilier, les personnages, les véhicules et les éléments décoratifs.
+
+La liberté créative n'est jamais implicite. Elle est accordée explicitement par le ProjectState, élément par élément et, lorsque nécessaire, propriété par propriété.
 
 ## 8. Parcours déterministe du dossier
 
@@ -220,10 +237,32 @@ La fiche affiche les données validées et provisoires, la hiérarchie des sourc
 
 Une action explicite d'Évariste est obligatoire pour passer à `PRÊT_À_GÉNÉRER`.
 
+### 9.4A Couche Contraintes & Libertés
+
+Avant la génération, l'application construit une matrice d'autorité à partir du ProjectState confirmé.
+
+Pour chaque élément pertinent, le système peut stocker séparément :
+
+- `geometry_policy` : `locked`, `strict`, `controlled` ou `creative` ;
+- `material_policy` ;
+- `lighting_policy` ;
+- `appearance_policy` ;
+- `presence_policy` : conservation, suppression ou ajout autorisé ;
+- `source_authority` : source faisant autorité pour la propriété concernée ;
+- `freedom_level` : niveau de liberté autorisé ;
+- `scope` : zone ou sous-partie concernée ;
+- `authorized_by` et `authorized_at`.
+
+Exemple : une piscine peut avoir sa géométrie `locked`, ses margelles `validated`, son eau `creative` et son éclairage `controlled` ou `creative` selon le style.
+
+Le backend refuse toute requête qui accorderait une liberté non présente dans cette matrice.
+
 ### 9.5 Étape 5 — Génération
 
 - Une seule opération technique peut être active par dossier, mais une opération peut demander plusieurs variantes bornées d'une même vue.
-- Le backend construit la requête à partir du ProjectState confirmé et du package RIF versionné.
+- Le backend construit la requête à partir du ProjectState confirmé, de la matrice Contraintes & Libertés et du package RIF versionné.
+- La requête technique est un **Generation Package** comprenant au minimum le prompt, les sources autorisées, les références limitées, les zones modifiables, les zones verrouillées, les directives localisées, les contraintes structurelles et les libertés créatives accordées.
+- Lorsque le moteur d'image supporte réellement masques, édition locale, références multiples ou autres contraintes structurées, ces capacités sont utilisées en priorité plutôt que de reposer uniquement sur des formulations textuelles.
 - Le LLM ne peut pas appeler librement le moteur avec un prompt non validé par le backend.
 - Le polling se poursuit jusqu'à un état terminal : succès, échec ou timeout.
 - Le résultat est enregistré avant d'être présenté comme disponible.
@@ -235,7 +274,19 @@ Le rendu entre obligatoirement dans l'état `CONTRÔLE_À_EXAMINER`. Il n'est ja
 
 Le rapport compare le rendu aux sources sur le cadrage, la perspective, les volumes, les ouvertures, la toiture, l'implantation, le terrain, l'environnement, les matériaux, la lumière, les éléments secondaires et la confidentialité.
 
+Le contrôle distingue deux classes :
+
+- **Critères absolus** : caméra, perspective, silhouette, volumes, ouvertures, toiture, implantation, environnement verrouillé et toute propriété explicitement `locked` ou `strict`. Ils sont évalués en logique PASS / FAIL métier, même si une mesure technique continue est conservée en interne.
+- **Critères perceptuels** : réalisme, lumière lorsqu'elle est modifiable, intégration, qualité des matériaux, ambiance et enrichissements autorisés. Ils reçoivent une appréciation qualitative et peuvent comporter un score.
+
 Chaque critère reçoit l'état `Conforme`, `Réserve`, `Non conforme` ou `Non applicable`, conformément à LIB-002.
+
+Lorsque cela est techniquement possible, le contrôle combine :
+
+- comparaison multimodale ;
+- mesures déterministes de cadrage, silhouette, contours, lignes structurantes ou points d'ancrage ;
+- comparaison des zones verrouillées avec les sources originales ;
+- validation humaine.
 
 Lorsque plusieurs variantes existent, l'interface permet de les comparer, de consulter leurs réserves et d'en sélectionner explicitement une comme résultat canonique. Une sélection ultérieure ne supprime pas l'historique.
 
@@ -253,6 +304,8 @@ Le ProjectState est un objet structuré distinct de la conversation. Chaque donn
 
 Le ProjectState contient au minimum l'identité et l'usage du dossier, les sources et leurs rôles détectés et confirmés, la compatibilité caméra, le mode et le style, la géométrie décrite, l'implantation, la zone d'intervention, les matériaux par élément avec provenance et confiance, les références matériau limitées, les directives localisées, l'environnement à conserver, les opérations autorisées, la lumière, les zones verrouillées, les interdictions, les validations, les réserves et le résultat canonique éventuel.
 
+Il contient également, lorsque pertinent, la matrice Contraintes & Libertés par élément et par propriété, ainsi que les éventuels `geometric_anchors`, silhouettes de contrôle, régions verrouillées et tolérances techniques utilisées par le moteur de contrôle. Ces données de contrôle n'autorisent aucune modification du projet ; elles servent uniquement à vérifier la conservation des sources autoritaires.
+
 Le prompt final est toujours généré depuis une version immuable du ProjectState confirmé. Une modification ultérieure crée une nouvelle révision.
 
 ## 11. Architecture technique cible
@@ -265,13 +318,13 @@ Backend applicatif
   authentification + sessions + machine à états + règles de transition
 
 RIF Core / package d'implémentation versionné
-  collecte ENG-004 + modes + styles + prompt + corrections + contrôle
+  collecte ENG-004 + modes + styles + Contraintes & Libertés + prompt + corrections + contrôle
 
 LLM multimodal
-  dialogue + extraction structurée + analyse assistée des sources
+  dialogue + extraction structurée + analyse assistée des sources + audit visuel
 
 Services de production
-  génération fal.ai + stockage privé + contrôle + export
+  génération fal.ai + traitement d'image déterministe lorsque pertinent + stockage privé + contrôle + export
 
 Supabase
   ProjectState + événements + générations + audits + coûts
@@ -350,13 +403,13 @@ Elles peuvent être conservées dans le `project_state` ou dans des tables dédi
 
 ## 14. Contrats des opérations techniques
 
-### 14.1 `genererRendu`
+### 14.1 `genererRenduFlux`
 
 Entrées minimales : `dossierId`, révision confirmée du ProjectState, IDs des sources autorisées, prompt construit par RIF Core, mode, style, nombre de variantes borné et version du package d'implémentation.
 
 L'opération est refusée si le dossier n'est pas dans l'état `PRÊT_À_GÉNÉRER`.
 
-### 14.2 `corrigerRendu`
+### 14.2 `corrigerRenduFlux`
 
 Entrées minimales : rendu de base, sources nécessaires, correction ciblée, zones modifiables et verrouillées, éléments déjà validés et critères de non-régression.
 
@@ -460,13 +513,11 @@ La décision économique ne repose pas uniquement sur le coût d'un appel d'imag
 ## 21. Supervision et gouvernance
 
 - Chaque erreur critique produit une alerte exploitable par Alpha_no_code.
-- Le solde de crédits fal.ai fait l'objet d'une alerte automatique sous un seuil défini ; il n'est plus vérifié uniquement par une recharge manuelle mensuelle sans supervision.
 - Chaque génération est rattachée aux versions exactes du Framework, du package, du prompt et des modèles.
 - Une mise à jour du Framework n'est jamais appliquée automatiquement à des dossiers en cours.
 - Toute version de l'application possède un changelog et un jeu de tests de non-régression.
 - Une mise à jour du LLM ou du moteur d'image déclenche les tests applicables avant mise en production.
 - Les décisions structurantes de cette application sont documentées sans modifier rétroactivement les règles gelées du Framework.
-- Le statut d'abonnement ChatGPT d'Évariste (gratuit ou payant) n'est pas une dépendance de ce PRD : ni RIF-App, ni son filet de sécurité de Phase 1 ne reposent sur une Action de Custom GPT. L'accès au modèle conversationnel et à la génération d'image passe uniquement par des appels API directs, hors du compte personnel ChatGPT d'Évariste. La limitation constatée le 04.08.2026 (comptes gratuits sans accès aux Actions) reste une cause racine historique documentée pour GPT RIF, sans effet sur l'architecture cible.
 
 ## 22. Critères d'acceptation V1
 
@@ -487,6 +538,11 @@ La décision économique ne repose pas uniquement sur le coût d'un appel d'imag
 - [ ] RLS et contrôles d'accès passent des tests positifs et négatifs.
 - [ ] Coût complet par dossier mesuré et documenté.
 - [ ] Évariste juge l'expérience au moins équivalente à GPT RIF.
+- [ ] Aucun rendu accepté ne présente de dérive sur un critère déclaré `locked` ou `strict`.
+- [ ] Les changements de lumière, d'ambiance, de végétation et les ajouts secondaires sont tous traçables à une autorisation du ProjectState.
+- [ ] Un même élément peut conserver une géométrie verrouillée tout en autorisant une liberté visuelle sur une autre propriété sans régression structurelle.
+- [ ] Les zones verrouillées d'un Photomontage contrôlé restent inchangées ou dans les tolérances techniques validées en Phase 0.
+- [ ] Le RIF Fidelity Benchmark est rejouable après toute mise à jour du LLM, du moteur d'image ou du package RIF.
 
 ## 23. Plan de déploiement
 
@@ -505,6 +561,7 @@ La décision économique ne repose pas uniquement sur le coût d'un appel d'imag
 ### Phase 0B — Validation technique
 
 - [ ] Brancher le véritable endpoint fal.ai avec polling complet.
+- [ ] Établir une matrice de capacités réelle de l'endpoint image : image-to-image, références multiples, respect du cadrage, édition locale, masque, conservation hors zone, référence matériau, correction d'image existante, résolution et reproductibilité.
 - [ ] Réaliser au moins 5 dossiers techniques de bout en bout.
 - [ ] Exécuter les cas de défauts réels : mur inventé, ouverture déplacée, annexe surdimensionnée, sous-face non texturée, bord de terrasse blanc, calepinage décalé, margelles erronées, équipement inventé, annotation conservée et soleil impossible.
 - [ ] Vérifier la reprise après rafraîchissement et perte de connexion.
@@ -512,6 +569,9 @@ La décision économique ne repose pas uniquement sur le coût d'un appel d'imag
 - [ ] Tester l'authentification, les autorisations et la RLS.
 - [ ] Mesurer les coûts réels.
 - [ ] Auditer manuellement les rendus contre les sources.
+- [ ] Constituer un **RIF Fidelity Benchmark** à partir de dossiers réels : sources Revit, photographies, rendus validés, défauts injectés et verdicts humains attendus.
+- [ ] Tester séparément la conservation de la caméra, de la perspective, de la silhouette, des volumes, des ouvertures, de la toiture, de l'implantation et de l'environnement verrouillé.
+- [ ] Tester les libertés créatives autorisées : changement de lumière, embellissement paysager, ajout de mobilier, personnages ou véhicules, sans régression des propriétés verrouillées.
 - [ ] Exécuter le jeu de défauts connus.
 - [ ] Vérifier qu'aucun secret n'est exposé.
 - [ ] Documenter le devenir des éléments réutilisables du prototype déterministe antérieur.
@@ -548,8 +608,68 @@ La décision économique ne repose pas uniquement sur le coût d'un appel d'imag
 | Référence matériau qui déforme le projet | Autorité limitée à l'apparence de l'élément explicitement ciblé |
 | Annotation reproduite dans le rendu | Conversion en directive structurée et contrôle éliminatoire |
 | Dépendance à un fournisseur | Versions enregistrées et aucune bascule silencieuse |
+| Liberté créative qui dérive vers une modification architecturale | Matrice Contraintes & Libertés par propriété, contrôle post-génération et rejet des régressions |
+| Respect des verrouillages uniquement textuel | Validation en Phase 0 des capacités réelles de masque, édition locale et conservation hors zone ; contrôle déterministe lorsque possible |
+| Belle image mais géométrie subtilement fausse | Critères absolus PASS / FAIL, benchmark de fidélité et reprise depuis les sources |
 
 Le risque professionnel le plus grave reste un écart géométrique ou environnemental non détecté dans un rendu destiné à une procédure administrative. Aucun choix d'interface ou de modèle ne supprime ce risque ; les blocages, le contrôle et la validation humaine doivent le réduire et le rendre visible.
+
+## 24A. Couche Contraintes & Libertés — doctrine de production
+
+La V1.3 introduit une doctrine explicite séparant la fidélité structurelle de la liberté visuelle.
+
+### 24A.1 Propriétés structurelles
+
+Ces propriétés sont `locked` ou `strict` par défaut lorsqu'elles proviennent d'une source autoritaire :
+
+- caméra et cadrage ;
+- perspective ;
+- silhouette ;
+- volumes ;
+- ouvertures ;
+- toiture ;
+- implantation ;
+- géométrie des piscines, terrasses et annexes ;
+- environnement réel déclaré conservé.
+
+Une demande d'embellissement, de changement d'ambiance ou de style ne modifie jamais automatiquement ces propriétés.
+
+### 24A.2 Propriétés visuelles
+
+Ces propriétés peuvent devenir `controlled` ou `creative` si Évariste l'autorise :
+
+- lumière ;
+- ambiance ;
+- apparence de l'eau ;
+- microtexture ;
+- enrichissement végétal ;
+- mobilier ;
+- personnes ;
+- véhicules ;
+- éléments décoratifs ;
+- activation d'éclairages intérieurs ou extérieurs.
+
+### 24A.3 Autorisation conversationnelle
+
+Le LLM traduit les demandes en langage naturel en propositions structurées. Exemple :
+
+> « Supprime les deux arbres entourés, garde la haie du fond, rends le jardin plus propre, mets une lumière de fin d'après-midi et ajoute deux transats près de la piscine. »
+
+devient notamment :
+
+- arbres ciblés : `presence_policy = remove_authorized` ;
+- haie : `appearance_policy = strict`, `locked = true` ;
+- pelouse : `appearance_policy = controlled` ;
+- lumière : `lighting_policy = controlled`, ambiance fin d'après-midi ;
+- transats : `presence_policy = add_authorized`, zone piscine.
+
+La proposition est confirmée avant génération lorsqu'elle modifie une liberté précédemment absente.
+
+### 24A.4 Principe d'arbitrage
+
+En cas de conflit entre créativité et fidélité, la propriété la plus restrictive prévaut.
+
+Une image plus séduisante n'est jamais acceptée si elle exige une dérive d'une propriété structurelle ou documentaire verrouillée.
 
 ## 25. Non-objectifs
 
@@ -574,7 +694,11 @@ Les identifiants définitifs sont attribués dans le registre officiel des ADR. 
 8. stratégie économique si le coût complet observé est incompatible avec 60 €/mois ;
 9. limite maximale de variantes incluses par dossier ou par perspective ;
 10. format technique des masques et directives localisées ;
-11. modalités contractuelles finales, le contrat signé restant autoritaire.
+11. modalités contractuelles finales, le contrat signé restant autoritaire ;
+12. représentation technique de la matrice Contraintes & Libertés et des niveaux `locked`, `strict`, `controlled`, `creative` ;
+13. protocole de qualification de la compatibilité caméra et des contrôles géométriques ;
+14. définition des tolérances techniques internes applicables aux critères absolus ;
+15. format et usage des `geometric_anchors`, silhouettes, contours ou autres références de contrôle lorsqu'ils sont retenus.
 
 ## 27. Annexes et dépendances
 
@@ -599,4 +723,4 @@ Les identifiants définitifs sont attribués dans le registre officiel des ADR. 
 - **V1.0 — 02.09.2026 :** draft initial post-prémortem.
 - **V1.1 — 06.09.2026 :** clarification Framework/implémentation, ajout du ProjectState, orchestration déterministe, séparation du contrôle qualité, reprise depuis les sources, sécurité RLS, journalisation transactionnelle, transport privé des fichiers et critères d'acceptation renforcés.
 - **V1.2 — 06.09.2026 :** intégration des retours terrain : dépôt groupé, rôles étendus, pré-analyse matériau, annotations structurées, références matériau limitées, variantes comparables, isolation stricte, fonctionnement connecté explicite, tests de défauts réels et modèle commercial à 60 €/mois.
-- **V1.3 — 07.09.2026 :** ajout d'une alerte automatique de solde fal.ai en §21 ; clôture de la question du statut d'abonnement ChatGPT d'Évariste, sans effet sur l'architecture cible puisque ni RIF-App ni son filet de sécurité de Phase 1 ne dépendent d'une Action de Custom GPT.
+- **V1.3 — 08.09.2026 :** ajout de la couche Contraintes & Libertés, distinction critères absolus / perceptuels, Generation Package enrichi, contrôles géométriques déterministes lorsque possibles, RIF Fidelity Benchmark, validation des capacités réelles du moteur image et traçabilité des libertés créatives par propriété.
