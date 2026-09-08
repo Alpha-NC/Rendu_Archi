@@ -338,3 +338,48 @@ describe('executerTourConversationnel — avancerParcours', () => {
     expect(evenements[0].type).toBe('operation_refusee')
   })
 })
+
+describe('executerTourConversationnel — sources jointes au modèle (D-06, PRD §9.2)', () => {
+  it('joint chaque source comme bloc image pendant la phase de collecte', async () => {
+    const { depot } = depotMemoire({ ...dossierBase, etat: 'SOURCES_RECUES' })
+    const appelerModele = vi.fn<AppelModele>(async () => ({
+      content: [{ type: 'text', text: 'Je regarde les documents.' }],
+    }))
+
+    await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: { ...dossierBase, etat: 'SOURCES_RECUES' },
+      historique: [],
+      nouveauMessage: 'Voici mes documents.',
+      actorId: 'user-1',
+    })
+
+    const contenu = appelerModele.mock.calls[0][0].messages.at(-1)!.content
+    expect(Array.isArray(contenu)).toBe(true)
+    const blocs = contenu as Array<{ type: string; source?: { url: string }; text?: string }>
+    const images = blocs.filter((b) => b.type === 'image')
+    expect(images).toHaveLength(2) // src-1 (revit) + src-2 (photo)
+    expect(images[0].source?.url).toBe('https://storage.test/src-1')
+    // Chaque image est précédée d'un libellé de rôle, sinon le modèle ne sait
+    // pas laquelle fait autorité sur quoi.
+    expect(blocs.some((b) => b.text?.includes('rôle revit_view'))).toBe(true)
+    // Le message de l'utilisateur reste présent, en dernier.
+    expect(blocs.at(-1)).toEqual({ type: 'text', text: 'Voici mes documents.' })
+  })
+
+  it('ne rejoint plus les sources une fois la révision engagée (coût inutile)', async () => {
+    const { depot } = depotMemoire(dossierBase) // PRET_A_GENERER
+    const appelerModele = vi.fn<AppelModele>(async () => ({
+      content: [{ type: 'text', text: 'Prêt.' }],
+    }))
+
+    await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: dossierBase,
+      historique: [],
+      nouveauMessage: 'On en est où ?',
+      actorId: 'user-1',
+    })
+
+    const blocs = appelerModele.mock.calls[0][0].messages.at(-1)!.content as Array<{ type: string }>
+    expect(blocs.filter((b) => b.type === 'image')).toHaveLength(0)
+  })
+})

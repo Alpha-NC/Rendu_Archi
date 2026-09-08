@@ -45,6 +45,8 @@ export interface BlocContenu {
   name?: string
   input?: unknown
   text?: string
+  /** Bloc image sortant (voir orchestrateur-conversationnel : sources du dossier). */
+  source?: { type: 'url'; url: string }
 }
 
 export type ResultatAppelOutil =
@@ -113,7 +115,7 @@ export function analyserReponseModele(blocs: BlocContenu[]): ResultatAppelOutil 
 }
 
 /** États où la fiche projet est encore modifiable (D-15). */
-const ETATS_COLLECTE_OUVERTE: EtatDossier[] = [
+export const ETATS_COLLECTE_OUVERTE: EtatDossier[] = [
   'BROUILLON',
   'SOURCES_RECUES',
   'SOURCES_CONTROLEES',

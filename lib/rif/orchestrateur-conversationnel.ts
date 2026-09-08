@@ -2,6 +2,7 @@ import {
   analyserReponseModele,
   autoriserAvancementParcours,
   autoriserOperation,
+  ETATS_COLLECTE_OUVERTE,
   type BlocContenu,
 } from './appel-outil'
 import { determinerModeParDefaut, determinerStyleParDefaut } from './modes-styles'
@@ -125,10 +126,37 @@ export async function executerTourConversationnel(
     parcours: branchement.parcours,
   })
 
+  // D-06 a choisi un modèle MULTIMODAL pour « l'analyse assistée des
+  // sources » (PRD §9.2 : rôles, compatibilité caméra, pré-analyse des
+  // matériaux). Sans les images jointes, cette étape est impossible et le
+  // modèle ne peut que deviner — exactement ce que le Framework interdit.
+  //
+  // ponytail: les images sont renvoyées à chaque tour de la phase de
+  // collecte (l'historique ne porte que du texte, cf. note en tête). Coût
+  // ~1,5k tokens par image et par tour ; passer par le cache de prompt ou
+  // une persistance de conversation si la facture le justifie.
+  const contenuUtilisateur: BlocContenu[] = []
+  if (ETATS_COLLECTE_OUVERTE.includes(dossier.etat) && dossier.projectState.sources.length > 0) {
+    const sources = dossier.projectState.sources
+    // Échec franc si le stockage ne répond pas : analyser sans voir les
+    // sources produirait une pré-analyse inventée.
+    const urls = await depot.resolverUrlsSignees(sources.map((s) => s.id))
+    sources.forEach((s, i) => {
+      const url = urls[i]
+      if (!url) return
+      contenuUtilisateur.push({
+        type: 'text',
+        text: `Source ${s.id} — rôle ${s.role_confirmed ?? s.role_detected}${s.role_confirmed ? '' : ' (non confirmé)'}${s.target ? `, cible : ${s.target}` : ''}`,
+      })
+      contenuUtilisateur.push({ type: 'image', source: { type: 'url', url } })
+    })
+  }
+  contenuUtilisateur.push({ type: 'text', text: contexte.nouveauMessage })
+
   const reponse = await appelerModele({
     system,
     tools: OUTILS_CONVERSATIONNELS,
-    messages: [...contexte.historique, { role: 'user', content: contexte.nouveauMessage }],
+    messages: [...contexte.historique, { role: 'user', content: contenuUtilisateur }],
   })
 
   const analyse = analyserReponseModele(reponse.content)
