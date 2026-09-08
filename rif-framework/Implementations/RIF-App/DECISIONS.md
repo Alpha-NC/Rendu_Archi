@@ -119,10 +119,10 @@ Le schéma suit le PRD §10 et l'exemple `Exemples/PROJECT_STATE_EXEMPLE.json` :
 
 **Non fait :** le Generation Package structuré du §9.5 (objet portant prompt + sources + zones + directives + contraintes + libertés) n'existe pas encore comme structure ; les contraintes voyagent aujourd'hui dans le texte du prompt. À reprendre quand la matrice de capacités réelles de l'endpoint image (§23 Phase 0B) dira ce que le moteur sait consommer autrement que du texte.
 
-## D-18 — Divergence de nommage assumée avec le PRD V1.3
+## D-18 — Nommage des opérations : genererRendu / corrigerRendu
 
-**Statut :** Accepted — 08.09.2026.
-Le PRD V1.3 §14 nomme encore les opérations `genererRenduFlux` et `corrigerRenduFlux`. Le code utilise `genererRendu` et `corrigerRendu` depuis le commit `b2fecde`, sur demande explicite d'Alpha_no_code : le suffixe « Flux » prêtait à confusion avec le modèle Flux, qui n'est pas le moteur retenu (D-05 : `fal-ai/nano-banana-pro/edit`). La divergence est volontaire et connue ; à aligner dans une prochaine révision du PRD plutôt qu'à défaire dans le code.
+**Statut :** Accepted — 08.09.2026, aligné code et PRD.
+Le suffixe « Flux » des noms d'origine (`genererRenduFlux`, `corrigerRenduFlux`) prêtait à confusion avec le modèle Flux, qui n'est pas le moteur retenu (D-05 : `fal-ai/nano-banana-pro/edit`). Les opérations s'appellent `genererRendu` et `corrigerRendu` dans le code (commit `b2fecde`) comme dans le PRD §14. Les documents figés — prototype de référence, transcription du prémortem, copie du PRD dans `rif-framework/Documentation/` — gardent l'ancien nom : ce sont des témoins d'un état daté, pas la spec vivante.
 
 ## Décisions encore ouvertes (issues du PRD §26, non couvertes ci-dessus)
 

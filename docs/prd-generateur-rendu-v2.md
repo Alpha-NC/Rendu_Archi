@@ -403,13 +403,13 @@ Elles peuvent être conservées dans le `project_state` ou dans des tables dédi
 
 ## 14. Contrats des opérations techniques
 
-### 14.1 `genererRenduFlux`
+### 14.1 `genererRendu`
 
 Entrées minimales : `dossierId`, révision confirmée du ProjectState, IDs des sources autorisées, prompt construit par RIF Core, mode, style, nombre de variantes borné et version du package d'implémentation.
 
 L'opération est refusée si le dossier n'est pas dans l'état `PRÊT_À_GÉNÉRER`.
 
-### 14.2 `corrigerRenduFlux`
+### 14.2 `corrigerRendu`
 
 Entrées minimales : rendu de base, sources nécessaires, correction ciblée, zones modifiables et verrouillées, éléments déjà validés et critères de non-régression.
 
