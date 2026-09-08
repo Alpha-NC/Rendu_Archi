@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { creerProjectStateVide } from './project-state'
-import { analyserReponseModele, autoriserOperation } from './appel-outil'
+import { analyserReponseModele, autoriserAvancementParcours, autoriserOperation } from './appel-outil'
 
 const etatConfirme = { ...creerProjectStateVide('P-1'), revision: 1 }
 
@@ -126,5 +126,47 @@ describe('autoriserOperation — revérification backend (PRD §11, §14)', () =
     for (const etat of ['PRET_A_GENERER', 'GENERATION_EN_COURS', 'CONTROLE_A_EXAMINER', 'VALIDE'] as const) {
       expect(autoriserOperation('mettreAJourFicheProjet', etat, etatConfirme).autorisee).toBe(false)
     }
+  })
+})
+
+describe('autoriserAvancementParcours — le modèle propose, le backend décide (PRD §8)', () => {
+  it('autorise une avancée nominale du parcours de collecte', () => {
+    expect(
+      autoriserAvancementParcours('SOURCES_CONTROLEES', 'COLLECTE_EN_COURS', etatConfirme).autorisee,
+    ).toBe(true)
+    expect(
+      autoriserAvancementParcours('COLLECTE_EN_COURS', 'FICHE_A_CONFIRMER', etatConfirme).autorisee,
+    ).toBe(true)
+  })
+
+  it("refuse PRÊT_À_GÉNÉRER : le passage exige une action explicite d'Évariste (PRD §9.4)", () => {
+    const decision = autoriserAvancementParcours('FICHE_A_CONFIRMER', 'PRET_A_GENERER', etatConfirme)
+    expect(decision.autorisee).toBe(false)
+    expect(decision.raison).toMatch(/PRET_A_GENERER/)
+  })
+
+  it("refuse les états de production, qui découlent des opérations et de l'audit", () => {
+    for (const cible of ['GENERATION_EN_COURS', 'CONTROLE_A_EXAMINER', 'VALIDE', 'ECHEC'] as const) {
+      expect(autoriserAvancementParcours('COLLECTE_EN_COURS', cible, etatConfirme).autorisee).toBe(false)
+    }
+  })
+
+  it('autorise une suspension sur blocage majeur (PRD §9.2)', () => {
+    expect(autoriserAvancementParcours('SOURCES_RECUES', 'SUSPENDU', etatConfirme).autorisee).toBe(true)
+  })
+
+  it('reste soumis aux préconditions : pas de contrôle des sources sans vue Revit exploitable', () => {
+    const decision = autoriserAvancementParcours(
+      'SOURCES_RECUES',
+      'SOURCES_CONTROLEES',
+      etatConfirme,
+      { vueRevitExploitable: false },
+    )
+    expect(decision.autorisee).toBe(false)
+    expect(decision.raison).toMatch(/Revit/)
+  })
+
+  it('refuse un saut hors du graphe même vers un état proposable', () => {
+    expect(autoriserAvancementParcours('BROUILLON', 'FICHE_A_CONFIRMER', etatConfirme).autorisee).toBe(false)
   })
 })

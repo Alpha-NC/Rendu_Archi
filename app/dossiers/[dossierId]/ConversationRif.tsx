@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import VerdictQualite from './VerdictQualite'
 
 /**
@@ -26,6 +27,7 @@ interface MessageAffiche {
 }
 
 export default function ConversationRif({ dossierId }: { dossierId: string }) {
+  const router = useRouter()
   const [historique, setHistorique] = useState<TourHistorique[]>([])
   const [messages, setMessages] = useState<MessageAffiche[]>([
     { auteur: 'systeme', texte: 'Décris le projet ou dépose tes sources pour commencer.' },
@@ -43,6 +45,7 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
       operation?: string
       resultat?: { success: boolean; generationId?: string; imageUrl?: string; error?: { message: string } }
       champsModifies?: string[]
+      versEtat?: string
     }
     if (t.type === 'message') return { texte: t.texte ?? '' }
     if (t.type === 'incident') return { texte: `⚠️ ${t.message}` }
@@ -58,6 +61,9 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
         }
       }
       return { texte: `❌ ${t.operation} a échoué : ${t.resultat?.error?.message ?? 'raison inconnue'}.` }
+    }
+    if (t.type === 'parcours_avance') {
+      return { texte: `➡️ Dossier passé en ${(t.versEtat ?? '').replace(/_/g, ' ')}.` }
     }
     if (t.type === 'fiche_mise_a_jour') {
       return { texte: `📋 Fiche projet mise à jour (${(t.champsModifies ?? []).join(', ') || 'aucun champ'}).` }
@@ -91,6 +97,11 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
 
       const resume = resumerTour(corps.tour)
       setMessages((prev) => [...prev, { auteur: 'assistant', ...resume }])
+      // L'état du dossier est rendu côté serveur (en-tête, bouton de
+      // confirmation) : sans ça, une avancée ou une opération resterait
+      // invisible jusqu'à un rafraîchissement manuel.
+      const typeTour = (corps.tour as { type?: string } | undefined)?.type
+      if (typeTour === 'parcours_avance' || typeTour === 'operation') router.refresh()
       setHistorique((prev) => [
         ...prev,
         { role: 'user', content: texte },

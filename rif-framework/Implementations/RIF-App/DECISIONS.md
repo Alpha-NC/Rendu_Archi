@@ -99,6 +99,14 @@ Le schéma suit le PRD §10 et l'exemple `Exemples/PROJECT_STATE_EXEMPLE.json` :
 **Limite explicite :** cette opération ne touche jamais la `revision` du ProjectState — la révision n'avance qu'à la confirmation explicite de la fiche projet (PRD §9.4), dont le câblage (transition FICHE_À_CONFIRMER → PRÊT_À_GÉNÉRER avec incrément de révision) reste à faire.
 **Autorisation :** `mettreAJourFicheProjet` n'est licite que tant que la fiche n'est pas confirmée (`BROUILLON` à `FICHE_À_CONFIRMER`) — refusée à partir de `PRÊT_À_GÉNÉRER`.
 
+## D-16 — Avancement du parcours proposé par le modèle, décidé par le backend
+
+**Statut :** Accepted — 08.09.2026.
+**Contexte :** aucun code ne faisait avancer un dossier au-delà de `BROUILLON`. Le graphe de transitions et `verifierPrecondition` existaient depuis la Phase 0A, mais sans appelant : la fiche projet n'atteignait jamais `FICHE_À_CONFIRMER`, donc le bouton de confirmation (§9.4) n'apparaissait jamais et la génération était structurellement inatteignable.
+**Décision :** un cinquième outil, `avancerParcours`, applique littéralement le PRD §8 (« Le LLM peut proposer une transition ; seul le backend l'applique ») : le modèle propose un état cible et un motif, `autoriserAvancementParcours` (`lib/rif/appel-outil.ts`) tranche.
+**Bornes :** le modèle ne peut proposer que `SOURCES_CONTROLEES`, `COLLECTE_EN_COURS`, `FICHE_A_CONFIRMER` et `SUSPENDU` (§9.2, blocage majeur). `PRET_A_GENERER` est explicitement exclu — §9.4 exige une action volontaire d'Évariste. Les états de production (`GENERATION_EN_COURS`, `CONTROLE_A_EXAMINER`, `VALIDE`, `A_CORRIGER`, `A_REPRENDRE`, `ECHEC`) découlent des opérations et de l'audit qualité, jamais d'une proposition conversationnelle.
+**Exception mécanique :** `BROUILLON → SOURCES_REÇUES` se fait au dépôt de la première source, sans passer par le modèle — c'est un fait constaté (des sources sont arrivées), pas un jugement.
+
 ## Décisions encore ouvertes (issues du PRD §26, non couvertes ci-dessus)
 
 - [ ] D-10 — limite maximale de variantes incluses par dossier ou par perspective.
@@ -118,3 +126,4 @@ En implémentant ENG-004 (`lib/rif/collecte-conditionnelle.ts`), ENG-004 lui-mê
 - 07.09.2026 — D-06 tranchée (Claude Sonnet 5), D-14 ajoutée (clôture du plan V2), module de contrôle qualité et Route Handlers livrés, module de collecte conditionnelle (ENG-004) livré.
 - 07.09.2026 — Orchestrateur conversationnel livré ; renommage genererRenduFlux/corrigerRenduFlux → genererRendu/corrigerRendu ; D-15 ajoutée (extraction structurée du ProjectState via un quatrième outil).
 - 07.09.2026 — Première interface (`app/dossiers/`) : liste et création de dossiers, dépôt de sources (rôle choisi par l'utilisateur, pas encore détecté automatiquement), chat connecté à l'orchestrateur conversationnel. Correction en cours de route : le dépôt d'une source n'inscrivait pas la source dans `project_state.sources`, rendant le dépôt invisible à la conversation comme à l'interface — corrigé dans `app/api/dossiers/[dossierId]/sources/route.ts`.
+- 08.09.2026 — D-16 ajoutée : `avancerParcours` débloque le parcours, qui ne sortait jamais de BROUILLON.

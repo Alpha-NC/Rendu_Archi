@@ -81,6 +81,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     ],
   })
 
+  // BROUILLON -> SOURCES_REÇUES : fait mécanique (des sources sont
+  // arrivées), aucun jugement requis — contrairement aux étapes suivantes,
+  // qui passent par avancerParcours. Sans ça, le dossier reste bloqué en
+  // BROUILLON et la génération est inatteignable.
+  if (dossier.etat === 'BROUILLON') {
+    await depot.transitionnerDossier(dossierId, 'SOURCES_RECUES')
+  }
+
   await depot.journaliserEvenement(
     dossierId,
     'source_deposee',

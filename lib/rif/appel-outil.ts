@@ -31,6 +31,10 @@ export const OPERATIONS_RIF = [
   // qui prétend avoir mis à jour la fiche projet sans tool_use réel est
   // tout aussi dangereux qu'un faux appel de génération.
   'mettreAJourFicheProjet',
+  // Cinquième outil : le modèle PROPOSE une transition, le backend décide
+  // (PRD §8). Sans lui, un dossier reste bloqué en BROUILLON — la
+  // génération devient inatteignable.
+  'avancerParcours',
 ] as const
 
 export type OperationRif = (typeof OPERATIONS_RIF)[number]
@@ -108,6 +112,15 @@ export function analyserReponseModele(blocs: BlocContenu[]): ResultatAppelOutil 
   return { genre: 'aucun_appel' }
 }
 
+/** États où la fiche projet est encore modifiable (D-15). */
+const ETATS_COLLECTE_OUVERTE: EtatDossier[] = [
+  'BROUILLON',
+  'SOURCES_RECUES',
+  'SOURCES_CONTROLEES',
+  'COLLECTE_EN_COURS',
+  'FICHE_A_CONFIRMER',
+]
+
 export interface DecisionOperation {
   autorisee: boolean
   raison?: string
@@ -171,18 +184,52 @@ export function autoriserOperation(
   // est la révision immuable qui a servi ou va servir de base à une
   // génération (PRD §10) ; le modifier silencieusement à ce stade romprait
   // la traçabilité que la révision est censée garantir.
-  const ETATS_COLLECTE_OUVERTE: EtatDossier[] = [
-    'BROUILLON',
-    'SOURCES_RECUES',
-    'SOURCES_CONTROLEES',
-    'COLLECTE_EN_COURS',
-    'FICHE_A_CONFIRMER',
-  ]
-  if (!ETATS_COLLECTE_OUVERTE.includes(etatCourant)) {
+  if (operation === 'mettreAJourFicheProjet') {
+    if (!ETATS_COLLECTE_OUVERTE.includes(etatCourant)) {
+      return {
+        autorisee: false,
+        raison: `Mise à jour de la fiche projet impossible depuis l'état ${etatCourant} — la révision est déjà engagée ou confirmée.`,
+      }
+    }
+    return { autorisee: true }
+  }
+
+  // avancerParcours ne se décide pas sans état cible : voir
+  // autoriserAvancementParcours. Refus défensif pour tout le reste.
+  return { autorisee: false, raison: `Opération ${operation} non décidable ici.` }
+}
+
+/**
+ * États que le modèle peut proposer d'atteindre (PRD §8 : « Le LLM peut
+ * proposer une transition ; seul le backend l'applique »).
+ *
+ * Volontairement restreint au parcours de collecte, plus SUSPENDU (§9.2 :
+ * « Incompatibilité majeure en usage administratif : suspendre »).
+ * PRÊT_À_GÉNÉRER en est exclu : §9.4 exige une action explicite d'Évariste,
+ * jamais une décision du modèle. Les états de production
+ * (GÉNÉRATION_EN_COURS, CONTRÔLE_À_EXAMINER, VALIDÉ, À_CORRIGER,
+ * À_REPRENDRE, ÉCHEC) découlent des opérations et de l'audit, pas d'une
+ * proposition conversationnelle.
+ */
+const ETATS_PROPOSABLES: EtatDossier[] = [
+  'SOURCES_CONTROLEES',
+  'COLLECTE_EN_COURS',
+  'FICHE_A_CONFIRMER',
+  'SUSPENDU',
+]
+
+export function autoriserAvancementParcours(
+  etatCourant: EtatDossier,
+  versEtat: EtatDossier,
+  projectState: ProjectState,
+  contexte: Parameters<typeof verifierPrecondition>[3] = {},
+): DecisionOperation {
+  if (!ETATS_PROPOSABLES.includes(versEtat)) {
     return {
       autorisee: false,
-      raison: `Mise à jour de la fiche projet impossible depuis l'état ${etatCourant} — la révision est déjà engagée ou confirmée.`,
+      raison: `Le modèle ne peut pas faire passer un dossier en ${versEtat}.`,
     }
   }
-  return { autorisee: true }
+  const precondition = verifierPrecondition(etatCourant, versEtat, projectState, contexte)
+  return { autorisee: precondition.autorisee, raison: precondition.raison }
 }

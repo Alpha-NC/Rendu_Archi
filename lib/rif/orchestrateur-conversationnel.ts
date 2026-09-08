@@ -1,4 +1,9 @@
-import { analyserReponseModele, autoriserOperation, type BlocContenu } from './appel-outil'
+import {
+  analyserReponseModele,
+  autoriserAvancementParcours,
+  autoriserOperation,
+  type BlocContenu,
+} from './appel-outil'
 import { determinerModeParDefaut, determinerStyleParDefaut } from './modes-styles'
 import { determinerParcoursCollecte } from './collecte-conditionnelle'
 import { construireSystemPrompt, OUTILS_CONVERSATIONNELS } from './prompt-conversationnel'
@@ -6,6 +11,7 @@ import { construirePromptCorrection, construirePromptGeneration } from './prompt
 import { appliquerMiseAJourFicheProjet, type MiseAJourFicheProjet } from './extraction-project-state'
 import { executerGenerationOuCorrection, executerReprise, type ResultatOperation } from './orchestrateur'
 import type { DepotDossiers, DossierActuel } from './depot'
+import { ETATS_DOSSIER, type EtatDossier } from './etat-machine'
 import type { genererEtAttendre } from '../fal/client'
 
 /**
@@ -60,6 +66,7 @@ export type ResultatTour =
   | { type: 'operation'; operation: string; resultat: ResultatOperation }
   | { type: 'incident'; message: string }
   | { type: 'fiche_mise_a_jour'; champsModifies: string[]; ignores: Array<{ champ: string; raison: string }> }
+  | { type: 'parcours_avance'; versEtat: EtatDossier }
 
 /**
  * Calcule le contexte de branchement (mode/style résolus + plan de
@@ -201,6 +208,42 @@ export async function executerTourConversationnel(
     const motif = typeof entreeReprise?.motif === 'string' ? entreeReprise.motif : 'Motif non précisé par le modèle.'
     const resultat = await executerReprise(depot, { dossierId: dossier.id, actorId: contexte.actorId, motif })
     return { type: 'operation', operation: 'reprendreDepuisSources', resultat }
+  }
+
+  if (analyse.operation === 'avancerParcours') {
+    const entree = analyse.entree as { versEtat?: unknown; motif?: unknown } | undefined
+    const versEtat = entree?.versEtat
+    if (typeof versEtat !== 'string' || !(ETATS_DOSSIER as readonly string[]).includes(versEtat)) {
+      return { type: 'incident', message: "État cible invalide proposé par le modèle." }
+    }
+
+    const decision = autoriserAvancementParcours(dossier.etat, versEtat as EtatDossier, dossier.projectState, {
+      usageAdministratif: dossier.usageAdministratif,
+      vueRevitExploitable: dossier.projectState.sources.some(
+        (s) => (s.role_confirmed ?? s.role_detected) === 'revit_view' && s.status === 'valid',
+      ),
+      photoSiteFournie: dossier.projectState.sources.some(
+        (s) => (s.role_confirmed ?? s.role_detected) === 'site_photo' && s.status === 'valid',
+      ),
+    })
+    if (!decision.autorisee) {
+      await depot.journaliserEvenement(
+        dossier.id,
+        'operation_refusee',
+        { operation: 'avancerParcours', versEtat, raison: decision.raison },
+        contexte.actorId,
+      )
+      return { type: 'incident', message: decision.raison ?? 'Avancement refusé.' }
+    }
+
+    await depot.transitionnerDossier(dossier.id, versEtat as EtatDossier)
+    await depot.journaliserEvenement(
+      dossier.id,
+      'parcours_avance',
+      { versEtat, motif: typeof entree?.motif === 'string' ? entree.motif : null },
+      contexte.actorId,
+    )
+    return { type: 'parcours_avance', versEtat: versEtat as EtatDossier }
   }
 
   // mettreAJourFicheProjet (D-15) — la seule opération qui ne passe pas par

@@ -36,6 +36,7 @@ const RAPPEL_APPEL_OUTIL = [
   "genererRendu ne prend aucun paramètre de contenu : le prompt technique est construit par le backend à partir de la fiche projet confirmée. N'essaie jamais de fournir toi-même un prompt d'image.",
   'corrigerRendu attend elementAModifier (ce qui doit changer) et resultatAttendu (le résultat visé) — jamais une description de ce qu\'il faut préserver, c\'est la règle par défaut.',
   "reprendreDepuisSources attend un motif — utilise-la uniquement si la géométrie ou la caméra a dérivé, si l'environnement verrouillé a été altéré, ou si plusieurs corrections ont accumulé des régressions. Ne la confonds jamais avec une correction locale.",
+  "avancerParcours propose de faire avancer le dossier (sources contrôlées, collecte en cours, fiche à confirmer, ou suspendu si un blocage majeur apparaît). Tu PROPOSES seulement : le backend vérifie les préconditions et refuse si elles ne sont pas réunies. Tu ne peux jamais faire passer un dossier en PRÊT_À_GÉNÉRER — cela demande une action explicite d'Évariste.",
   "mettreAJourFicheProjet enregistre une information dans la fiche projet — appelle-la à chaque donnée structurée obtenue, pas seulement à la toute fin. N'utilise 'validated' que si l'utilisateur a confirmé explicitement ; sinon 'provisional'.",
 ]
 
@@ -166,6 +167,22 @@ export const OUTILS_CONVERSATIONNELS = [
         interdictions: { type: 'array', items: { type: 'string' } },
       },
       required: [],
+    },
+  },
+  {
+    name: 'avancerParcours',
+    description:
+      "Propose de faire avancer le dossier à l'étape suivante du parcours, une fois l'étape courante réellement terminée. Le backend vérifie les préconditions et peut refuser.",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        versEtat: {
+          type: 'string',
+          enum: ['SOURCES_CONTROLEES', 'COLLECTE_EN_COURS', 'FICHE_A_CONFIRMER', 'SUSPENDU'],
+        },
+        motif: { type: 'string', description: "Pourquoi cette étape est terminée, ou ce qui bloque." },
+      },
+      required: ['versEtat', 'motif'],
     },
   },
 ] as const

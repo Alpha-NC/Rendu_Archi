@@ -286,3 +286,55 @@ describe('executerTourConversationnel — mettreAJourFicheProjet (D-15)', () => 
     expect(evenements[0].type).toBe('operation_refusee')
   })
 })
+
+describe('executerTourConversationnel — avancerParcours', () => {
+  it('applique une avancée autorisée et la journalise', async () => {
+    const { depot, evenements, obtenirDossierCourant } = depotMemoire({
+      ...dossierBase,
+      etat: 'SOURCES_CONTROLEES',
+    })
+    const appelerModele = vi.fn<AppelModele>(async () => ({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'avancerParcours',
+          input: { versEtat: 'COLLECTE_EN_COURS', motif: 'Sources contrôlées, rôles confirmés.' },
+        },
+      ],
+    }))
+
+    const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: { ...dossierBase, etat: 'SOURCES_CONTROLEES' },
+      historique: [],
+      nouveauMessage: 'On peut passer à la collecte.',
+      actorId: 'user-1',
+    })
+
+    expect(resultat).toEqual({ type: 'parcours_avance', versEtat: 'COLLECTE_EN_COURS' })
+    expect(obtenirDossierCourant().etat).toBe('COLLECTE_EN_COURS')
+    expect(evenements.map((e) => e.type)).toContain('parcours_avance')
+  })
+
+  it("refuse et journalise une avancée vers PRÊT_À_GÉNÉRER proposée par le modèle (PRD §9.4)", async () => {
+    const { depot, evenements, obtenirDossierCourant } = depotMemoire({
+      ...dossierBase,
+      etat: 'FICHE_A_CONFIRMER',
+    })
+    const appelerModele = vi.fn<AppelModele>(async () => ({
+      content: [
+        { type: 'tool_use', name: 'avancerParcours', input: { versEtat: 'PRET_A_GENERER', motif: 'Fiche complète.' } },
+      ],
+    }))
+
+    const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: { ...dossierBase, etat: 'FICHE_A_CONFIRMER' },
+      historique: [],
+      nouveauMessage: 'Lance la génération.',
+      actorId: 'user-1',
+    })
+
+    expect(resultat.type).toBe('incident')
+    expect(obtenirDossierCourant().etat).toBe('FICHE_A_CONFIRMER')
+    expect(evenements[0].type).toBe('operation_refusee')
+  })
+})
