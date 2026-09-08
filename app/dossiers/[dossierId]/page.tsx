@@ -4,6 +4,7 @@ import { creerDepotSupabase } from '@/lib/rif/depot-supabase'
 import DepotSources from './DepotSources'
 import ConversationRif from './ConversationRif'
 import BoutonConfirmerFiche from './BoutonConfirmerFiche'
+import FicheProjet from './FicheProjet'
 
 export default async function PageDossier({ params }: { params: Promise<{ dossierId: string }> }) {
   const { dossierId } = await params
@@ -29,8 +30,13 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
         {dossier.etat === 'FICHE_A_CONFIRMER' && <BoutonConfirmerFiche dossierId={dossier.id} />}
       </div>
 
-      <div className="mt-6 grid flex-1 grid-cols-1 gap-6 md:grid-cols-[240px_1fr]">
-        <DepotSources dossierId={dossier.id} sources={dossier.projectState.sources} />
+      <div className="mt-6 grid flex-1 grid-cols-1 gap-6 md:grid-cols-[280px_1fr]">
+        <div className="flex flex-col gap-6">
+          <DepotSources dossierId={dossier.id} sources={dossier.projectState.sources} />
+          {/* PRD §9.4 : la fiche doit être visible — sans elle, la
+              confirmation demandée juste au-dessus se ferait à l'aveugle. */}
+          <FicheProjet projectState={dossier.projectState} />
+        </div>
         <ConversationRif dossierId={dossier.id} />
       </div>
     </main>
