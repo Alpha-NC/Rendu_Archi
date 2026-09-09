@@ -244,8 +244,38 @@ create policy "events_supervision_lecture"
   ));
 
 -- =========================================================================
--- 7. Bucket de stockage privé (PRD §12) — à créer manuellement dans
---    Supabase Storage (aucune API SQL standard portable pour les buckets) :
---    nom suggéré "rif-app-sources", accès privé, policies alignées sur
---    dossiers.owner_id via le chemin de stockage (ex. {owner_id}/{dossier_id}/...).
+-- 7. Bucket de stockage privé (PRD §12)
+--
+-- `storage.buckets`/`storage.objects` sont des tables Postgres normales :
+-- exécutables ici comme le reste, pas besoin de passer par le Dashboard.
+-- Nécessaire au fonctionnement, pas une simple convenance : les Route
+-- Handlers (lib/rif/depot-supabase.ts) utilisent le client lié à la session
+-- utilisateur (RLS active), jamais la clé service_role — sans ces policies,
+-- le premier dépôt de fichier échoue avec une erreur de permission.
+--
+-- Convention de chemin (lib/rif/depot-supabase.ts) : {owner_id}/{dossier_id}/...
+-- Le premier segment du chemin est donc le owner_id — `storage.foldername`
+-- est la fonction utilitaire fournie par Supabase pour l'extraire.
 -- =========================================================================
+
+insert into storage.buckets (id, name, public)
+values ('rif-app-sources', 'rif-app-sources', false)
+on conflict (id) do nothing;
+
+create policy "rif_app_sources_proprietaire_lecture"
+  on storage.objects for select
+  using (bucket_id = 'rif-app-sources' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "rif_app_sources_proprietaire_ecriture"
+  on storage.objects for insert
+  with check (bucket_id = 'rif-app-sources' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "rif_app_sources_supervision_lecture"
+  on storage.objects for select
+  using (bucket_id = 'rif-app-sources' and exists (
+    select 1 from profiles p where p.id = auth.uid() and p.role = 'supervisor'
+  ));
+
+-- Nom du bucket différent du défaut ('rif-app-sources') ? Adapter aussi la
+-- variable d'environnement SUPABASE_STORAGE_BUCKET (voir .env.example) —
+-- lib/rif/depot-supabase.ts:35 l'utilise pour choisir le bucket à chaque appel.
