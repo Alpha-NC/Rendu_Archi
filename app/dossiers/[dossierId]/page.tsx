@@ -32,7 +32,11 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
 
       <div className="mt-6 grid flex-1 grid-cols-1 gap-6 md:grid-cols-[280px_1fr]">
         <div className="flex flex-col gap-6">
-          <DepotSources dossierId={dossier.id} sources={dossier.projectState.sources} />
+          <DepotSources
+            dossierId={dossier.id}
+            sources={dossier.projectState.sources}
+            directives={dossier.projectState.localized_directives}
+          />
           {/* PRD §9.4 : la fiche doit être visible — sans elle, la
               confirmation demandée juste au-dessus se ferait à l'aveugle. */}
           <FicheProjet projectState={dossier.projectState} />

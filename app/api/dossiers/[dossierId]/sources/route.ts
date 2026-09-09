@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { creerClassifieurDirectives, interpreterDirectives } from '@/lib/rif/detection-directives'
 import { creerClassifieurRole, interpreterDetection, type ImageSource } from '@/lib/rif/detection-role'
 import type { RoleSource } from '@/lib/rif/project-state'
 import { authentifierRequete, obtenirDepot, repondreCorpsInvalide, verifierProprietaire } from '../../_lib/reponse'
@@ -117,6 +118,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     mimeType: fichier.type || 'application/octet-stream',
   })
 
+  // ADR-015, PRD §9.2 : une source annotée est convertie en directives
+  // localisées structurées — jamais transmise brute au moteur d'image. Ne
+  // bloque jamais le dépôt : si l'extraction échoue, l'annotation reste
+  // exploitable manuellement via la conversation.
+  let directivesExtraites: ReturnType<typeof interpreterDirectives> = []
+  if (role_detected === 'annotated_source' || role_detected === 'annotated_render') {
+    try {
+      const classifieurDirectives = creerClassifieurDirectives()
+      const detections = await classifieurDirectives({
+        base64: Buffer.from(contenu).toString('base64'),
+        mimeType: fichier.type as ImageSource['mimeType'],
+      })
+      directivesExtraites = interpreterDirectives(detections, resultat.id)
+    } catch (erreur) {
+      await depot.journaliserEvenement(
+        dossierId,
+        'extraction_directives_echec',
+        { fileId: resultat.id, message: erreur instanceof Error ? erreur.message : 'erreur inconnue' },
+        user.id,
+      )
+    }
+  }
+
   // Le fichier existe dans le stockage/la table `files`, mais tant qu'il
   // n'apparaît pas dans project_state.sources, ni la conversation ni
   // l'interface ne savent qu'il a été déposé (PRD §10).
@@ -126,6 +150,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
       ...dossier.projectState.sources,
       { id: resultat.id, role_detected, ...(role_confirmed ? { role_confirmed } : {}), status: 'valid' },
     ],
+    localized_directives: [...dossier.projectState.localized_directives, ...directivesExtraites],
   })
 
   // BROUILLON -> SOURCES_REÇUES : fait mécanique (des sources sont
@@ -139,7 +164,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
   await depot.journaliserEvenement(
     dossierId,
     'source_deposee',
-    { fileId: resultat.id, roleDetecte: role_detected, roleIndice, ambigu, nomOriginal: fichier.name },
+    {
+      fileId: resultat.id,
+      roleDetecte: role_detected,
+      roleIndice,
+      ambigu,
+      nomOriginal: fichier.name,
+      directivesExtraites: directivesExtraites.length,
+    },
     user.id,
   )
 

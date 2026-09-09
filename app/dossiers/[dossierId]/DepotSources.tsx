@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import type { RoleSource, SourceDossier } from '@/lib/rif/project-state'
+import { ACTIONS_DIRECTIVE, type DirectiveLocalisee, type RoleSource, type SourceDossier } from '@/lib/rif/project-state'
 
 // Reprend la disposition du prototype de référence (docs/rif_chat_prototype.jsx,
 // annexe PRD §27) : vue Revit obligatoire, photo et axonométrie facultatives.
@@ -26,15 +26,21 @@ const ROLES_CONFIRMABLES: Array<{ role: RoleSource; label: string }> = [
 export default function DepotSources({
   dossierId,
   sources,
+  directives,
 }: {
   dossierId: string
   sources: SourceDossier[]
+  directives: DirectiveLocalisee[]
 }) {
   const router = useRouter()
   const [enCours, setEnCours] = useState<RoleSource | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
   const [confirmationEnCours, setConfirmationEnCours] = useState<string | null>(null)
+  const [brouillonsDirectives, setBrouillonsDirectives] = useState<Record<string, { action: string; target: string }>>({})
   const aConfirmer = sources.filter((s) => !s.role_confirmed)
+  // ADR-015, PRD §9.2 : une directive au statut unknown n'est utilisable
+  // qu'après confirmation individuelle de sa cible et de son action.
+  const directivesAConfirmer = directives.filter((d) => d.status === 'unknown')
 
   async function confirmerRole(fileId: string, role: RoleSource) {
     setConfirmationEnCours(fileId)
@@ -48,6 +54,31 @@ export default function DepotSources({
       const corps = await reponse.json()
       if (!reponse.ok || !corps.success) {
         throw new Error(corps.error?.message ?? 'Confirmation du rôle impossible.')
+      }
+      router.refresh()
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
+    } finally {
+      setConfirmationEnCours(null)
+    }
+  }
+
+  function brouillonDirective(d: DirectiveLocalisee) {
+    return brouillonsDirectives[d.id] ?? { action: d.action, target: d.target }
+  }
+
+  async function confirmerDirective(directiveId: string, action: string, target: string) {
+    setConfirmationEnCours(directiveId)
+    setErreur(null)
+    try {
+      const reponse = await fetch(`/api/dossiers/${dossierId}/directives/${directiveId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, target }),
+      })
+      const corps = await reponse.json()
+      if (!reponse.ok || !corps.success) {
+        throw new Error(corps.error?.message ?? 'Confirmation de la directive impossible.')
       }
       router.refresh()
     } catch (e) {
@@ -127,6 +158,55 @@ export default function DepotSources({
               </select>
             </div>
           ))}
+        </div>
+      )}
+      {directivesAConfirmer.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-encre-douce/30 pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Directive à confirmer</p>
+          {directivesAConfirmer.map((d) => {
+            const brouillon = brouillonDirective(d)
+            return (
+              <div key={d.id} className="flex flex-col gap-1 text-xs">
+                <span className="text-encre-douce">
+                  détecté : {d.action} — {d.target}
+                  {d.consigne ? ` (« ${d.consigne} »)` : ''}
+                </span>
+                <div className="flex items-center gap-1">
+                  <select
+                    value={brouillon.action}
+                    disabled={confirmationEnCours === d.id}
+                    onChange={(e) =>
+                      setBrouillonsDirectives((prev) => ({ ...prev, [d.id]: { ...brouillon, action: e.target.value } }))
+                    }
+                    className="rounded border border-encre-douce/30 px-1 py-0.5"
+                  >
+                    {ACTIONS_DIRECTIVE.map((action) => (
+                      <option key={action} value={action}>
+                        {action}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={brouillon.target}
+                    disabled={confirmationEnCours === d.id}
+                    onChange={(e) =>
+                      setBrouillonsDirectives((prev) => ({ ...prev, [d.id]: { ...brouillon, target: e.target.value } }))
+                    }
+                    className="min-w-0 flex-1 rounded border border-encre-douce/30 px-1 py-0.5"
+                  />
+                  <button
+                    type="button"
+                    disabled={confirmationEnCours === d.id}
+                    onClick={() => confirmerDirective(d.id, brouillon.action, brouillon.target)}
+                    className="rounded bg-encre px-2 py-0.5 text-white disabled:opacity-50"
+                  >
+                    Confirmer
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
       {erreur && <p className="text-xs text-red-600">{erreur}</p>}

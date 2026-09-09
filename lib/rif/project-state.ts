@@ -115,7 +115,9 @@ export const PROPRIETES_POLITIQUE = [
 ] as const
 export type ProprietePolitique = (typeof PROPRIETES_POLITIQUE)[number]
 
-export type ActionDirective = 'preserve' | 'modify' | 'remove' | 'clarify'
+/** PRD §9.2, ADR-015 : les cinq types de directive issues d'une annotation — aucun autre n'existe. */
+export const ACTIONS_DIRECTIVE = ['conserver', 'supprimer', 'remplacer', 'corriger', 'verrouiller'] as const
+export type ActionDirective = (typeof ACTIONS_DIRECTIVE)[number]
 
 /**
  * Directive localisée — conversion obligatoire de toute annotation en
@@ -123,6 +125,8 @@ export type ActionDirective = 'preserve' | 'modify' | 'remove' | 'clarify'
  * telle quelle au moteur d'image.
  */
 export interface DirectiveLocalisee {
+  /** Identifiant stable (source + rang d'extraction) — nécessaire pour confirmer une directive individuellement. */
+  id: string
   source_id: string
   action: ActionDirective
   target: string
