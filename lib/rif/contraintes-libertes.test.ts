@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { creerProjectStateVide, type ProjectState } from './project-state'
 import {
+  autoriserLibertesEnAttente,
   contraintesStructurelles,
+  elargitLaLiberte,
+  libertesEnAttente,
   libertesAccordees,
   politiqueEffective,
   plusRestrictif,
@@ -14,9 +17,9 @@ function etatAvecPiscine(): ProjectState {
   return {
     ...creerProjectStateVide('P-1'),
     contraintes_libertes: {
-      piscine: { geometry_policy: 'locked', material_policy: 'strict', freedom_level: 'creative' },
-      eau: { appearance_policy: 'creative', freedom_level: 'creative' },
-      pelouse: { appearance_policy: 'controlled', freedom_level: 'creative' },
+      piscine: { geometry_policy: 'locked', material_policy: 'strict', freedom_level: 'creative', authorized_by: 'evariste' },
+      eau: { appearance_policy: 'creative', freedom_level: 'creative', authorized_by: 'evariste' },
+      pelouse: { appearance_policy: 'controlled', freedom_level: 'creative', authorized_by: 'evariste' },
       haie_fond: { appearance_policy: 'strict', freedom_level: 'strict' },
     },
   }
@@ -51,7 +54,7 @@ describe('§24A.4 — la propriété la plus restrictive prévaut', () => {
   it('un freedom_level restrictif plafonne une propriété plus permissive', () => {
     const etat: ProjectState = {
       ...creerProjectStateVide('P-1'),
-      contraintes_libertes: { mobilier: { appearance_policy: 'creative', freedom_level: 'controlled' } },
+      contraintes_libertes: { mobilier: { appearance_policy: 'creative', freedom_level: 'controlled', authorized_by: 'evariste' } },
     }
     expect(politiqueEffective(etat, 'mobilier', 'appearance_policy')).toBe('controlled')
   })
@@ -61,7 +64,7 @@ describe('§24A.1 — les propriétés structurelles ne s\'assouplissent jamais'
   it("refuse une géométrie creative sur un élément structurel, même déclarée dans la matrice", () => {
     const etat: ProjectState = {
       ...creerProjectStateVide('P-1'),
-      contraintes_libertes: { toiture: { geometry_policy: 'creative', freedom_level: 'creative' } },
+      contraintes_libertes: { toiture: { geometry_policy: 'creative', freedom_level: 'creative', authorized_by: 'evariste' } },
     }
     expect(politiqueEffective(etat, 'toiture', 'geometry_policy')).toBe('strict')
     expect(verifierLiberte(etat, 'toiture', 'geometry_policy', 'creative').autorisee).toBe(false)
@@ -121,5 +124,87 @@ describe('inventaires pour le Generation Package (§9.5) et la traçabilité (§
     const presences = presencesAutorisees(etat)
     expect(presences).toHaveLength(2)
     expect(presences).toContainEqual({ element: 'transats', politique: 'add_authorized', scope: 'zone piscine' })
+  })
+})
+
+describe('§24A.3 — une liberté proposée ne prend effet qu\'une fois confirmée', () => {
+  const etatPropose: ProjectState = {
+    ...creerProjectStateVide('P-1'),
+    contraintes_libertes: {
+      // Proposée par le modèle, pas encore confirmée par Évariste.
+      pelouse: { appearance_policy: 'controlled' },
+      arbres: { presence_policy: 'remove_authorized' },
+      // Un durcissement n'a jamais besoin d'autorisation.
+      haie_fond: { appearance_policy: 'strict' },
+    },
+  }
+
+  it("n'accorde aucune liberté tant qu'authorized_by est absent", () => {
+    expect(politiqueEffective(etatPropose, 'pelouse', 'appearance_policy')).toBe('locked')
+    expect(verifierLiberte(etatPropose, 'pelouse', 'appearance_policy', 'controlled').autorisee).toBe(false)
+  })
+
+  it('applique immédiatement un durcissement, sans autorisation', () => {
+    expect(politiqueEffective(etatPropose, 'haie_fond', 'appearance_policy')).toBe('strict')
+  })
+
+  it('expose les libertés en attente pour qu\'Évariste les voie avant de confirmer', () => {
+    const attente = libertesEnAttente(etatPropose)
+    expect(attente).toEqual([
+      { element: 'pelouse', propriete: 'appearance_policy', niveauPropose: 'controlled' },
+    ])
+  })
+
+  it("n'inscrit pas une liberté non confirmée dans les libertés accordées", () => {
+    expect(libertesAccordees(etatPropose)).toEqual([])
+  })
+
+  it('rend la liberté effective après autorisation explicite', () => {
+    const autorise = autoriserLibertesEnAttente(etatPropose, 'evariste', '2026-09-08T10:00:00.000Z')
+    expect(politiqueEffective(autorise, 'pelouse', 'appearance_policy')).toBe('controlled')
+    expect(libertesEnAttente(autorise)).toEqual([])
+    expect(autorise.contraintes_libertes?.pelouse.authorized_at).toBe('2026-09-08T10:00:00.000Z')
+  })
+
+  it('ne mute pas le ProjectState reçu et préserve une autorisation antérieure', () => {
+    const dejaAutorise: ProjectState = {
+      ...creerProjectStateVide('P-1'),
+      contraintes_libertes: {
+        eau: { appearance_policy: 'creative', authorized_by: 'evariste', authorized_at: '2026-09-01T09:00:00.000Z' },
+        pelouse: { appearance_policy: 'controlled' },
+      },
+    }
+    const copie = JSON.parse(JSON.stringify(dejaAutorise))
+    const autorise = autoriserLibertesEnAttente(dejaAutorise, 'evariste', '2026-09-08T10:00:00.000Z')
+    expect(dejaAutorise).toEqual(copie)
+    expect(autorise.contraintes_libertes?.eau.authorized_at).toBe('2026-09-01T09:00:00.000Z')
+    expect(autorise.contraintes_libertes?.pelouse.authorized_at).toBe('2026-09-08T10:00:00.000Z')
+  })
+})
+
+describe('elargitLaLiberte — détecte un assouplissement par rapport à une politique en vigueur', () => {
+  it("n'élargit rien quand aucun champ proposé ne dépasse le niveau existant", () => {
+    const existante = { appearance_policy: 'controlled' as const, authorized_by: 'evariste' }
+    expect(elargitLaLiberte(existante, { appearance_policy: 'controlled' })).toBe(false)
+    expect(elargitLaLiberte(existante, { appearance_policy: 'strict' })).toBe(false)
+  })
+
+  it('élargit quand une propriété proposée dépasse le niveau existant', () => {
+    const existante = { appearance_policy: 'controlled' as const, authorized_by: 'evariste' }
+    expect(elargitLaLiberte(existante, { appearance_policy: 'creative' })).toBe(true)
+  })
+
+  it('un champ omis dans la proposition ne compte jamais comme un élargissement', () => {
+    const existante = { appearance_policy: 'creative' as const, material_policy: 'strict' as const, authorized_by: 'evariste' }
+    expect(elargitLaLiberte(existante, { appearance_policy: 'creative' })).toBe(false)
+  })
+
+  it('une propriété absente auparavant (défaut locked) élargit dès que proposée au-delà de locked', () => {
+    expect(elargitLaLiberte({}, { appearance_policy: 'strict' })).toBe(true)
+  })
+
+  it('passer de conserve à add_authorized/remove_authorized élargit ; l\'inverse non', () => {
+    expect(elargitLaLiberte({ presence_policy: 'conserve' }, { presence_policy: 'add_authorized' })).toBe(true)
+    expect(elargitLaLiberte({ presence_policy: 'add_authorized' }, { presence_policy: 'conserve' })).toBe(false)
   })
 })

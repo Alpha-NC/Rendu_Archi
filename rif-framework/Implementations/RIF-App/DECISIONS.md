@@ -119,6 +119,8 @@ Le schéma suit le PRD §10 et l'exemple `Exemples/PROJECT_STATE_EXEMPLE.json` :
 
 **Non fait :** le Generation Package structuré du §9.5 (objet portant prompt + sources + zones + directives + contraintes + libertés) n'existe pas encore comme structure ; les contraintes voyagent aujourd'hui dans le texte du prompt. À reprendre quand la matrice de capacités réelles de l'endpoint image (§23 Phase 0B) dira ce que le moteur sait consommer autrement que du texte.
 
+**§24A.3 câblé (09.09.2026) :** « la proposition est confirmée avant génération lorsqu'elle modifie une liberté précédemment absente ». Une politique `controlled`/`creative` déclarée sans `authorized_by` n'a aucun effet (`politiqueEffective` la traite comme `locked`) ; un durcissement (`locked`/`strict`) s'applique immédiatement, sans autorisation. Le modèle peut désormais proposer des entrées `contraintes_libertes` via `mettreAJourFicheProjet` (schéma étendu dans `prompt-conversationnel.ts`) — `appliquerMiseAJourFicheProjet` lui interdit structurellement d'y inscrire `authorized_by`/`authorized_at`, et fait repartir en attente (`elargitLaLiberte`) une autorisation déjà accordée si la proposition l'élargit. `POST .../confirmer` — seule action humaine du parcours (§9.4) — appelle `autoriserLibertesEnAttente` avant d'incrémenter la révision : c'est le seul endroit qui transforme une proposition en liberté effective. `FicheProjet.tsx` liste les libertés en attente (`libertesEnAttente`) pour qu'Évariste les voie avant de confirmer.
+
 ## D-18 — Nommage des opérations : genererRendu / corrigerRendu
 
 **Statut :** Accepted — 08.09.2026, aligné code et PRD.
@@ -145,3 +147,4 @@ En implémentant ENG-004 (`lib/rif/collecte-conditionnelle.ts`), ENG-004 lui-mê
 - 07.09.2026 — Première interface (`app/dossiers/`) : liste et création de dossiers, dépôt de sources (rôle choisi par l'utilisateur, pas encore détecté automatiquement), chat connecté à l'orchestrateur conversationnel. Correction en cours de route : le dépôt d'une source n'inscrivait pas la source dans `project_state.sources`, rendant le dépôt invisible à la conversation comme à l'interface — corrigé dans `app/api/dossiers/[dossierId]/sources/route.ts`.
 - 08.09.2026 — D-16 ajoutée : `avancerParcours` débloque le parcours, qui ne sortait jamais de BROUILLON.
 - 08.09.2026 — PRD V1.3 adopté ; D-17 (Contraintes & Libertés) et D-18 (divergence de nommage) ajoutées.
+- 09.09.2026 — D-17 complétée : §24A.3 câblé de bout en bout (proposition par le modèle → attente → autorisation à la confirmation de fiche → effet sur le prompt technique).

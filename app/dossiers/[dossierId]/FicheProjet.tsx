@@ -1,3 +1,4 @@
+import { libertesEnAttente } from '@/lib/rif/contraintes-libertes'
 import type { ProjectState, ValeurTracee } from '@/lib/rif/project-state'
 
 /**
@@ -46,6 +47,9 @@ export default function FicheProjet({ projectState }: { projectState: ProjectSta
   const references = projectState.sources.filter(
     (s) => (s.role_confirmed ?? s.role_detected) === 'material_reference',
   )
+  // §24A.3 : une liberté proposée par le modèle reste sans effet tant
+  // qu'Évariste ne l'a pas confirmée — il doit donc la voir avant de confirmer.
+  const libertesProposees = libertesEnAttente(projectState)
 
   return (
     <section className="rounded border border-encre-douce/30 p-3 text-xs">
@@ -132,6 +136,20 @@ export default function FicheProjet({ projectState }: { projectState: ProjectSta
         </Ligne>
         <Ligne label="Réserves">
           {projectState.reserves?.join(', ') || <span className="text-encre-douce">—</span>}
+        </Ligne>
+
+        <Ligne label="Libertés prop.">
+          {libertesProposees.length === 0 ? (
+            <span className="text-encre-douce">aucune</span>
+          ) : (
+            <ul>
+              {libertesProposees.map((l) => (
+                <li key={`${l.element}.${l.propriete}`} className="text-amber-700">
+                  {l.element} / {l.propriete} : {l.niveauPropose} — à confirmer
+                </li>
+              ))}
+            </ul>
+          )}
         </Ligne>
       </dl>
     </section>

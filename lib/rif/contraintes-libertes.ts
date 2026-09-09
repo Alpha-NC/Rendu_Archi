@@ -59,9 +59,19 @@ export function plusRestrictif(a: NiveauPolitique, b: NiveauPolitique): NiveauPo
 }
 
 /**
- * Politique effective d'une propriété d'un élément. Combine la politique
- * déclarée, le `freedom_level` global de l'élément (plafond) et le défaut
- * restrictif — toujours par la règle du plus restrictif (§24A.4).
+ * Politique effective d'une propriété d'un élément.
+ *
+ * Combine, toujours par la règle du plus restrictif (§24A.4) : la politique
+ * déclarée, le `freedom_level` de l'élément (plafond) et le défaut
+ * restrictif.
+ *
+ * §7.3 + §24A.3 : une liberté (`controlled`/`creative`) ne prend effet
+ * qu'une fois autorisée explicitement — `authorized_by` renseigné. Une
+ * liberté seulement proposée par le modèle reste sans effet jusqu'à la
+ * confirmation d'Évariste : « la proposition est confirmée avant génération
+ * lorsqu'elle modifie une liberté précédemment absente ». Un durcissement
+ * (`locked`/`strict`) ne demande aucune autorisation : restreindre est
+ * toujours permis.
  */
 export function politiqueEffective(
   projectState: ProjectState,
@@ -70,15 +80,71 @@ export function politiqueEffective(
 ): NiveauPolitique {
   const politique: PolitiqueElement | undefined = projectState.contraintes_libertes?.[element]
   const declaree = politique?.[propriete] ?? POLITIQUE_PAR_DEFAUT
-  const plafond = politique?.freedom_level ?? POLITIQUE_PAR_DEFAUT
+  const estLiberte = (n: NiveauPolitique) => RANG[n] >= RANG['controlled']
+  const autorisee = Boolean(politique?.authorized_by)
+
+  // Liberté déclarée mais pas encore autorisée : sans effet.
+  const declareeEffective = estLiberte(declaree) && !autorisee ? POLITIQUE_PAR_DEFAUT : declaree
+
+  // `freedom_level` est un PLAFOND (§9.4A : « niveau de liberté autorisé »),
+  // pas un défaut : non déclaré, il ne contraint rien — la restriction par
+  // défaut vient de la politique déclarée manquante, traitée comme locked.
+  const plafondDeclare = politique?.freedom_level
+  const plafondEffectif: NiveauPolitique = plafondDeclare
+    ? estLiberte(plafondDeclare) && !autorisee
+      ? POLITIQUE_PAR_DEFAUT
+      : plafondDeclare
+    : 'creative'
 
   // La géométrie d'un élément structurel ne s'assouplit jamais (§24A.1).
   const estStructurel = (ELEMENTS_STRUCTURELS as readonly string[]).includes(element)
   if (estStructurel && propriete === 'geometry_policy') {
-    return plusRestrictif(declaree, 'strict')
+    return plusRestrictif(declareeEffective, 'strict')
   }
 
-  return plusRestrictif(declaree, plafond)
+  return plusRestrictif(declareeEffective, plafondEffectif)
+}
+
+/**
+ * Libertés proposées mais pas encore autorisées (§24A.3). Elles n'ont aucun
+ * effet sur la génération ; elles existent pour être montrées à Évariste et
+ * confirmées — ou non.
+ */
+export function libertesEnAttente(
+  projectState: ProjectState,
+): Array<{ element: string; propriete: ProprietePolitique; niveauPropose: NiveauPolitique }> {
+  const attente: Array<{ element: string; propriete: ProprietePolitique; niveauPropose: NiveauPolitique }> = []
+  for (const [element, politique] of Object.entries(projectState.contraintes_libertes ?? {})) {
+    if (politique.authorized_by) continue
+    for (const propriete of PROPRIETES_POLITIQUE) {
+      const declaree = politique[propriete]
+      if (declaree && RANG[declaree] >= RANG['controlled']) {
+        attente.push({ element, propriete, niveauPropose: declaree })
+      }
+    }
+  }
+  return attente
+}
+
+/**
+ * Autorise toutes les libertés en attente (action explicite d'Évariste au
+ * moment de confirmer la fiche projet, §9.4 + §24A.3). Fonction pure.
+ */
+export function autoriserLibertesEnAttente(
+  projectState: ProjectState,
+  autorisePar: string,
+  horodatage = new Date().toISOString(),
+): ProjectState {
+  const matrice = projectState.contraintes_libertes
+  if (!matrice) return projectState
+
+  const suivante: Record<string, PolitiqueElement> = {}
+  for (const [element, politique] of Object.entries(matrice)) {
+    suivante[element] = politique.authorized_by
+      ? politique
+      : { ...politique, authorized_by: autorisePar, authorized_at: horodatage }
+  }
+  return { ...projectState, contraintes_libertes: suivante }
 }
 
 export interface DecisionLiberte {
@@ -144,6 +210,26 @@ export function contraintesStructurelles(
     }
   }
   return contraintes
+}
+
+/**
+ * Une proposition élargit-elle une politique déjà en vigueur ? Sert à décider
+ * si une autorisation existante doit repartir en attente (§24A.3 : élargir
+ * une liberté déjà accordée redemande confirmation, restreindre n'en demande
+ * jamais). Compare uniquement les propriétés présentes dans `proposee` — un
+ * champ omis n'élargit rien.
+ */
+export function elargitLaLiberte(existante: PolitiqueElement, proposee: PolitiqueElement): boolean {
+  for (const propriete of PROPRIETES_POLITIQUE) {
+    const apres = proposee[propriete]
+    if (!apres) continue
+    const avant = existante[propriete] ?? POLITIQUE_PAR_DEFAUT
+    if (RANG[apres] > RANG[avant]) return true
+  }
+  if (proposee.presence_policy && proposee.presence_policy !== (existante.presence_policy ?? 'conserve')) {
+    return proposee.presence_policy !== 'conserve'
+  }
+  return false
 }
 
 /** Présences autorisées (§9.4A `presence_policy`, §24A.3). */

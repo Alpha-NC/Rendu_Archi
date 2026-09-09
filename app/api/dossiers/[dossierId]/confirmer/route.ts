@@ -1,3 +1,4 @@
+import { autoriserLibertesEnAttente } from '@/lib/rif/contraintes-libertes'
 import { verifierPrecondition } from '@/lib/rif/etat-machine'
 import { authentifierRequete, obtenirDepot, repondreOperation, verifierProprietaire } from '../../_lib/reponse'
 
@@ -37,7 +38,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ do
     })
   }
 
-  const projectStateConfirme = { ...dossier.projectState, revision: dossier.projectState.revision + 1 }
+  // §24A.3 : confirmer la fiche est l'action explicite d'Évariste qui rend
+  // effectives les libertés que le modèle a proposées jusqu'ici sans effet.
+  const avecLibertesAutorisees = autoriserLibertesEnAttente(dossier.projectState, user.id)
+  const projectStateConfirme = { ...avecLibertesAutorisees, revision: dossier.projectState.revision + 1 }
   await depot.mettreAJourProjectState(dossierId, projectStateConfirme)
   await depot.transitionnerDossier(dossierId, 'PRET_A_GENERER')
   await depot.journaliserEvenement(

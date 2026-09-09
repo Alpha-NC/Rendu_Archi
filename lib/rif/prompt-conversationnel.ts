@@ -165,6 +165,23 @@ export const OUTILS_CONVERSATIONNELS = [
         },
         usage: { type: 'array', items: { type: 'string' } },
         interdictions: { type: 'array', items: { type: 'string' } },
+        contraintesLibertes: {
+          type: 'object',
+          description:
+            "Propose, par élément (ex. 'piscine', 'haie_fond'), une politique Contraintes & Libertés (PRD §9.4A) : geometry_policy/material_policy/lighting_policy/appearance_policy ('locked'|'strict'|'controlled'|'creative'), presence_policy ('conserve'|'remove_authorized'|'add_authorized'), scope. N'inclus jamais authorized_by ni authorized_at — seule la confirmation de la fiche projet par l'utilisateur rend une liberté effective (§24A.3) ; une simple proposition ici reste sans effet sur le rendu tant qu'elle n'a pas été confirmée.",
+          additionalProperties: {
+            type: 'object',
+            properties: {
+              geometry_policy: { type: 'string', enum: ['locked', 'strict', 'controlled', 'creative'] },
+              material_policy: { type: 'string', enum: ['locked', 'strict', 'controlled', 'creative'] },
+              lighting_policy: { type: 'string', enum: ['locked', 'strict', 'controlled', 'creative'] },
+              appearance_policy: { type: 'string', enum: ['locked', 'strict', 'controlled', 'creative'] },
+              presence_policy: { type: 'string', enum: ['conserve', 'remove_authorized', 'add_authorized'] },
+              freedom_level: { type: 'string', enum: ['locked', 'strict', 'controlled', 'creative'] },
+              scope: { type: 'string' },
+            },
+          },
+        },
       },
       required: [],
     },

@@ -127,3 +127,55 @@ describe('appliquerMiseAJourFicheProjet — fonction pure', () => {
     expect(suivant.style).toBe('commercial')
   })
 })
+
+describe('contraintesLibertes — le modèle propose, il n\'autorise jamais (§24A.3)', () => {
+  it('ajoute une politique proposée sans jamais y inscrire authorized_by', () => {
+    const etat = creerProjectStateVide('P-1')
+    const { suivant, ignores } = appliquerMiseAJourFicheProjet(
+      etat,
+      { contraintesLibertes: { pelouse: { appearance_policy: 'controlled', authorized_by: 'le-modele' } } },
+      contexte,
+    )
+    expect(suivant.contraintes_libertes?.pelouse).toEqual({ appearance_policy: 'controlled' })
+    expect(ignores).toEqual([])
+  })
+
+  it('préserve une autorisation existante quand la proposition ne l\'élargit pas', () => {
+    const etat = {
+      ...creerProjectStateVide('P-1'),
+      contraintes_libertes: {
+        pelouse: { appearance_policy: 'creative' as const, authorized_by: 'evariste', authorized_at: '2026-09-01T09:00:00.000Z' },
+      },
+    }
+    const { suivant, ignores } = appliquerMiseAJourFicheProjet(
+      etat,
+      { contraintesLibertes: { pelouse: { appearance_policy: 'strict' } } },
+      contexte,
+    )
+    expect(suivant.contraintes_libertes?.pelouse).toEqual({
+      appearance_policy: 'strict',
+      authorized_by: 'evariste',
+      authorized_at: '2026-09-01T09:00:00.000Z',
+    })
+    expect(ignores).toEqual([])
+  })
+
+  it('fait repartir en attente une autorisation existante que la proposition élargit', () => {
+    const etat = {
+      ...creerProjectStateVide('P-1'),
+      contraintes_libertes: {
+        pelouse: { appearance_policy: 'controlled' as const, authorized_by: 'evariste', authorized_at: '2026-09-01T09:00:00.000Z' },
+      },
+    }
+    const { suivant, ignores } = appliquerMiseAJourFicheProjet(
+      etat,
+      { contraintesLibertes: { pelouse: { appearance_policy: 'creative' } } },
+      contexte,
+    )
+    expect(suivant.contraintes_libertes?.pelouse.appearance_policy).toBe('creative')
+    expect(suivant.contraintes_libertes?.pelouse.authorized_by).toBeUndefined()
+    expect(ignores).toEqual([
+      { champ: 'contraintes_libertes.pelouse', raison: expect.stringContaining('retourne en attente') },
+    ])
+  })
+})

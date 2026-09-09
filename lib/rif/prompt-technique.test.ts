@@ -115,9 +115,9 @@ describe('Contraintes & Libertés dans le prompt (PRD §9.5)', () => {
   const etatAvecLibertes = {
     ...etatPhotomontageAdministratif(),
     contraintes_libertes: {
-      piscine: { geometry_policy: 'locked' as const, freedom_level: 'creative' as const },
-      eau: { appearance_policy: 'creative' as const, freedom_level: 'creative' as const },
-      transats: { presence_policy: 'add_authorized' as const, scope: 'zone piscine' },
+      piscine: { geometry_policy: 'locked' as const, freedom_level: 'creative' as const, authorized_by: 'evariste' },
+      eau: { appearance_policy: 'creative' as const, freedom_level: 'creative' as const, authorized_by: 'evariste' },
+      transats: { presence_policy: 'add_authorized' as const, scope: 'zone piscine', authorized_by: 'evariste' },
     },
   }
 

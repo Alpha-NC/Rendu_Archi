@@ -1,4 +1,12 @@
-import type { ModeProduction, ProjectState, StatutValeur, StyleRendu, ValeurTracee } from './project-state'
+import type {
+  ModeProduction,
+  PolitiqueElement,
+  ProjectState,
+  StatutValeur,
+  StyleRendu,
+  ValeurTracee,
+} from './project-state'
+import { elargitLaLiberte } from './contraintes-libertes'
 
 /**
  * Extraction structurée du ProjectState — D-15 (DECISIONS.md).
@@ -43,6 +51,13 @@ export interface MiseAJourFicheProjet {
   cameraCompatibility?: ProjectState['camera_compatibility']
   usage?: string[]
   interdictions?: string[]
+  /**
+   * Politiques Contraintes & Libertés proposées par le modèle (§24A.3).
+   * Le backend n'y inscrit JAMAIS `authorized_by` : une liberté proposée
+   * reste sans effet jusqu'à la confirmation de la fiche par Évariste
+   * (§24A.3, contraintes-libertes.ts::autoriserLibertesEnAttente).
+   */
+  contraintesLibertes?: Record<string, PolitiqueElement>
 }
 
 export interface ContexteExtraction {
@@ -158,6 +173,33 @@ export function appliquerMiseAJourFicheProjet(
   if (miseAJour.cameraCompatibility) suivant.camera_compatibility = miseAJour.cameraCompatibility
   if (miseAJour.usage) suivant.usage = miseAJour.usage
   if (miseAJour.interdictions) suivant.interdictions = miseAJour.interdictions
+
+  if (miseAJour.contraintesLibertes) {
+    const matrice = { ...(suivant.contraintes_libertes ?? {}) }
+    for (const [element, proposee] of Object.entries(miseAJour.contraintesLibertes)) {
+      // Le modèle propose ; il n'autorise jamais (§24A.3). Une autorisation
+      // déjà donnée par Évariste est préservée tant que la politique ne
+      // s'élargit pas ; si elle s'élargit, elle repart en attente.
+      const existante = matrice[element]
+      const fusionnee: PolitiqueElement = { ...existante, ...proposee }
+      // Le modèle propose ; il n'autorise jamais (§24A.3).
+      delete fusionnee.authorized_by
+      delete fusionnee.authorized_at
+      if (existante?.authorized_by && !elargitLaLiberte(existante, fusionnee)) {
+        fusionnee.authorized_by = existante.authorized_by
+        fusionnee.authorized_at = existante.authorized_at
+      } else if (existante?.authorized_by) {
+        delete fusionnee.authorized_by
+        delete fusionnee.authorized_at
+        ignores.push({
+          champ: `contraintes_libertes.${element}`,
+          raison: "Liberté élargie par rapport à l'autorisation en vigueur — elle retourne en attente de confirmation (PRD §24A.3).",
+        })
+      }
+      matrice[element] = fusionnee
+    }
+    suivant.contraintes_libertes = matrice
+  }
 
   return { suivant, ignores }
 }
