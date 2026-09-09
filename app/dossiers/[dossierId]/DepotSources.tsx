@@ -12,6 +12,17 @@ const SLOTS: Array<{ role: RoleSource; label: string; obligatoire: boolean }> = 
   { role: 'axonometry', label: 'Axonométrie', obligatoire: false },
 ]
 
+// Rôles que la détection automatique peut produire (lib/rif/detection-role.ts,
+// non importé ici : ce module charge le SDK Anthropic, réservé au serveur).
+const ROLES_CONFIRMABLES: Array<{ role: RoleSource; label: string }> = [
+  { role: 'revit_view', label: 'Vue 3D Revit' },
+  { role: 'site_photo', label: 'Photo du site' },
+  { role: 'axonometry', label: 'Axonométrie' },
+  { role: 'annotated_source', label: 'Source annotée' },
+  { role: 'material_reference', label: 'Référence matériau' },
+  { role: 'existing_building_photo', label: 'Photo bâtiment existant' },
+]
+
 export default function DepotSources({
   dossierId,
   sources,
@@ -22,6 +33,29 @@ export default function DepotSources({
   const router = useRouter()
   const [enCours, setEnCours] = useState<RoleSource | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
+  const [confirmationEnCours, setConfirmationEnCours] = useState<string | null>(null)
+  const aConfirmer = sources.filter((s) => !s.role_confirmed)
+
+  async function confirmerRole(fileId: string, role: RoleSource) {
+    setConfirmationEnCours(fileId)
+    setErreur(null)
+    try {
+      const reponse = await fetch(`/api/dossiers/${dossierId}/sources/${fileId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      })
+      const corps = await reponse.json()
+      if (!reponse.ok || !corps.success) {
+        throw new Error(corps.error?.message ?? 'Confirmation du rôle impossible.')
+      }
+      router.refresh()
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
+    } finally {
+      setConfirmationEnCours(null)
+    }
+  }
 
   async function deposer(role: RoleSource, fichier: File) {
     setEnCours(role)
@@ -73,6 +107,28 @@ export default function DepotSources({
           </div>
         )
       })}
+      {aConfirmer.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-encre-douce/30 pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Rôle à confirmer</p>
+          {aConfirmer.map((s) => (
+            <div key={s.id} className="flex items-center gap-2 text-xs">
+              <span className="text-encre-douce">détecté : {s.role_detected}</span>
+              <select
+                defaultValue={s.role_detected}
+                disabled={confirmationEnCours === s.id}
+                onChange={(e) => confirmerRole(s.id, e.target.value as RoleSource)}
+                className="rounded border border-encre-douce/30 px-1 py-0.5"
+              >
+                {ROLES_CONFIRMABLES.map(({ role, label }) => (
+                  <option key={role} value={role}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
       {erreur && <p className="text-xs text-red-600">{erreur}</p>}
     </aside>
   )
