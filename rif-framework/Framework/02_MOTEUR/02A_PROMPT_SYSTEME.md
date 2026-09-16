@@ -2,7 +2,7 @@
 
 ID : ENG-002  
 Type : ENGINE  
-Version : V1.4  
+Version : V1.5  
 Statut : Review  
 Niveau : L3  
 Dossier : Framework/02_MOTEUR
@@ -69,6 +69,10 @@ STYLE DE RENDU
 ZONE MODIFIABLE
 {zone_modifiable}
 
+ZONES HARMONISABLES
+{zones_harmonisables}
+Liberté du moteur limitée à l'amélioration visuelle ; l'identité générale du site reste cohérente.
+
 ZONES VERROUILLÉES
 {zones_verrouillees}
 
@@ -123,14 +127,22 @@ Limiter les modifications aux raccords locaux, ombres de contact, transitions de
 et ajustements d’exposition nécessaires à l’intégration.
 ```
 
-### 3.3 Présentation générative
+### 3.3 Retexturation contextualisée
 
 Ajouter la clause suivante :
 
 ```text
-Produire une image de présentation cohérente avec le projet.
-La géométrie désignée reste autoritaire.
-L’environnement peut être harmonisé dans les limites validées.
+Utiliser la vue Revit comme image de base et comme seule autorité de caméra, cadrage,
+perspective, silhouette, volumes, ouvertures, toiture et implantation.
+Utiliser la photographie réelle comme référence de contexte, jamais comme canevas :
+elle n’impose pas la conservation pixel par pixel de chaque détail.
+Pour chaque élément d’environnement identifié sur la photographie :
+- un élément verrouillé (locked) doit rester cohérent avec le réel ;
+- un élément modifiable (editable) ne peut être remplacé, supprimé ou transformé
+  que si une décision explicite l’autorise ;
+- un élément harmonisable (harmonizable) peut être amélioré visuellement sans
+  changer l’identité générale du site.
+Ne pas reconstruire le site dans son intégralité.
 Ne pas présenter le résultat comme une insertion documentaire exacte.
 ```
 
@@ -160,3 +172,8 @@ Lorsque plusieurs variantes sont demandées, ce modèle est instancié séparém
 - ENG-001 — 02_PROMPT_GENERATION.md
 - ENG-003 — 03_PROMPTS_CORRECTIONS.md
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
+
+## Historique
+
+V1.5 — §3.3 : remplace la clause « Présentation générative » par « Retexturation contextualisée » (recalibrage produit V2.1, ADR-019) — canevas Revit explicite, photo réelle explicitement qualifiée de référence de contexte, classification `locked`/`editable`/`harmonizable` de chaque élément d'environnement (ARCH-002). Ajout de la section commune ZONES HARMONISABLES (§2).

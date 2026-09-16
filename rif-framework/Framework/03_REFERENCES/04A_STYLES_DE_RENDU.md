@@ -2,7 +2,7 @@
 
 ID : LIB-005  
 Type : LIB  
-Version : V1.4  
+Version : V1.6  
 Statut : Review  
 Niveau : L4  
 Dossier : Framework/03_REFERENCES
@@ -23,12 +23,20 @@ Principe général
 
 Le style est sélectionné selon la demande explicite de l'utilisateur, ou à défaut selon le type de projet.
 
-Si une photographie réelle est fournie pour un usage administratif, l'implémentation propose le style Photomontage administratif. Sans photographie, ce style est exclu.
+Si une photographie réelle est fournie **pour un usage administratif**, l'implémentation propose le style Administratif sobre. Sans photographie, ce style est exclu. Une photographie fournie sans usage administratif ne suffit plus, seule, à sélectionner ce style (voir « Sélection automatique » ci-dessous — Retexturation contextualisée, mode principal du PRD V2.1, ne l'implique pas par défaut).
 
 Le style Commercial (section 3) fait exception à ce principe : il n'est jamais sélectionné par défaut ni par la règle de sélection automatique. Il ne peut être choisi que sur demande explicite de l'utilisateur.
 
+Nomenclature officielle (PRD V2.1 §9, source de vérité) :
+
+| Style | Identifiant |
+|---|---|
+| Présentation naturelle | `presentation_naturelle` |
+| Administratif sobre | `administratif_sobre` |
+| Commercial | `commercial` |
+
 Styles disponibles
-1. Photomontage administratif
+1. Administratif sobre
 Utilisation
 Insertion sur photographie réelle
 Permis de construire
@@ -50,10 +58,11 @@ Aucun effet artistique.
 
 Ce style constitue le style par défaut.
 
-2. Présentation client
+2. Présentation naturelle
 Utilisation
 Réunion client
 Avant-projet
+Cas standard de Retexturation contextualisée (LIB-006 §4, PRD V2.1 §9.1)
 Objectif
 
 Valoriser le projet sans le transformer.
@@ -67,7 +76,7 @@ environnement légèrement valorisé.
 homogénéité du niveau de détail sur toute l'image ;
 matières lisibles comme dans une prise de vue rapprochée ;
 légère réduction de profondeur de champ limitée à l'arrière-plan ;
-lumière et ciel plus présents que dans le style administratif, sans incohérence physique.
+lumière et ciel plus présents que dans le style Administratif sobre, sans incohérence physique.
 
 Les éléments ajoutés doivent rester discrets.
 
@@ -77,7 +86,7 @@ Communication résidentielle
 Book professionnel, portfolio
 Support commercial
 
-Jamais un dossier administratif ou réglementaire — ce style ne remplace jamais Photomontage administratif dans cet usage.
+Jamais un dossier administratif ou réglementaire — ce style ne remplace jamais Administratif sobre dans cet usage.
 
 Objectif
 
@@ -115,7 +124,7 @@ Le style ne doit jamais modifier l'architecture.
 
 5. Interdictions communes aux styles administratifs
 
-Applicables à Photomontage administratif et Présentation client. Le style Commercial (section 3) y fait exception, selon ses règles propres définies dans sa propre section.
+Applicables à Administratif sobre et Présentation naturelle. Le style Commercial (section 3) y fait exception, selon ses règles propres définies dans sa propre section.
 
 Éviter systématiquement :
 
@@ -129,13 +138,17 @@ effets cinématographiques ;
 publicité immobilière.
 Sélection automatique
 
-Photographie réelle fournie (cas standard)
+Photographie réelle fournie pour un usage administratif, caméras compatibles (LIB-006 §3)
 
-→ Photomontage administratif
+→ Administratif sobre
+
+Photographie réelle fournie sans usage administratif strict (cas standard, Retexturation contextualisée — LIB-006 §4)
+
+→ Présentation naturelle
 
 Réunion client, avant-projet
 
-→ Présentation client
+→ Présentation naturelle
 
 Si plusieurs styles sont possibles, l'implémentation demande confirmation à l'utilisateur.
 
@@ -145,8 +158,17 @@ Le style Commercial n'entre jamais dans cette sélection automatique, quelle que
 
 De nouveaux styles pourront être ajoutés selon les besoins des projets, chacun devant respecter les principes du référentiel général, à l'exception d'un style explicitement documenté comme dérogatoire, comme Commercial l'est vis-à-vis de la section 5.
 
+Documents liés
+
+- LIB-006 — 04B_MODES_DE_PRODUCTION.md
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
+
 Historique
 
-V1.2 — Réduction de cinq à trois styles actifs (Administratif simple et Concours ou communication retirés de l'usage courant à la demande d'Alpha No_Code) ; ajout du style Commercial.
+V1.6 — Harmonisation de la nomenclature sur le PRD V2.1 §9 (ADR-020), désormais source de vérité sur le nom des styles : « Photomontage administratif » renommé **Administratif sobre** (`administratif_sobre`), « Présentation client » renommé **Présentation naturelle** (`presentation_naturelle`). Commercial (`commercial`) inchangé. Aucun changement de comportement ni de règle — renommage seul. Ajout de la table de nomenclature ci-dessus.
+
+V1.5 — Correction d'une contradiction avec le recalibrage produit V2.1 (ADR-019) : la sélection automatique traitait toute « photographie réelle fournie » comme le signal suffisant du style Photomontage administratif, alors que ce style suppose un usage administratif (cf. sa propre section « Utilisation » ci-dessus, jamais modifiée). Le cas standard (photo fournie, pas d'usage administratif strict — Retexturation contextualisée, LIB-006 §4) sélectionne désormais Présentation client par défaut. Documents liés ajoutés : ARCH-002, LIB-006.
 
 V1.4 — Clarification : aucun style, y compris Commercial, n'autorise l'invention d'un élément architectural ou technique ni la reprise de la composition d'une référence matériau.
+
+V1.2 — Réduction de cinq à trois styles actifs (Administratif simple et Concours ou communication retirés de l'usage courant à la demande d'Alpha No_Code) ; ajout du style Commercial.

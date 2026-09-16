@@ -2,7 +2,7 @@
 
 ID : ENG-001  
 Type : ENGINE  
-Version : V1.4  
+Version : V1.5  
 Statut : Review  
 Niveau : L3  
 Dossier : Framework/02_MOTEUR
@@ -25,7 +25,7 @@ Transformer l'état projet confirmé en contexte de génération exploitable, sa
 6. Convertir les annotations en directives localisées ; exclure leurs marques du résultat.
 7. Pré-analyser les matériaux et conserver pour chacun la source et le niveau de confiance.
 8. Limiter toute référence matériau à l'élément désigné.
-9. Charger les zones modifiables, verrouillées, les interdictions et les validations.
+9. Charger les zones verrouillées, modifiables et harmonisables (ARCH-002), les interdictions et les validations.
 10. Vérifier la cohérence entre orientation, moment de la journée et lumière.
 
 ## 3. Questions résiduelles
@@ -41,4 +41,13 @@ Chaque champ conserve sa provenance et son statut de validation. Le contexte est
 ## 5. Variantes
 
 Plusieurs variantes peuvent être demandées depuis la même révision. Elles partagent le contexte autoritaire mais reçoivent chacune un identifiant et, si nécessaire, une variation esthétique explicitement bornée. Aucune variante ne devient canonique sans sélection humaine.
+
+## Documents liés
+
+- ENG-002 — 02A_PROMPT_SYSTEME.md
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
+
+## Historique
+
+V1.5 — Étape 9 : les zones chargées sont désormais verrouillées, modifiables **et harmonisables** (ARCH-002), au lieu d'une distinction à deux états. Recalibrage produit V2.1, voir ADR-019.
 

@@ -2,7 +2,7 @@
 
 ID : LIB-002  
 Type : LIB  
-Version : V1.4  
+Version : V1.5  
 Statut : Review  
 Niveau : L4  
 Dossier : Framework/03_REFERENCES
@@ -32,12 +32,13 @@ Chaque critère reçoit un état :
 |---|---|---|
 | Cadrage | Source désignée | limites, hauteur de caméra, champ visible |
 | Perspective | Source désignée | lignes de fuite, échelle, point de vue |
-| Volumes | Source géométrique | proportions, niveaux, silhouettes |
+| Silhouette | Source géométrique | contour extérieur du bâti tel que vu depuis la caméra, sans reconstruction |
+| Volumes | Source géométrique | proportions, niveaux |
 | Toiture | Source géométrique | pans, faîtages, rives, débords, noues |
 | Ouvertures | Source géométrique | nombre, position, dimensions visibles |
 | Implantation | Source géométrique | bâtiment, piscine, terrasses, annexes |
 | Terrain | Photo ou source terrain | relief, niveaux, raccords |
-| Environnement | Photographie | végétation, murs, clôtures, voisinage, horizon |
+| Environnement | Photographie | respect de l'état déclaré (`locked`/`editable`/`harmonizable`, ARCH-002) pour chaque élément — végétation, murs, clôtures, voisinage, horizon |
 | Matériaux | État du projet | nature, teinte, texture, joints, échelle |
 | Lumière | Photo ou paramètres | direction, intensité, ombres, exposition |
 | Éléments secondaires | État du projet | présence, position, autorisation |
@@ -73,14 +74,19 @@ Contrôler en priorité :
 
 Toute transformation importante de l’environnement verrouillé est **Non conforme** pour un usage administratif.
 
-### 4.3 Présentation générative
+### 4.3 Retexturation contextualisée
 
 Contrôler en priorité :
 
-- géométrie du projet ;
-- cohérence visuelle ;
-- limites de liberté validées ;
+- fidélité de la vue Revit (cadrage, perspective, silhouette, volumes, toiture, ouvertures, implantation) ;
+- reconnaissabilité du contexte du site (identité générale, pas conformité pixel par pixel) ;
+- respect de l'état déclaré de chaque élément d'environnement — un `locked` non conservé ou un `editable`/`harmonizable` modifié sans décision validée sont tous deux des écarts, dans un sens comme dans l'autre ;
+- absence de reconstruction intégrale du site ;
 - absence de présentation trompeuse comme insertion administrative.
+
+### 4.4 Retexturation Revit et Retexturation contextualisée — correction ciblée
+
+Une correction ne doit jamais réouvrir un élément d'environnement déjà validé à un état différent de celui confirmé, ni transformer un élément `locked` sous couvert de corriger un élément `editable` ou `harmonizable` voisin.
 
 ## 5. Défauts éliminatoires
 
@@ -89,11 +95,12 @@ Contrôler en priorité :
 - ouverture déplacée ;
 - piscine ou terrasse mal implantée ;
 - caméra changée sans autorisation ;
-- environnement réel remplacé dans un photomontage contrôlé ;
+- environnement réel remplacé dans un photomontage contrôlé, ou reconstruit dans son intégralité en retexturation contextualisée ;
+- élément d'environnement `locked` modifié, ou élément `editable`/`harmonizable` transformé sans décision validée ;
 - bâtiment voisin significatif supprimé ;
 - relief réinventé ;
 - donnée confidentielle visible ;
-- usage administratif revendiqué malgré une présentation générative.
+- usage administratif revendiqué malgré un mode non documentaire (Retexturation Revit ou Retexturation contextualisée).
 - mur, ouverture, volet, marche ou équipement inventé ;
 - annotation, flèche, cercle ou texte de correction visible ;
 - pool house ou annexe dont l'échelle ne correspond pas à la source ;
@@ -123,5 +130,10 @@ Pour un écart mineur, le rapport peut conclure `Acceptable avec réserve` pour 
 ## Documents liés
 
 - REF-001 — 01_REFERENTIEL_GENERAL.md
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
 - ENG-003 — 03_PROMPTS_CORRECTIONS.md
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
+
+## Historique
+
+V1.5 — Ajout du critère « Silhouette » (§3, distingué des Volumes, PRD V2.1 §13.1). §4.3 : remplace les priorités de contrôle « Présentation générative » par « Retexturation contextualisée », fondées sur le respect de l'état déclaré (`locked`/`editable`/`harmonizable`, ARCH-002) plutôt que sur des « limites de liberté » non qualifiées. §5 : défauts éliminatoires généralisés aux deux modes utilisant un environnement réel. Recalibrage produit V2.1, voir ADR-019.

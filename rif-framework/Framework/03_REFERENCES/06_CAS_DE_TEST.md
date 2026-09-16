@@ -2,7 +2,7 @@
 
 ID : LIB-003  
 Type : LIB  
-Version : V1.4  
+Version : V1.6  
 Statut : Review  
 Niveau : L4  
 Dossier : Framework/03_REFERENCES
@@ -65,13 +65,35 @@ Mode attendu : Photomontage contrôlé.
 
 Réussite : photographie conservée hors masque ; projet correctement implanté ; voisinage et végétation identiques.
 
-### TEST-007 — Présentation générative
+### TEST-007 — Retexturation contextualisée standard
 
-Contexte : vue Revit, photographie indicative, usage présentation client.
+Contexte : vue Revit perspective, axonométrie, photographie réelle proche, usage présentation client (non administratif).
 
-Mode attendu : Présentation générative.
+Mode attendu : Retexturation contextualisée.
 
-Réussite : géométrie fidèle, image valorisante, résultat explicitement non documentaire.
+Réussite : architecture Revit conservée à l'identique (cadrage, perspective, silhouette, volumes, toiture, ouvertures, implantation) ; contexte du site reconnaissable sans conformité pixel par pixel ; aucun élément `locked` modifié.
+
+### TEST-007A — Élément harmonisé
+
+Objectif : améliorer un élément d'environnement classé `harmonizable` (ex. pelouse médiocre) sans modifier l'identité générale du site.
+
+Contexte : Retexturation contextualisée, photographie avec un élément visuellement dégradé, instruction d'amélioration.
+
+Réussite : élément plus crédible et entretenu ; terrain, cadrage et architecture inchangés ; aucun élément voisin non désigné n'est affecté.
+
+### TEST-007B — Élément remplacé ou supprimé
+
+Objectif : transformer un élément d'environnement classé `editable` (ex. clôture à remplacer, arbre à supprimer) sur décision explicite.
+
+Contexte : Retexturation contextualisée, instruction ciblée sur un élément nommé.
+
+Réussite : seul l'élément désigné évolue ; voisinage, horizon, terrain et projet restent cohérents ; suppression ou remplacement propre, sans reconstruction arbitraire du reste du site.
+
+### TEST-007C — Photo et Revit partiellement incompatibles
+
+Contexte : Retexturation contextualisée, correspondance approximative (non stricte) entre l'angle de la photo et la vue Revit.
+
+Réussite : l'implémentation estime si le mode reste possible malgré l'écart et ne bloque que si l'écart compromet réellement le résultat attendu — contrairement à Photomontage contrôlé (LIB-006 §3), une correspondance de caméra parfaite n'est pas requise dans ce mode.
 
 ### TEST-008 — Double verdict d’usage
 
@@ -129,11 +151,11 @@ Résultat attendu : Non conforme pour usage administratif ; nouvelle génératio
 
 Contexte : photographie et vue Revit avec perspectives incompatibles.
 
-Résultat attendu : aucun photomontage administratif automatique ; nouvelle vue ou calibration demandée.
+Résultat attendu : aucune bascule automatique vers Photomontage contrôlé en style Administratif sobre ; nouvelle vue ou calibration demandée.
 
 ### TEST-108 — Mauvais mode sélectionné
 
-Contexte : usage administratif traité en Présentation générative.
+Contexte : usage administratif traité en Retexturation contextualisée.
 
 Résultat attendu : échec du test et reclassement en Photomontage contrôlé.
 
@@ -195,6 +217,18 @@ Résultat attendu : aucune source, instruction ou défaut d'une tentative antér
 
 Résultat attendu : détection de toute altération d'un élément déjà validé ; résultat non promu au rang canonique.
 
+### TEST-123 — Élément verrouillé modifié en retexturation contextualisée
+
+Contexte : élément d'environnement classé `locked` (ex. bâtiment voisin, horizon) transformé sans instruction explicite exceptionnelle.
+
+Résultat attendu : Non conforme ; reprise depuis les sources.
+
+### TEST-124 — Élément modifiable ou harmonisable transformé sans décision validée
+
+Contexte : élément classé `editable` ou `harmonizable` modifié en l'absence de toute décision explicite de l'utilisateur sur cet élément.
+
+Résultat attendu : Non conforme — l'absence de décision équivaut à une conservation par défaut (ARCH-002), jamais à une autorisation implicite.
+
 ## 5. Validation d’une version
 
 Une version est validée lorsque :
@@ -210,3 +244,10 @@ Une version est validée lorsque :
 - ENG-003 — 03_PROMPTS_CORRECTIONS.md
 - LIB-002 — 05_CHECKLIST_CONTROLE.md
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
+
+## Historique
+
+V1.6 — TEST-107 : « aucun photomontage administratif automatique » précisé en « aucune bascule automatique vers Photomontage contrôlé en style Administratif sobre », pour ne jamais confondre mode et style (PRD V2.1, ADR-020).
+
+V1.5 — TEST-007 reclassé sur Retexturation contextualisée (remplace Présentation générative) ; ajout de TEST-007A à 007C (harmonisation, remplacement/suppression `editable`, correspondance photo/Revit non stricte) reprenant les cas de test prioritaires du PRD V2.1 §15. TEST-108 mis à jour. Ajout de TEST-123 et TEST-124 (élément `locked` modifié ; élément `editable`/`harmonizable` transformé sans décision validée). Recalibrage produit V2.1, voir ADR-019.

@@ -2,7 +2,7 @@
 
 **Statut :** Phase 0A en cours.
 **Portée :** décisions structurantes propres à l'implémentation RIF-App. Ce registre ne modifie pas et ne remplace pas le registre ADR du Framework (`Framework/99_DOCUMENTATION/99_DECISIONS_ARCHITECTURE.md`) — voir non-objectif §25 du PRD.
-**Réfère à :** `docs/prd-generateur-rendu-v2.md` (V1.3), §23 Phase 0A, §26 Décisions à formaliser.
+**Réfère à :** `RIF APP/PRD_RIF_V2.1_Neon_Vercel.md` (V2.1, 11.09.2026) — référence produit et technique courante depuis D-19. `docs/prd-generateur-rendu-v2.md` (V1.3) reste la spec du code aujourd'hui en place, non encore adaptée.
 
 ---
 
@@ -126,6 +126,19 @@ Le schéma suit le PRD §10 et l'exemple `Exemples/PROJECT_STATE_EXEMPLE.json` :
 **Statut :** Accepted — 08.09.2026, aligné code et PRD.
 Le suffixe « Flux » des noms d'origine (`genererRenduFlux`, `corrigerRenduFlux`) prêtait à confusion avec le modèle Flux, qui n'est pas le moteur retenu (D-05 : `fal-ai/nano-banana-pro/edit`). Les opérations s'appellent `genererRendu` et `corrigerRendu` dans le code (commit `b2fecde`) comme dans le PRD §14. Les documents figés — prototype de référence, transcription du prémortem, copie du PRD dans `rif-framework/Documentation/` — gardent l'ancien nom : ce sont des témoins d'un état daté, pas la spec vivante.
 
+## D-19 — Bascule sur le PRD V2.1 : référence produit, mode principal et stack cible
+
+**Statut :** Accepted — 12.09.2026. Décision documentaire uniquement : **aucun code TypeScript n'a encore été modifié à ce titre**.
+
+**Décision :**
+- `RIF APP/PRD_RIF_V2.1_Neon_Vercel.md` (V2.1) devient la référence produit et technique de RIF-App, remplaçant `docs/prd-generateur-rendu-v2.md` (V1.3) à ce titre. Le code actuel reste bâti sur la V1.3 tant que l'implémentation n'a pas repris ce chantier (voir « Ce qui reste à construire », CLAUDE.md).
+- Le Framework a été recalibré en conséquence, V1.4 → V1.6 (ADR-019, ADR-020, `Framework/99_DOCUMENTATION/99_DECISIONS_ARCHITECTURE.md`) : `retexturation_contextualisee` devient le mode principal du cas standard d'Évariste (LIB-006 §4) ; le modèle environnemental officiel utilise trois états `locked`/`editable`/`harmonizable`, définis une seule fois dans ARCH-002 (`00_VOCABULAIRE_SYSTEME.md`) ; les styles sont `presentation_naturelle`/`administratif_sobre`/`commercial` (LIB-005). Ce registre ne recopie pas ces règles — s'y référer directement plutôt qu'ici.
+- Cible technique produit (PRD V2.1 §16) : Neon PostgreSQL + Vercel Blob, authentification mono-utilisateur, accès base exclusivement serveur. Supabase sort de la cible.
+- État réel constaté (audit du 12.09.2026, non joint ici) : aucun projet Supabase n'a jamais été connecté, même en local (`.env.local` ne porte aucune variable Supabase) — **Supabase ne contient aucune donnée réelle**. La migration Neon/Vercel Blob est donc un changement de cible, pas une migration de données ; `lib/rif/depot.ts` (interface `DepotDossiers`) découple déjà la logique métier de Supabase, ce qui borne le risque technique de la bascule.
+- **Aucun développement TypeScript du nouveau modèle (mode, environnement, styles, Neon, Vercel Blob) n'a commencé.** Le code présent dans ce dépôt implémente encore le Framework V1.4 / PRD V1.3.
+
+**Conséquences :** la liste « Ce qui reste à construire » de `CLAUDE.md` et l'inventaire des fichiers TypeScript à adapter (`ModeProduction`, `modes-styles.ts`, `collecte-conditionnelle.ts`, `prompt-technique.ts`, `contraintes-libertes.ts`, `controle-qualite.ts`, `StyleRendu`, `depot-supabase.ts`) font foi sur le périmètre exact restant, pas ce registre.
+
 ## Décisions encore ouvertes (issues du PRD §26, non couvertes ci-dessus)
 
 - [ ] D-10 — limite maximale de variantes incluses par dossier ou par perspective.
@@ -151,3 +164,5 @@ En implémentant ENG-004 (`lib/rif/collecte-conditionnelle.ts`), ENG-004 lui-mê
 - 09.09.2026 — Détection automatique du rôle des sources (PRD §9.1) livrée : `lib/rif/detection-role.ts` classe chaque image déposée par appel multimodal (Claude Sonnet 5), le slot choisi par l'utilisateur devenant un simple indice. Simplification assumée et documentée dans CLAUDE.md : les détections non ambiguës sont auto-confirmées faute de session de revue groupée construite ; seules les détections ambiguës (confiance insuffisante ou désaccord avec le slot) attendent une confirmation individuelle via `PATCH .../sources/[fileId]`.
 - 09.09.2026 — Provisioning Supabase préparé (D-02/D-03/D-04) : `supabase/schema-rif-app.sql` complété avec le bucket de stockage privé et ses policies RLS `storage.objects` (nécessaires au fonctionnement — les Route Handlers utilisent le client lié à la session utilisateur, jamais `service_role`, donc sans ces policies le premier dépôt de fichier échoue). Runbook complet dans `docs/provisioning-supabase.md` : création du projet, des deux comptes (Évariste + supervision Alpha_no_code) et des variables d'environnement reste une action utilisateur, jamais exécutée depuis cet environnement.
 - 09.09.2026 — Extraction automatique des directives localisées depuis une source annotée (PRD §9.2, ADR-015) livrée : `lib/rif/detection-directives.ts` convertit chaque marque d'annotation détectée sur une image `annotated_source`/`annotated_render` en directive structurée. Correction de fidélité au passage : `ActionDirective` portait 4 valeurs (`preserve`/`modify`/`remove`/`clarify`) sans usage réel dans le code, ne correspondant à aucune des 5 valeurs littérales du PRD (`conserver`/`supprimer`/`remplacer`/`corriger`/`verrouiller`) — remplacé par les 5 valeurs du PRD, sans impact car le champ n'était lu nulle part. `DirectiveLocalisee` gagne un `id` stable (source + rang), nécessaire pour confirmer une directive individuellement (`PATCH .../directives/[directiveId]`). Même scope cut que la détection de rôle : pas de session de revue groupée, confirmation directive par directive pour les cas ambigus (statut `unknown`).
+- 12.09.2026 — Audit complet de l'existant face au PRD V2.1 (Neon/Vercel Blob) : aucune modification de code, cf. rapport d'audit de cette date (non conservé dans ce registre).
+- 12.09.2026 — Framework recalibré sur le PRD V2.1, V1.4 → V1.6 (ADR-019 : mode `retexturation_contextualisee` et modèle d'environnement `locked`/`editable`/`harmonizable` ; ADR-020 : styles `presentation_naturelle`/`administratif_sobre`/`commercial`) — voir `Framework/99_DOCUMENTATION/99_DECISIONS_ARCHITECTURE.md`. `Exemples/PROJECT_STATE_EXEMPLE.json` refondu sur un cas réel d'Évariste. D-19 ajoutée. Aucun fichier `.ts`/`.tsx` modifié à ce stade.

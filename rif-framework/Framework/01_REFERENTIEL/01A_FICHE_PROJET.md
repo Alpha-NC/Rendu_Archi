@@ -2,7 +2,7 @@
 
 ID : REF-002  
 Type : REF  
-Version : V1.4  
+Version : V1.5  
 Statut : Review  
 Niveau : L2  
 Dossier : Framework/01_REFERENTIEL
@@ -58,7 +58,10 @@ Pour chaque annotation : source, zone ou masque, action, élément ciblé, consi
 
 ## 7. Géométrie et environnement
 
-Volumes, niveaux, toitures, ouvertures, terrasses, bassin, margelles, plages, annexes, implantation, détails critiques, terrain, végétation, clôtures, voisinage, accès et horizon. Chaque élément peut être `locked`, `editable` ou `unknown`.
+Deux familles de données, gouvernées différemment (ARCH-002) :
+
+- **Éléments architecturaux du projet** : volumes, niveaux, toitures, ouvertures, terrasses, bassin, margelles, plages, annexes, implantation, détails critiques. Régis par l'autorité de la source géométrique (REF-001 §2) et par le mode de production (LIB-006) — pas par les trois états ci-dessous.
+- **Éléments d'environnement** : terrain, végétation, clôtures, voisinage, accès, horizon, et tout autre composant du contexte réel identifié. Chaque élément d'environnement reçoit exactement un des trois états `locked`, `editable` ou `harmonizable` (ARCH-002).
 
 ## 8. Matériaux
 
@@ -66,7 +69,7 @@ Pour chaque élément : nature, finition, teinte, calepinage, source, référenc
 
 ## 9. Production
 
-Mode, style, canevas, zones modifiables, zones verrouillées, orientation, lumière, format de sortie, nombre de variantes demandé et contraintes spécifiques.
+Mode, style, canevas, zones verrouillées, modifiables et harmonisables (ARCH-002), orientation, lumière, format de sortie, nombre de variantes demandé et contraintes spécifiques.
 
 ## 10. Historique et sélection
 
@@ -75,4 +78,14 @@ Générations, variantes, corrections, reprises, audits, coûts, décisions, ré
 ## 11. Validation
 
 Éléments validés, réserves, non-conformités, contrôles en attente et verdict par usage.
+
+## Documents liés
+
+- REF-001 — 01_REFERENTIEL_GENERAL.md
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
+- LIB-006 — 04B_MODES_DE_PRODUCTION.md
+
+## Historique
+
+V1.5 — §7 : remplace `locked`/`editable`/`unknown` (non défini, jamais harmonisé avec le reste du Framework) par les trois états d'environnement officiels `locked`/`editable`/`harmonizable` (ARCH-002), et distingue explicitement les éléments architecturaux (régis par REF-001/LIB-006) des éléments d'environnement (régis par ces trois états). Recalibrage produit V2.1 — voir ADR-019.
 

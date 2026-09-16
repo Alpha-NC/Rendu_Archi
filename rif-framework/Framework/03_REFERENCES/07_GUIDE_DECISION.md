@@ -2,7 +2,7 @@
 
 ID : LIB-004  
 Type : LIB  
-Version : V1.4  
+Version : V1.6  
 Statut : Review  
 Niveau : L4  
 Dossier : Framework/03_REFERENCES
@@ -14,10 +14,11 @@ Dossier : Framework/03_REFERENCES
 ## Sources et mode
 
 - Vue Revit seule, cadrage conservé : Retexturation Revit.
+- Vue Revit + photo réelle, sans usage administratif strict (cas standard) : Retexturation contextualisée.
 - Photo réelle et usage administratif, caméras compatibles : Photomontage contrôlé.
 - Caméras approximatives : présentation possible avec réserve ; administratif suspendu jusqu'à calibration ou nouvelle vue.
-- Caméras incompatibles ou non évaluées : aucun photomontage administratif.
-- Liberté d'ambiance explicitement acceptée : Présentation générative, clairement qualifiée.
+- Caméras incompatibles ou non évaluées : aucune bascule automatique vers Photomontage contrôlé en style Administratif sobre ; Retexturation contextualisée reste possible si l'écart ne compromet pas le résultat attendu (LIB-006 §4).
+- Liberté d'ambiance explicitement acceptée en Retexturation contextualisée : autoriser les éléments `harmonizable` plus largement, jamais au-delà (ARCH-002).
 
 ## Rôles de fichiers
 
@@ -58,4 +59,15 @@ Dossier : Framework/03_REFERENCES
 3. ne pas inventer ;
 4. demander une clarification ciblée ;
 5. suspendre plutôt que produire une fausse conformité.
+
+## Documents liés
+
+- LIB-006 — 04B_MODES_DE_PRODUCTION.md
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
+
+## Historique
+
+V1.6 — Précision « aucun photomontage administratif » → « aucune bascule automatique vers Photomontage contrôlé en style Administratif sobre » : l'ancienne formulation nommait, sans le dire explicitement, un couple mode+style avec l'ancien nom du style (PRD V2.1, ADR-020).
+
+V1.5 — Ajout de la ligne « Vue Revit + photo réelle, sans usage administratif strict » (Retexturation contextualisée), absente de ce guide alors qu'elle correspond au cas standard du PRD V2.1. Remplacement de la référence à « Présentation générative ». Recalibrage produit V2.1, voir ADR-019.
 

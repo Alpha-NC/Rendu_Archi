@@ -2,7 +2,7 @@
 
 ID : ENG-004
 Type : ENGINE
-Version : V1.4
+Version : V1.6
 Statut : Review
 Niveau : L3
 Dossier : Framework/02_MOTEUR
@@ -63,7 +63,7 @@ Les huit questions génériques de l'Étape 3, numérotées pour y référer dan
 
 ## 4. Branchement par combinaison
 
-### 4.1 Photomontage contrôlé + Photomontage administratif (cas par défaut)
+### 4.1 Photomontage contrôlé + Administratif sobre (cas par défaut)
 
 ① Inchangée.
 ② Convertie en confirmation — LIB-006 §5 fixe déjà ce mode par défaut dès qu'une photographie existe pour un usage administratif. Seule l'implantation précise du projet dans la photo reste une vraie question.
@@ -73,13 +73,13 @@ Les huit questions génériques de l'Étape 3, numérotées pour y référer dan
 ⑦ Convertie en confirmation — style par défaut dès qu'une photographie existe (LIB-005, Sélection automatique).
 ⑧ Convertie en confirmation négative — absence d'ajout par défaut (LIB-005 §5), sauf demande explicite.
 
-### 4.2 Photomontage contrôlé + Présentation client
+### 4.2 Photomontage contrôlé + Présentation naturelle
 
 ① Inchangée.
 ② Inchangée, reformulée en langage naturel — LIB-004 fait de cet arbitrage (fidélité documentaire vs liberté d'ambiance) un vrai choix, pas une évidence.
 ③④ Inchangées.
 ⑤ Réduite mais reste ouverte — porte sur ce qui doit être valorisé plutôt que sur une liste exhaustive.
-⑥ Convertie en confirmation — le style Client définit déjà la direction (plus chaud que la photo, LIB-005 §2) ; seule la validation est demandée.
+⑥ Convertie en confirmation — le style Présentation naturelle définit déjà la direction (plus chaud que la photo, LIB-005 §2) ; seule la validation est demandée.
 ⑦ Convertie en confirmation.
 ⑧ Réduite — reste ouverte mais cadrée par l'exigence de discrétion (LIB-005 §2).
 
@@ -99,10 +99,37 @@ Les huit questions génériques de l'Étape 3, numérotées pour y référer dan
 ④ Réduite — la distinction existant conservé / modifié (ADR-012) répond à un conflit entre photo et Revit qui ne peut pas exister ici ; redevient une simple question de matériaux.
 ⑤ Quasi retirée — sans photographie, il n'y a pas d'environnement réel à conserver ou supprimer.
 ⑥ Inchangée, redevient une vraie question ouverte — aucune photographie n'impose de référence lumineuse ; REF-001 §9 sert de filet (lumière neutre par défaut si non précisée).
-⑦ Réduite à deux choix. **Photomontage administratif est exclu de ce mode** (ADR-013) : son objectif (LIB-005 §1) suppose une intégration à une photographie réelle, absente ici. Seuls Présentation client et Commercial restent proposables. À défaut de choix exprimé, Présentation client sert de valeur par défaut.
+⑦ Réduite à deux choix. **Administratif sobre est exclu de ce mode** (ADR-013) : son objectif (LIB-005 §1) suppose une intégration à une photographie réelle, absente ici. Seuls Présentation naturelle et Commercial restent proposables. À défaut de choix exprimé, Présentation naturelle sert de valeur par défaut.
 ⑧ Inchangée, dépend du style retenu comme dans les autres branches.
 
 ---
+
+### 4.5 Retexturation contextualisée + Présentation naturelle (cas standard, par défaut)
+
+① Inchangée.
+② Convertie en confirmation — LIB-006 §5 fixe déjà ce mode par défaut dès qu'une photographie existe sans exigence administrative stricte. Seule l'implantation précise du projet reste une vraie question si elle n'est pas déjà lisible sur la vue Revit.
+③④ Inchangées.
+⑤ **Reformulée** — devient une classification par élément d'environnement plutôt qu'une question globale de conservation. La pré-analyse (§2.1) propose un état `locked`, `editable` ou `harmonizable` (ARCH-002) pour chaque élément identifié sur la photo, avec confiance et provenance ; l'implémentation ne demande confirmation individuelle que pour les éléments ambigus, rares ou contradictoires — jamais une reclassification exhaustive élément par élément.
+⑥ Retirée — remplacée par une phrase annonçant que la lumière suit la photographie comme référence de contexte (REF-001 §6), sauf demande explicite d'ambiance différente.
+⑦ Convertie en confirmation — Présentation naturelle est le style par défaut de ce mode (LIB-005).
+⑧ Convertie en confirmation négative — absence d'ajout par défaut, sauf demande explicite.
+
+### 4.6 Retexturation contextualisée + Administratif sobre
+
+① Inchangée.
+② Convertie en confirmation — un usage administratif déclaré avec une photo compatible oriente plutôt vers Photomontage contrôlé (LIB-006 §6) ; ce cas ne subsiste que si l'utilisateur maintient explicitement Retexturation contextualisée malgré l'usage administratif — l'implémentation le signale avant de poursuivre.
+③④ Inchangées.
+⑤ Réduite — comme en 4.1, la conservation prévaut par défaut ; ne reste ouverte que la question de ce qui doit rester `editable`.
+⑥ Retirée — la lumière suit la photographie (REF-001 §6).
+⑦⑧ Convertie en confirmation, comme en 4.1.
+
+### 4.7 Retexturation contextualisée + Commercial
+
+①③④⑦ Même traitement qu'en 4.5.
+② Même nuance qu'en 4.5.
+⑤ Traitée comme en 4.5 — la classification par élément prime, avec une tolérance `harmonizable` plus large pour l'ambiance.
+⑥ **Ajoutée**, comme en 4.3 — moment de la journée explicite ; sous-question sur les éclairages à activer si fin de journée ou crépuscule.
+⑧ Inversée, comme en 4.3.
 
 ## 5. Ce que ce module ne fait pas
 
@@ -118,10 +145,16 @@ Il ne redéfinit aucune règle d'autorité, aucune caractéristique de style, au
 - LIB-004 — 07_GUIDE_DECISION.md
 - LIB-005 — 04A_STYLES_DE_RENDU.md
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
-- DOC-002 — 99_DECISIONS_ARCHITECTURE.md (ADR-013)
+- DOC-002 — 99_DECISIONS_ARCHITECTURE.md (ADR-013, ADR-019)
 
 ---
 
 ## Évolution
 
 Toute nouvelle combinaison mode × style doit être documentée ici selon la même structure : état de chacune des huit questions du tronc commun, plus toute question additionnelle propre à la combinaison.
+
+## Historique
+
+V1.6 — Harmonisation de la nomenclature des styles sur le PRD V2.1 (ADR-020) dans les en-têtes de branchement (§4.1, 4.2, 4.5, 4.6) et le corps du texte : « Photomontage administratif » → **Administratif sobre**, « Présentation client » → **Présentation naturelle**.
+
+V1.5 — Ajout des branches §4.5 à §4.7 (Retexturation contextualisée × Présentation client/Photomontage administratif/Commercial), remplaçant l'absence de branche pour l'ancien mode « Présentation générative » — qui, faute de règle documentée, ne bénéficiait d'aucune réduction (§2, comportement de repli). Recalibrage produit V2.1, voir ADR-019 et LIB-006 V1.5.

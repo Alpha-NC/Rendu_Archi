@@ -2,7 +2,7 @@
 
 ID : ENG-003  
 Type : ENGINE  
-Version : V1.4  
+Version : V1.5  
 Statut : Review  
 Niveau : L3  
 Dossier : Framework/02_MOTEUR
@@ -70,9 +70,9 @@ La photographie originale reste la référence des zones verrouillées.
 
 Si le rendu précédent a déjà altéré le site réel, la correction doit repartir de la photographie originale et du masque, et non de l’image dégradée.
 
-### Présentation générative
+### Retexturation contextualisée
 
-La correction peut s’appuyer sur le dernier rendu validé tant que la géométrie et les validations ne régressent pas.
+La correction porte sur un élément d'environnement classé `editable` ou `harmonizable` (ARCH-002), ou sur un aspect de la Retexturation Revit (matériaux, lumière, effets de surface). Elle ne doit jamais réouvrir un élément déjà classé et validé à un autre état, ni modifier un élément `locked`. La géométrie et les validations ne régressent pas.
 
 ## 7. Contexte de correction
 
@@ -129,6 +129,11 @@ Le résultat corrigé constitue une nouvelle variante traçable. Il ne remplace 
 ## Documents liés
 
 - REF-002 — 01A_FICHE_PROJET.md
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
 - ENG-002 — 02A_PROMPT_SYSTEME.md
 - LIB-002 — 05_CHECKLIST_CONTROLE.md
 - LIB-004 — 07_GUIDE_DECISION.md
+
+## Historique
+
+V1.5 — §6 : remplace la sous-section « Présentation générative » par « Retexturation contextualisée » — la correction porte explicitement sur un élément `editable`/`harmonizable` (ARCH-002), jamais sur un élément `locked` ni une réouverture d'un élément déjà validé à un autre état. Recalibrage produit V2.1, voir ADR-019.

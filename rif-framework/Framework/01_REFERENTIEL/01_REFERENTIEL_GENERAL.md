@@ -2,7 +2,7 @@
 
 ID : REF-001  
 Type : REF  
-Version : V1.4  
+Version : V1.5  
 Statut : Review  
 Niveau : L2  
 Dossier : Framework/01_REFERENTIEL
@@ -20,7 +20,7 @@ La fidélité au projet prévaut toujours sur l'esthétique. Une image moins spe
 L'autorité est attribuée par domaine et par élément, jamais au fichier entier sans qualification.
 
 - La source géométrique désignée, généralement Revit, fait foi pour les volumes, proportions, niveaux, toitures, ouvertures, terrasses, piscines, annexes et implantations projetées.
-- La photographie du site fait foi pour le terrain visible, le relief, la végétation existante, les clôtures, murs, voisins, accès et horizon.
+- La photographie du site fait foi pour l'identité générale du contexte : terrain visible, relief, végétation existante, clôtures, murs, voisins, accès et horizon. Selon le mode de production, elle peut être le canevas de cadrage (Photomontage contrôlé) ou une référence de contexte pendant que la source géométrique reste le canevas (Retexturation contextualisée) — voir LIB-006. Dans les deux cas, elle ne fait jamais foi au pixel près : chaque élément d'environnement qu'elle documente reçoit un état `locked`, `editable` ou `harmonizable` (ARCH-002), qui précise le degré de fidélité attendu.
 - Le canevas de cadrage dépend du mode de production.
 - Une donnée explicitement validée sur l'état projet prévaut sur une apparence contradictoire de l'état existant lorsque l'élément est modifié par le projet.
 - Une axonométrie est une source secondaire de contrôle des volumes ; elle ne remplace ni la caméra ni le canevas.
@@ -39,7 +39,9 @@ La géométrie validée ne doit pas être modifiée sans demande explicite. Il e
 
 ## 6. Environnement et lumière
 
-En Photomontage contrôlé, l'identité du site reste reconnaissable et stable hors zones autorisées. La lumière suit la photographie lorsqu'elle constitue le canevas. Si l'orientation est connue, la position du soleil doit être physiquement plausible ; sinon une lumière naturelle neutre et diffuse est utilisée.
+Quel que soit le mode, l'identité du site reste reconnaissable : en Photomontage contrôlé, elle reste stable hors zones autorisées ; en Retexturation contextualisée, elle reste cohérente tout en admettant les transformations `editable` et les améliorations `harmonizable` explicitement décidées sur les éléments d'environnement (ARCH-002). Aucun de ces deux modes n'autorise la reconstruction intégrale du site.
+
+La lumière suit la photographie lorsqu'elle constitue le canevas ou la référence de contexte. Si l'orientation est connue, la position du soleil doit être physiquement plausible ; sinon une lumière naturelle neutre et diffuse est utilisée.
 
 ## 7. Matériaux
 
@@ -64,4 +66,14 @@ Les verdicts sont : `Conforme`, `Réserve`, `Non conforme`, `Non applicable`. Le
 ## 12. Validation humaine
 
 La sélection du résultat canonique et la validation administrative appartiennent toujours au responsable du projet.
+
+## Documents liés
+
+- ARCH-002 — 00_VOCABULAIRE_SYSTEME.md
+- REF-002 — 01A_FICHE_PROJET.md
+- LIB-006 — 04B_MODES_DE_PRODUCTION.md
+
+## Historique
+
+V1.5 — §2 et §6 : cessent de présumer que la photographie du site est nécessairement un canevas figé — elle peut être canevas (Photomontage contrôlé) ou référence de contexte pendant que la source géométrique reste le canevas (Retexturation contextualisée, mode principal du recalibrage V2.1). Introduction des trois états d'environnement `locked`/`editable`/`harmonizable` (ARCH-002). Voir ADR-019.
 

@@ -2,7 +2,7 @@
 
 ID : DOC-003  
 Type : DOC  
-Version : V1.4  
+Version : V1.6  
 Statut : Review  
 Niveau : L5  
 Dossier : Framework/99_DOCUMENTATION
@@ -10,6 +10,58 @@ Dossier : Framework/99_DOCUMENTATION
 ---
 
 # Journal des versions
+
+## V1.6 — Review — 12 septembre 2026
+
+Harmonisation finale de la nomenclature des styles sur le PRD V2.1 §9 (ADR-020), en préparation de l'implémentation TypeScript.
+
+### Modifications
+
+- style « Photomontage administratif » renommé **Administratif sobre** (`administratif_sobre`) ;
+- style « Présentation client » renommé **Présentation naturelle** (`presentation_naturelle`) ;
+- Commercial (`commercial`) inchangé ;
+- renommage seul, aucune règle de sélection ou de caractéristique modifiée (déjà corrigées en V1.5) ;
+- tables de nomenclature officielle ajoutées dans LIB-005 (styles) et LIB-006 (modes), avec rappel explicite de la distinction mode/style ;
+- `Exemples/PROJECT_STATE_EXEMPLE.json` refondu sur le cas d'usage Évariste réel (mode `retexturation_contextualisee`, style `presentation_naturelle`, environnement à trois états) ;
+- `SHA256SUMS.txt` régénéré.
+
+### Décisions
+
+ADR-020.
+
+### Condition de stabilité
+
+Inchangée par rapport à la V1.5 : validation des cas de test applicables sur des dossiers réels d'Évariste, en particulier Retexturation contextualisée, et approbation du responsable RIF.
+
+## V1.5 — Review — 12 septembre 2026
+
+Recalibrage documentaire complet sur le PRD produit V2.1 (`PRD_RIF_V2.1_Neon_Vercel.md`) — recentrage sur la photoréalisation contrôlée de vues Revit et introduction d'un modèle d'environnement à trois états. Ne couvre que le Framework documentaire ; la stack technique cible du PRD V2.1 (Neon, Vercel Blob) n'est pas traitée par cette version, qui reste un sujet d'implémentation.
+
+### Ajouts
+
+- mode **Retexturation contextualisée**, mode principal du cas standard (vue Revit + axonométrie + photo réelle, sans usage administratif strict) ;
+- modèle d'environnement à trois états `locked`/`editable`/`harmonizable`, défini une seule fois dans ARCH-002 et référencé partout ailleurs ;
+- critère de contrôle « Silhouette », distinct des Volumes (LIB-002) ;
+- branches de collecte conditionnelle §4.5 à §4.7 pour Retexturation contextualisée (ENG-004) ;
+- clause de prompt et section ZONES HARMONISABLES pour Retexturation contextualisée (ENG-002) ;
+- cas de test TEST-007A à 007C, TEST-123, TEST-124 (LIB-003).
+
+### Modifications
+
+- le mode **Présentation générative est retiré**, remplacé par Retexturation contextualisée (ADR-019) ;
+- REF-002 §7 : `locked`/`editable`/`unknown` (non défini) remplacé par `locked`/`editable`/`harmonizable` (ARCH-002) ;
+- REF-001 §2 et §6 : la photographie du site n'est plus présumée être systématiquement un canevas figé — elle peut être canevas (Photomontage contrôlé) ou référence de contexte (Retexturation contextualisée) ;
+- LIB-005 : correction de la sélection automatique de style, qui orientait tout dépôt de photo vers Photomontage administratif indépendamment de l'usage déclaré ;
+- LIB-004 : ajout de la ligne de décision manquante pour le cas standard ;
+- ADR-009 restreinte à son périmètre d'origine (Photomontage contrôlé) par ADR-019.
+
+### Décisions
+
+ADR-019.
+
+### Condition de stabilité
+
+La V1.5 devient Stable après exécution des cas de test applicables (LIB-003) sur des dossiers réels d'Évariste couvrant Retexturation contextualisée, et approbation du responsable RIF. Elle hérite de la condition de stabilité non encore levée de la V1.4 (`Tests/PLAN_VALIDATION_V1.4.md`).
 
 ## V1.4 — Review — 6 septembre 2026
 

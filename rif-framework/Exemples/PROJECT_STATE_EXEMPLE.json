@@ -1,23 +1,163 @@
 {
-  "project_id": "EXEMPLE-001",
-  "revision": 3,
-  "usage": ["presentation_client", "insertion_administrative"],
+  "project_id": "EVARISTE-2026-014",
+  "project_name": "Extension R+1 - Biarritz, quartier Aguilera",
+  "phase": "avant-projet",
+  "revision": 2,
+  "usage": ["presentation_client"],
+  "framework_version": "V1.6",
+  "implementation_version": "RIF-App-0.1.0",
+  "mode": "retexturation_contextualisee",
+  "style": "presentation_naturelle",
   "sources": [
-    {"id": "src-1", "role_detected": "revit_view", "role_confirmed": "revit_view", "status": "valid"},
-    {"id": "src-2", "role_detected": "site_photo", "role_confirmed": "site_photo", "status": "valid"},
-    {"id": "src-3", "role_detected": "material_reference", "role_confirmed": "material_reference", "target": "facade_extension"}
+    {
+      "id": "src-1",
+      "role_detected": "revit_view",
+      "role_confirmed": "revit_view",
+      "status": "valid",
+      "note": "Canevas principal - fixe camera, cadrage, perspective, silhouette, volumes, ouvertures, toiture et implantation."
+    },
+    {
+      "id": "src-2",
+      "role_detected": "axonometry",
+      "role_confirmed": "axonometry",
+      "status": "valid",
+      "note": "Garde-fou structurel - controle les retours de facade et l'implantation de l'extension, partiellement masques en perspective."
+    },
+    {
+      "id": "src-3",
+      "role_detected": "site_photo",
+      "role_confirmed": "site_photo",
+      "status": "valid",
+      "note": "Reference de contexte, jamais canevas dans ce mode - angle proche de la vue Revit mais non strictement identique."
+    },
+    {
+      "id": "src-4",
+      "role_detected": "material_reference",
+      "role_confirmed": "material_reference",
+      "target": "facade_extension",
+      "status": "valid"
+    }
   ],
-  "camera_compatibility": "Compatible",
-  "mode": "Photomontage controle",
-  "style": "Photomontage administratif",
+  "camera_compatibility": "Approximative",
+  "geometrie": {
+    "value": "Extension R+1 en retour d'equerre, toiture deux pans, ouvertures alignees sur l'existant",
+    "status": "validated",
+    "source_id": "src-1",
+    "authority": "source_document",
+    "editable": false,
+    "locked": true
+  },
+  "locked": [
+    "camera",
+    "cadrage",
+    "perspective",
+    "silhouette",
+    "volumes",
+    "toiture",
+    "ouvertures",
+    "implantation"
+  ],
+  "environnement": [
+    {
+      "element": "batiment_voisin_nord",
+      "type": "batiment_voisin",
+      "localisation": "arriere-plan gauche",
+      "source": "src-3",
+      "etat": "locked",
+      "action_attendue": "conserver a l'identique",
+      "validation": "validated"
+    },
+    {
+      "element": "horizon",
+      "type": "structure_generale_terrain",
+      "localisation": "arriere-plan",
+      "source": "src-3",
+      "etat": "locked",
+      "action_attendue": "conserver a l'identique",
+      "validation": "validated"
+    },
+    {
+      "element": "cloture_limite_sud",
+      "type": "cloture",
+      "localisation": "limite sud de parcelle, premier plan",
+      "source": "src-3",
+      "etat": "editable",
+      "action_attendue": "remplacer par une cloture bois claire, decision explicite d'Evariste",
+      "validation": "validated"
+    },
+    {
+      "element": "arbre_angle_sud_est",
+      "type": "vegetation",
+      "localisation": "angle sud-est de la parcelle",
+      "source": "src-3",
+      "etat": "editable",
+      "action_attendue": "supprimer - masque l'acces projete",
+      "validation": "validated"
+    },
+    {
+      "element": "pelouse",
+      "type": "sol_vegetal",
+      "localisation": "premier plan, autour de l'extension",
+      "source": "src-3",
+      "etat": "harmonizable",
+      "action_attendue": "ameliorer l'aspect entretenu sans reconstruire le terrain",
+      "validation": "provisional"
+    },
+    {
+      "element": "haie_ouest",
+      "type": "vegetation",
+      "localisation": "limite ouest de parcelle",
+      "source": "src-3",
+      "etat": "locked",
+      "action_attendue": "conserver a l'identique - explicitement demande",
+      "validation": "validated"
+    }
+  ],
   "materials": {
-    "facade_extension": {"value": "enduit mineral clair", "confidence": 0.91, "source_id": "src-3", "status": "validated"}
+    "facade_extension": {
+      "value": "enduit mineral clair",
+      "status": "validated",
+      "source_id": "src-4",
+      "authority": "utilisateur",
+      "editable": false,
+      "locked": true,
+      "confidence": 0.91
+    }
   },
   "localized_directives": [
-    {"source_id": "src-2", "action": "preserve", "target": "haie_ouest", "status": "validated", "remove_annotation_from_output": true}
+    {
+      "source_id": "src-3",
+      "action": "conserver",
+      "target": "haie_ouest",
+      "consigne": "ne pas toucher a la haie, elle masque le vis-a-vis",
+      "confidence": 0.95,
+      "status": "validated",
+      "remove_annotation_from_output": true
+    },
+    {
+      "source_id": "src-3",
+      "action": "supprimer",
+      "target": "arbre_angle_sud_est",
+      "consigne": "cet arbre genera l'acces au projet, a retirer",
+      "confidence": 0.88,
+      "status": "validated",
+      "remove_annotation_from_output": true
+    }
   ],
-  "locked": ["camera", "openings", "roof", "existing_environment"],
-  "variant_count": 3,
-  "canonical_result_id": null
+  "lumiere": {
+    "value": "lumiere naturelle de fin de matinee, coherente avec l'orientation sud-est de la photo de reference",
+    "status": "validated",
+    "source_id": "src-3",
+    "authority": "source_document",
+    "editable": false,
+    "locked": false
+  },
+  "interdictions": [
+    "aucune ouverture, marche ou equipement absent des sources",
+    "aucune marque d'annotation visible dans le rendu"
+  ],
+  "reserves": [],
+  "variant_count": 2,
+  "canonical_result_id": null,
+  "validated_by": "evariste.blasco"
 }
-
