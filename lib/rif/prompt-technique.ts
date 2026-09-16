@@ -14,16 +14,23 @@
  */
 
 import type { ProjectState, ModeProduction } from './project-state'
-import { contraintesStructurelles, libertesAccordees, presencesAutorisees } from './contraintes-libertes'
+import {
+  contraintesStructurelles,
+  elementsHarmonisables,
+  elementsModifiables,
+  elementsVerrouilles,
+  libertesAccordees,
+  presencesAutorisees,
+} from './contraintes-libertes'
 
 function sectionModeProduction(mode: ModeProduction | undefined): string {
   switch (mode) {
     case 'retexturation_revit':
       return 'Retexturation Revit — amélioration d\'une vue Revit sans modifier sa construction visuelle.'
+    case 'retexturation_contextualisee':
+      return 'Retexturation contextualisée — photoréalisation de la vue Revit, contextualisée par la photo réelle du site, mode principal du cas standard.'
     case 'photomontage_controle':
       return 'Photomontage contrôlé — insertion du projet dans une photographie réelle, identité documentaire du site conservée.'
-    case 'presentation_generative':
-      return 'Présentation générative — image réaliste et valorisante, liberté visuelle contrôlée.'
     default:
       return 'Non déterminé — ne devrait jamais atteindre la construction du prompt (précondition manquante).'
   }
@@ -33,12 +40,57 @@ function sectionCanevasPrincipal(mode: ModeProduction | undefined, projectState:
   const source = (role: string) => projectState.sources.find((s) => (s.role_confirmed ?? s.role_detected) === role)
   switch (mode) {
     case 'retexturation_revit':
+    case 'retexturation_contextualisee':
       return `Vue Revit (source ${source('revit_view')?.id ?? 'non résolue'}).`
     case 'photomontage_controle':
       return `Photographie réelle (source ${source('site_photo')?.id ?? 'non résolue'}).`
     default:
       return `Vue Revit ou source explicitement désignée (source ${source('revit_view')?.id ?? 'non résolue'}).`
   }
+}
+
+/**
+ * ENG-002 V1.6 §3.3 : garde-fou structurel et référence de contexte,
+ * propres à Retexturation contextualisée — jamais présents dans les autres
+ * modes (la photo n'y est jamais qu'un canevas fixe ou hors sujet).
+ */
+function sectionGardeFouStructurel(projectState: ProjectState): string {
+  const axo = projectState.sources.find((s) => (s.role_confirmed ?? s.role_detected) === 'axonometry')
+  return axo
+    ? `Vue axonométrique (source ${axo.id}) — contrôle les volumes, retours de façade, toiture, terrasses, piscine et annexes partiellement masqués en perspective. Ne remplace jamais la vue Revit perspective comme canevas ou référence de caméra.`
+    : 'Aucune axonométrie fournie — vigilance accrue sur les volumes partiellement masqués en perspective.'
+}
+
+function sectionReferenceContexte(projectState: ProjectState): string {
+  const photo = projectState.sources.find((s) => (s.role_confirmed ?? s.role_detected) === 'site_photo')
+  return photo
+    ? `Photographie réelle (source ${photo.id}) — référence de contexte, jamais canevas dans ce mode : elle n'impose pas la conservation pixel par pixel de chaque détail. Le terrain, le relief, le fond et l'identité générale du site s'en inspirent selon la classification ci-dessous.`
+    : "Aucune photographie réelle fournie — ce mode se rabat sur Retexturation Revit (LIB-006 §4)."
+}
+
+function ligneElement(e: { id: string; type: string; action_attendue?: string }): string {
+  return `- ${e.id} (${e.type})${e.action_attendue ? ` : ${e.action_attendue}` : ''}`
+}
+
+function sectionElementsVerrouilles(projectState: ProjectState): string {
+  const elements = elementsVerrouilles(projectState)
+  return elements.length
+    ? elements.map(ligneElement).join('\n')
+    : 'Aucun élément classé — traiter tout élément de contexte comme verrouillé par défaut (ARCH-002).'
+}
+
+function sectionElementsModifiables(projectState: ProjectState): string {
+  const elements = elementsModifiables(projectState)
+  return elements.length
+    ? elements.map(ligneElement).join('\n')
+    : 'Aucun. Aucune suppression ni aucun remplacement ne sont autorisés sur les éléments de contexte.'
+}
+
+function sectionElementsHarmonisables(projectState: ProjectState): string {
+  const elements = elementsHarmonisables(projectState)
+  return elements.length
+    ? elements.map(ligneElement).join('\n')
+    : 'Aucun. Aucune amélioration visuelle des éléments de contexte au-delà de leur apparence actuelle.'
 }
 
 function clauseParMode(mode: ModeProduction | undefined): string {
@@ -51,6 +103,16 @@ function clauseParMode(mode: ModeProduction | undefined): string {
         'Améliorer uniquement les matériaux, l\'eau, la lumière, les ombres et les effets de surface autorisés.',
         'Ne pas reconstruire l\'architecture.',
       ].join('\n')
+    case 'retexturation_contextualisee':
+      return [
+        'Utiliser la vue Revit comme image de base et comme seule autorité de caméra, cadrage,',
+        'perspective, silhouette, volumes, ouvertures, toiture et implantation.',
+        'Utiliser la photographie réelle comme référence de contexte, jamais comme canevas :',
+        'elle n\'impose pas la conservation pixel par pixel de chaque détail.',
+        'Respecter la classification de chaque élément d\'environnement : verrouillé, modifiable ou harmonisable.',
+        'Ne pas reconstruire le site dans son intégralité.',
+        'Ne pas présenter le résultat comme une insertion documentaire exacte.',
+      ].join('\n')
     case 'photomontage_controle':
       return [
         'Utiliser la photographie réelle comme canevas fixe.',
@@ -60,13 +122,6 @@ function clauseParMode(mode: ModeProduction | undefined): string {
         'Intégrer uniquement les éléments projetés définis par la source géométrique.',
         'Limiter les modifications aux raccords locaux, ombres de contact, transitions de sol',
         'et ajustements d\'exposition nécessaires à l\'intégration.',
-      ].join('\n')
-    case 'presentation_generative':
-      return [
-        'Produire une image de présentation cohérente avec le projet.',
-        'La géométrie désignée reste autoritaire.',
-        'L\'environnement peut être harmonisé dans les limites validées.',
-        'Ne pas présenter le résultat comme une insertion documentaire exacte.',
       ].join('\n')
     default:
       return ''
@@ -151,6 +206,8 @@ export function construirePromptGeneration(projectState: ProjectState): string {
     `OBJECTIF\nProduire un rendu photoréaliste destiné à ${projectState.usage.join(', ') || 'usage non précisé'}.`,
     `MODE DE PRODUCTION\n${sectionModeProduction(mode)}`,
     `CANEVAS PRINCIPAL\n${sectionCanevasPrincipal(mode, projectState)}\nConserver son cadrage final, sa perspective et ses dimensions selon les règles du mode retenu.`,
+    mode === 'retexturation_contextualisee' ? `GARDE-FOU STRUCTUREL\n${sectionGardeFouStructurel(projectState)}` : '',
+    mode === 'retexturation_contextualisee' ? `RÉFÉRENCE DE CONTEXTE\n${sectionReferenceContexte(projectState)}` : '',
     clauseParMode(mode),
     `RÉFÉRENCES MATÉRIAU LIMITÉES\n${sectionReferencesMateriau(projectState)}\nChaque référence ci-dessus ne transmet que l'apparence de l'élément désigné.\nElle ne modifie ni la géométrie, ni le cadrage, ni la caméra, ni l'environnement.`,
     `COMPATIBILITÉ DES CAMÉRAS\nÉtat : ${projectState.camera_compatibility}`,
@@ -163,6 +220,9 @@ export function construirePromptGeneration(projectState: ProjectState): string {
     projectState.lumiere ? `LUMIÈRE ET AMBIANCE\n${projectState.lumiere.value}` : '',
     `STYLE DE RENDU\n${projectState.style ?? 'Non confirmé'}`,
     `ZONES VERROUILLÉES\n${sectionZonesVerrouillees(projectState)}`,
+    mode === 'retexturation_contextualisee' ? `ÉLÉMENTS VERROUILLÉS\n${sectionElementsVerrouilles(projectState)}` : '',
+    mode === 'retexturation_contextualisee' ? `ÉLÉMENTS MODIFIABLES\n${sectionElementsModifiables(projectState)}` : '',
+    mode === 'retexturation_contextualisee' ? `ÉLÉMENTS HARMONISABLES\n${sectionElementsHarmonisables(projectState)}` : '',
     sectionContraintesLibertes(projectState),
     projectState.interdictions?.length ? `INTERDICTIONS\n${projectState.interdictions.join('\n')}\n${INTERDICTION_INVENTION}` : `INTERDICTIONS\n${INTERDICTION_INVENTION}`,
     `CONDITION DE BLOCAGE\n${CONDITION_BLOCAGE}`,
@@ -193,6 +253,9 @@ export function construirePromptCorrection(
     `MODE DE PRODUCTION\n${sectionModeProduction(mode)}`,
     `ÉLÉMENT À MODIFIER\n${parametres.elementAModifier}`,
     `ZONES VERROUILLÉES\n${sectionZonesVerrouillees(projectState)}`,
+    mode === 'retexturation_contextualisee' ? `ÉLÉMENTS VERROUILLÉS\n${sectionElementsVerrouilles(projectState)}` : '',
+    mode === 'retexturation_contextualisee' ? `ÉLÉMENTS MODIFIABLES\n${sectionElementsModifiables(projectState)}` : '',
+    mode === 'retexturation_contextualisee' ? `ÉLÉMENTS HARMONISABLES\n${sectionElementsHarmonisables(projectState)}` : '',
     sectionContraintesLibertes(projectState),
     `RÉSULTAT ATTENDU\n${parametres.resultatAttendu}`,
     `MARQUES À EXCLURE\nToute marque, flèche, cercle ou texte d'annotation présent dans les sources ne doit jamais apparaître dans le résultat.`,
@@ -200,6 +263,8 @@ export function construirePromptCorrection(
 
   const sectionsCommunes = [
     clauseParMode(mode),
+    mode === 'retexturation_contextualisee' ? `GARDE-FOU STRUCTUREL\n${sectionGardeFouStructurel(projectState)}` : '',
+    mode === 'retexturation_contextualisee' ? `RÉFÉRENCE DE CONTEXTE\n${sectionReferenceContexte(projectState)}` : '',
     `RÉFÉRENCES MATÉRIAU LIMITÉES\n${sectionReferencesMateriau(projectState)}`,
     `DIRECTIVES LOCALISÉES\n${sectionDirectivesLocalisees(projectState)}`,
     `CONDITION DE BLOCAGE\n${CONDITION_BLOCAGE}`,

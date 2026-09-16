@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   autoriserExportAdministratif,
   calculerVerdictPropose,
+  defautsEnvironnementVersLignes,
+  evaluerEnvironnement,
+  type ConstatEnvironnement,
   type LigneRapport,
   type RapportControle,
 } from './controle-qualite'
+import type { ElementEnvironnement } from './project-state'
 
 function rapport(lignes: LigneRapport[], usageAdministratif = true): RapportControle {
   return {
@@ -136,5 +140,86 @@ describe('autoriserExportAdministratif — garde-fou (PRD §15.3, prémortem #3)
     expect(autoriserExportAdministratif(verdictPropose.verdict, true).autorise).toBe(true)
     // ...mais ceci reste un verdict PROPOSÉ : l'appelant réel doit passer le
     // champ verdict_human de quality_audits, jamais verdict_proposed.
+  })
+})
+
+describe('evaluerEnvironnement — défauts déterministes (ARCH-002, D-19)', () => {
+  const locked: ElementEnvironnement = { id: 'voisin_nord', type: 'batiment_voisin', etat: 'locked' }
+  const editableValide: ElementEnvironnement = {
+    id: 'cloture_sud',
+    type: 'cloture',
+    etat: 'editable',
+    action_attendue: 'remplacer par du bois',
+    validation: 'validated',
+  }
+  const harmonizableValide: ElementEnvironnement = {
+    id: 'pelouse',
+    type: 'sol_vegetal',
+    etat: 'harmonizable',
+    validation: 'validated',
+  }
+  const editableNonValide: ElementEnvironnement = {
+    id: 'arbre_est',
+    type: 'vegetation',
+    etat: 'editable',
+    action_attendue: 'supprimer',
+    // Pas de validation : proposé, pas confirmé.
+  }
+
+  function constat(element: ElementEnvironnement, c: ConstatEnvironnement['constat']): ConstatEnvironnement {
+    return { element, constat: c }
+  }
+
+  it('ne relève aucun défaut quand chaque élément est traité conformément à son état', () => {
+    expect(
+      evaluerEnvironnement([
+        constat(locked, 'conserve'),
+        constat(editableValide, 'modifie'),
+        constat(harmonizableValide, 'ameliore'),
+      ]),
+    ).toEqual([])
+  })
+
+  it('signale une régression architecturale/environnementale : un élément locked modifié', () => {
+    const defauts = evaluerEnvironnement([constat(locked, 'modifie')])
+    expect(defauts).toEqual([
+      expect.objectContaining({ type: 'locked_modifie', element: 'voisin_nord' }),
+    ])
+  })
+
+  it("signale l'absence d'une modification demandée sur un élément editable", () => {
+    const defauts = evaluerEnvironnement([constat(editableValide, 'conserve')])
+    expect(defauts).toEqual([
+      expect.objectContaining({ type: 'editable_non_traite', element: 'cloture_sud' }),
+    ])
+  })
+
+  it("signale une transformation excessive d'un élément harmonizable (suppression ou remplacement, pas une simple amélioration)", () => {
+    expect(evaluerEnvironnement([constat(harmonizableValide, 'supprime')])).toEqual([
+      expect.objectContaining({ type: 'harmonizable_excessif', element: 'pelouse' }),
+    ])
+    expect(evaluerEnvironnement([constat(harmonizableValide, 'modifie')])).toEqual([
+      expect.objectContaining({ type: 'harmonizable_excessif', element: 'pelouse' }),
+    ])
+  })
+
+  it("traite un élément editable non validé comme locked — le modifier est déjà un défaut, ne pas le traiter n'en est jamais un", () => {
+    expect(evaluerEnvironnement([constat(editableNonValide, 'modifie')])).toEqual([
+      expect.objectContaining({ type: 'locked_modifie', element: 'arbre_est' }),
+    ])
+    expect(evaluerEnvironnement([constat(editableNonValide, 'conserve')])).toEqual([])
+  })
+
+  it('convertit les défauts en lignes de rapport LIB-002 éliminatoires', () => {
+    const lignes = defautsEnvironnementVersLignes(evaluerEnvironnement([constat(locked, 'supprime')]))
+    expect(lignes).toEqual([
+      expect.objectContaining({ critere: 'environnement', etat: 'non_conforme', defautEliminatoire: true }),
+    ])
+  })
+
+  it('un défaut environnement, fondu dans le rapport, déclenche une reprise depuis les sources (critère structurel)', () => {
+    const lignes = defautsEnvironnementVersLignes(evaluerEnvironnement([constat(locked, 'supprime')]))
+    const verdict = calculerVerdictPropose(rapport(lignes))
+    expect(verdict.verdict).toBe('nouvelle_generation')
   })
 })

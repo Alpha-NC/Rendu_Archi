@@ -61,7 +61,7 @@ const dossierBase: DossierActuel = {
     revision: 1,
     usage: ['insertion_administrative'],
     mode: 'photomontage_controle',
-    style: 'photomontage_administratif',
+    style: 'administratif_sobre',
     sources: [
       { id: 'src-1', role_detected: 'revit_view', role_confirmed: 'revit_view', status: 'valid' },
       { id: 'src-2', role_detected: 'site_photo', role_confirmed: 'site_photo', status: 'valid' },
@@ -88,7 +88,7 @@ describe('calculerContexteBranchement', () => {
   it('reprend le mode/style déjà confirmés dans le ProjectState sans les recalculer', () => {
     const { modeResolu, styleResolu } = calculerContexteBranchement(dossierBase)
     expect(modeResolu).toBe('photomontage_controle')
-    expect(styleResolu).toBe('photomontage_administratif')
+    expect(styleResolu).toBe('administratif_sobre')
   })
 
   it('calcule un mode/style par défaut quand le ProjectState ne les a pas encore', () => {
@@ -103,7 +103,7 @@ describe('calculerContexteBranchement', () => {
     }
     const { modeResolu, styleResolu } = calculerContexteBranchement(dossierSansModeStyle)
     expect(modeResolu).toBe('photomontage_controle') // photo + camera Compatible + admin (LIB-006 §5)
-    expect(styleResolu).toBe('photomontage_administratif') // photo + admin (LIB-005)
+    expect(styleResolu).toBe('administratif_sobre') // photo + admin (LIB-005)
   })
 })
 

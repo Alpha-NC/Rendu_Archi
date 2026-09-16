@@ -8,7 +8,7 @@ function etatPhotomontageAdministratif() {
     revision: 1,
     usage: ['insertion_administrative'],
     mode: 'photomontage_controle' as const,
-    style: 'photomontage_administratif' as const,
+    style: 'administratif_sobre' as const,
     camera_compatibility: 'Compatible' as const,
     sources: [
       { id: 'src-1', role_detected: 'revit_view' as const, role_confirmed: 'revit_view' as const, status: 'valid' as const },
@@ -108,6 +108,74 @@ describe('construirePromptCorrection (ENG-003)', () => {
     const etat = etatPhotomontageAdministratif()
     const promptCorrection = construirePromptCorrection(etat, { elementAModifier: 'x', resultatAttendu: 'y' })
     expect(promptCorrection).toMatch(/Ne pas reconstruire la scène entière/)
+  })
+})
+
+describe('Retexturation contextualisée dans le prompt (ENG-002 V1.6 §3.3)', () => {
+  function etatContextualisee() {
+    return {
+      ...creerProjectStateVide('P-2'),
+      revision: 1,
+      mode: 'retexturation_contextualisee' as const,
+      style: 'presentation_naturelle' as const,
+      sources: [
+        { id: 'src-1', role_detected: 'revit_view' as const, role_confirmed: 'revit_view' as const, status: 'valid' as const },
+        { id: 'src-2', role_detected: 'axonometry' as const, role_confirmed: 'axonometry' as const, status: 'valid' as const },
+        { id: 'src-3', role_detected: 'site_photo' as const, role_confirmed: 'site_photo' as const, status: 'valid' as const },
+      ],
+      environnement: [
+        { id: 'voisin_nord', type: 'batiment_voisin', etat: 'locked' as const },
+        {
+          id: 'cloture_sud',
+          type: 'cloture',
+          etat: 'editable' as const,
+          action_attendue: 'remplacer par une clôture bois claire',
+          validation: 'validated' as const,
+        },
+        { id: 'pelouse', type: 'sol_vegetal', etat: 'harmonizable' as const, validation: 'validated' as const },
+        // Proposé mais jamais confirmé : ne doit apparaître nulle part comme modifiable.
+        { id: 'arbre_est', type: 'vegetation', etat: 'editable' as const, action_attendue: 'supprimer', validation: 'provisional' as const },
+      ],
+    }
+  }
+
+  it('mentionne la vue Revit comme canevas et la photo comme référence de contexte, jamais comme canevas', () => {
+    const prompt = construirePromptGeneration(etatContextualisee())
+    expect(prompt).toMatch(/CANEVAS PRINCIPAL\nVue Revit \(source src-1\)/)
+    expect(prompt).toMatch(/RÉFÉRENCE DE CONTEXTE\nPhotographie réelle \(source src-3\).*référence de contexte, jamais canevas/)
+  })
+
+  it('mentionne l\'axonométrie comme garde-fou structurel', () => {
+    const prompt = construirePromptGeneration(etatContextualisee())
+    expect(prompt).toMatch(/GARDE-FOU STRUCTUREL\nVue axonométrique \(source src-2\)/)
+  })
+
+  it("ne contient jamais la clause « photographie comme canevas fixe » propre à Photomontage contrôlé", () => {
+    const prompt = construirePromptGeneration(etatContextualisee())
+    expect(prompt).not.toMatch(/canevas fixe/)
+  })
+
+  it('distingue les trois catégories d\'éléments, chacune dans sa propre section', () => {
+    const prompt = construirePromptGeneration(etatContextualisee())
+    expect(prompt).toMatch(/ÉLÉMENTS VERROUILLÉS\n- voisin_nord \(batiment_voisin\)/)
+    expect(prompt).toMatch(/ÉLÉMENTS MODIFIABLES\n- cloture_sud \(cloture\) : remplacer par une clôture bois claire/)
+    expect(prompt).toMatch(/ÉLÉMENTS HARMONISABLES\n- pelouse \(sol_vegetal\)/)
+  })
+
+  it("ne traite jamais une proposition non validée comme une autorisation — l'élément reste verrouillé", () => {
+    const prompt = construirePromptGeneration(etatContextualisee())
+    expect(prompt).toMatch(/ÉLÉMENTS VERROUILLÉS\n(.|\n)*arbre_est/)
+    expect(prompt).not.toMatch(/ÉLÉMENTS MODIFIABLES\n(.|\n)*arbre_est/)
+  })
+
+  it('porte les mêmes sections dans le prompt de correction', () => {
+    const prompt = construirePromptCorrection(etatContextualisee(), {
+      elementAModifier: 'Clôture sud',
+      resultatAttendu: 'Bois clair, hauteur inchangée.',
+    })
+    expect(prompt).toMatch(/GARDE-FOU STRUCTUREL/)
+    expect(prompt).toMatch(/RÉFÉRENCE DE CONTEXTE/)
+    expect(prompt).toMatch(/ÉLÉMENTS MODIFIABLES\n- cloture_sud/)
   })
 })
 

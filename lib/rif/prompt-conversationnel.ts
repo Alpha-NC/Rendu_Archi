@@ -47,6 +47,7 @@ function libellePrecisionTraitement(t: TraitementQuestion): string {
     convertie_confirmation: 'Annoncer la valeur déjà déterminée, demander une confirmation d\'une ligne',
     retiree: 'Ne pas poser cette question',
     inversee: 'Traitement inversé par rapport aux autres branches',
+    reformulee: 'Poser une classification par élément (locked/editable/harmonizable), pas une question globale',
   }
   return `${libellesEtat[t.etat]} — ${t.precision}`
 }
@@ -156,9 +157,9 @@ export const OUTILS_CONVERSATIONNELS = [
         environnementAConserver: { type: 'array', items: { type: 'string' } },
         mode: {
           type: 'string',
-          enum: ['retexturation_revit', 'photomontage_controle', 'presentation_generative'],
+          enum: ['retexturation_revit', 'retexturation_contextualisee', 'photomontage_controle'],
         },
-        style: { type: 'string', enum: ['photomontage_administratif', 'presentation_client', 'commercial'] },
+        style: { type: 'string', enum: ['presentation_naturelle', 'administratif_sobre', 'commercial'] },
         cameraCompatibility: {
           type: 'string',
           enum: ['Compatible', 'Approximative', 'Incompatible', 'Non evaluee'],
@@ -180,6 +181,26 @@ export const OUTILS_CONVERSATIONNELS = [
               freedom_level: { type: 'string', enum: ['locked', 'strict', 'controlled', 'creative'] },
               scope: { type: 'string' },
             },
+          },
+        },
+        environnement: {
+          type: 'array',
+          description:
+            "Propose une classification d'éléments de contexte identifiés sur la photographie réelle (ARCH-002, mode Retexturation contextualisée) : locked (doit rester cohérent avec le réel), editable (remplaçable/supprimable/transformable sur décision explicite de l'utilisateur — jamais sans elle), harmonizable (amélioration visuelle sans changer l'identité générale du site). N'invente jamais une décision non exprimée : un élément sans décision explicite de l'utilisateur reste sans effet tant que statut n'est pas 'validated' — ne mets 'validated' que si l'utilisateur a confirmé explicitement cette classification, sinon 'provisional'.",
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: "Identifiant de l'élément, ex. 'cloture_limite_sud'." },
+              type: { type: 'string', description: "Nature de l'élément, ex. 'cloture', 'vegetation', 'batiment_voisin'." },
+              etat: { type: 'string', enum: ['locked', 'editable', 'harmonizable'] },
+              actionAttendue: {
+                type: 'string',
+                description: "Action décidée par l'utilisateur pour un élément editable ou harmonizable, ex. 'remplacer par une clôture bois'.",
+              },
+              confiance: { type: 'number', description: 'Confiance de la détection automatique, entre 0 et 1, si applicable.' },
+              statut: { type: 'string', enum: ['provisional', 'validated'] },
+            },
+            required: ['id', 'type', 'etat', 'statut'],
           },
         },
       },

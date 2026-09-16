@@ -1,6 +1,8 @@
 import {
   NIVEAUX_POLITIQUE,
   PROPRIETES_POLITIQUE,
+  type ElementEnvironnement,
+  type EtatElementEnvironnement,
   type NiveauPolitique,
   type PolitiqueElement,
   type ProjectState,
@@ -8,7 +10,8 @@ import {
 } from './project-state'
 
 /**
- * Couche Contraintes & Libertés — PRD §9.4A et §24A.
+ * Couche Contraintes & Libertés — PRD §9.4A et §24A (PRD V1.3, toujours en
+ * vigueur pour ce mécanisme précis).
  *
  * Doctrine appliquée ici, littéralement :
  *
@@ -21,6 +24,42 @@ import {
  * - §24A.1 : les propriétés structurelles sont `locked`/`strict` par défaut
  *   lorsqu'elles viennent d'une source autoritaire — la liste ci-dessous
  *   n'est donc pas configurable par la conversation.
+ *
+ * ---
+ *
+ * D-19 — Coexistence avec le modèle d'environnement V2.1 (ARCH-002) :
+ *
+ * Le Framework V1.6 introduit un second modèle, `ElementEnvironnement`
+ * (project-state.ts), à trois états `locked`/`editable`/`harmonizable`. Ce
+ * n'est PAS un remplacement de ce qui précède : analyse menée avant
+ * d'écrire le moindre code (D-19) —
+ *
+ * - `contraintes_libertes` gouverne des PROPRIÉTÉS (geometry/material/
+ *   lighting/appearance) par ÉLÉMENT, avec un plafond (`freedom_level`) et
+ *   une échelle à 4 niveaux (locked/strict/controlled/creative) — un
+ *   mécanisme général de gouvernance de la liberté, utile aussi bien pour
+ *   des éléments architecturaux (piscine, terrasse) que pour nuancer une
+ *   propriété précise d'un élément de contexte (ex. material_policy d'une
+ *   clôture). Rien dans le Framework V1.6 ne rend ce mécanisme obsolète :
+ *   ARCH-002 lui-même ne définit les trois nouveaux états QUE pour les
+ *   « éléments d'environnement », jamais pour les éléments architecturaux.
+ * - `ElementEnvironnement` classe des ÉLÉMENTS DE CONTEXTE entiers
+ *   (pas une propriété isolée) selon une intention globale — conserver,
+ *   transformer sur décision, ou améliorer cosmétiquement — qui est le
+ *   vocabulaire que le PRD V2.1 et le Framework V1.6 emploient partout
+ *   pour le cas standard (Retexturation contextualisée).
+ *
+ * Décision (option A, cf. prompt d'implémentation) : les deux coexistent.
+ * `contraintes_libertes` n'est PAS simplifié ni réduit aux seules
+ * propriétés architecturales — aucune règle du Framework ne le justifie et
+ * cela romprait des politiques déjà valides (ex. material_policy d'un
+ * élément de contexte). Le modèle d'environnement est ADDITIF : il
+ * complète `contraintes_libertes` pour le cas d'usage précis que le PRD
+ * V2.1 qualifie explicitement (classification globale d'un élément de
+ * contexte), sans le remplacer. Les deux modèles ne sont jamais appliqués
+ * au même type de donnée : une confusion mode/modèle serait elle-même un
+ * bug (voir `etatEffectifEnvironnement` ci-dessous, qui ne touche jamais
+ * `contraintes_libertes`).
  */
 
 /** Rang de restriction : 0 = le plus restrictif (§24A.4). */
@@ -242,3 +281,66 @@ export function presencesAutorisees(
 }
 
 export { NIVEAUX_POLITIQUE }
+
+/* =========================================================================
+ * Modèle d'environnement V2.1 (ARCH-002) — voir décision D-19 en en-tête.
+ * ========================================================================= */
+
+/**
+ * État effectif d'un élément d'environnement — même doctrine que
+ * `politiqueEffective` pour `contraintes_libertes` (§24A.3, ADR-019) :
+ * « ne pas convertir une absence de décision en autorisation ». Un état
+ * `editable`/`harmonizable` proposé mais non validé (`validation` absent ou
+ * différent de `'validated'`) n'a AUCUN effet sur la génération — l'élément
+ * reste `locked` tant qu'Évariste ne l'a pas confirmé. Un élément déjà
+ * `locked` n'a besoin d'aucune validation : restreindre est toujours permis.
+ */
+export function etatEffectifEnvironnement(element: ElementEnvironnement): EtatElementEnvironnement {
+  if (element.etat === 'locked') return 'locked'
+  return element.validation === 'validated' ? element.etat : 'locked'
+}
+
+/** Éléments dont l'état effectif est `locked` (identité à conserver). */
+export function elementsVerrouilles(projectState: ProjectState): ElementEnvironnement[] {
+  return projectState.environnement.filter((e) => etatEffectifEnvironnement(e) === 'locked')
+}
+
+/**
+ * Éléments réellement modifiables — état `editable` ET décision validée.
+ * Une proposition `editable` non confirmée n'apparaît jamais ici (elle
+ * reste dans `elementsVerrouilles` via `etatEffectifEnvironnement`).
+ */
+export function elementsModifiables(projectState: ProjectState): ElementEnvironnement[] {
+  return projectState.environnement.filter((e) => etatEffectifEnvironnement(e) === 'editable')
+}
+
+/** Éléments réellement harmonisables — état `harmonizable` ET décision validée. */
+export function elementsHarmonisables(projectState: ProjectState): ElementEnvironnement[] {
+  return projectState.environnement.filter((e) => etatEffectifEnvironnement(e) === 'harmonizable')
+}
+
+/**
+ * Éléments proposés (`editable`/`harmonizable`) mais pas encore validés —
+ * pour les montrer à Évariste avant confirmation, comme
+ * `libertesEnAttente` pour `contraintes_libertes`.
+ */
+export function elementsEnvironnementEnAttente(projectState: ProjectState): ElementEnvironnement[] {
+  return projectState.environnement.filter(
+    (e) => e.etat !== 'locked' && e.validation !== 'validated',
+  )
+}
+
+/**
+ * Valide qu'une classification respecte la sémantique obligatoire d'ARCH-002
+ * avant de l'enregistrer — utilisée par extraction-project-state.ts.
+ * Ne bloque jamais une classification `locked` (toujours valide) ni une
+ * classification non encore validée (une proposition peut être incomplète,
+ * elle n'a de toute façon aucun effet tant qu'elle n'est pas validée).
+ */
+export function elementEnvironnementValide(element: ElementEnvironnement): boolean {
+  if (element.etat === 'locked' || element.validation !== 'validated') return true
+  // editable validé : une décision (action_attendue) doit être exprimée —
+  // sans quoi « validé » ne voudrait rien dire de plus qu'une conservation.
+  if (element.etat === 'editable') return Boolean(element.action_attendue?.trim())
+  return true
+}

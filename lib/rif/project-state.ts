@@ -68,11 +68,28 @@ export interface SourceDossier {
   target?: string
 }
 
-/** LIB-006 §2-4 — les trois modes de production, aucun autre n'existe. */
-export type ModeProduction = 'retexturation_revit' | 'photomontage_controle' | 'presentation_generative'
+/**
+ * LIB-006 V1.6 §1 — les trois modes de production, aucun autre n'existe.
+ * `presentation_generative` a disparu (D-19/ADR-019, PRD V2.1 §8 : « RIF V2
+ * distingue trois modes ») : `retexturation_contextualisee` prend sa place
+ * comme mode principal du cas standard, avec un modèle d'environnement
+ * qualifié (`ElementEnvironnement` ci-dessous) là où l'ancien mode ne
+ * définissait qu'une « harmonisation dans les limites validées » non
+ * qualifiée. Aucune compatibilité legacy conservée : ce mode n'a jamais eu
+ * de dossier réel en production (D-19, audit du 12.09.2026).
+ */
+export type ModeProduction = 'retexturation_revit' | 'retexturation_contextualisee' | 'photomontage_controle'
 
-/** LIB-005 — les trois styles de rendu actifs (V1.2 en a retiré deux). */
-export type StyleRendu = 'photomontage_administratif' | 'presentation_client' | 'commercial'
+/**
+ * LIB-005 V1.6 — les trois styles de rendu actifs (V1.2 en a retiré deux).
+ * Nomenclature harmonisée sur le PRD V2.1 §9 (D-19/ADR-020) :
+ * `photomontage_administratif` → `administratif_sobre`, `presentation_client`
+ * → `presentation_naturelle`. Renommage seul, aucune caractéristique de
+ * style modifiée. Ne pas confondre avec `ProjectState.usage`, qui porte
+ * une valeur `presentation_client` distincte (axe usage, pas style) —
+ * ADR-020 le documente explicitement pour éviter un renommage par réflexe.
+ */
+export type StyleRendu = 'presentation_naturelle' | 'administratif_sobre' | 'commercial'
 
 /**
  * Niveaux de la matrice Contraintes & Libertés (PRD §9.4A, §24A).
@@ -137,6 +154,54 @@ export interface DirectiveLocalisee {
   zone_ou_masque?: string
 }
 
+/**
+ * Modèle d'environnement — ARCH-002, REF-002 §7 (V1.6), PRD V2.1 §4.4/§10.4.
+ *
+ * Distinct de `contraintes_libertes` (D-19, décision documentée) : ce
+ * modèle gouverne exclusivement les éléments de CONTEXTE (terrain,
+ * végétation, clôtures, voisinage, horizon...), jamais les éléments
+ * architecturaux du projet — ceux-ci restent régis par `contraintes_libertes`
+ * (propriétés geometry/material/lighting/appearance) et par le mode de
+ * production. Les deux modèles coexistent sans se substituer l'un à
+ * l'autre ; voir le commentaire d'en-tête de contraintes-libertes.ts.
+ */
+export const ETATS_ELEMENT_ENVIRONNEMENT = ['locked', 'editable', 'harmonizable'] as const
+export type EtatElementEnvironnement = (typeof ETATS_ELEMENT_ENVIRONNEMENT)[number]
+
+/**
+ * Élément d'environnement identifié (typiquement sur la photographie
+ * réelle en Retexturation contextualisée). Sémantique obligatoire
+ * (ARCH-002) :
+ * - `locked` : conserver l'identité, la position et l'aspect pertinent ;
+ * - `editable` : suppression, remplacement ou transformation autorisés,
+ *   mais seulement sur décision explicite (`action_attendue` renseignée
+ *   ET `validation: 'validated'`) — une absence de décision ne vaut
+ *   jamais autorisation ;
+ * - `harmonizable` : amélioration visuelle locale autorisée sans changer
+ *   l'identité générale du site, jamais une suppression ou un remplacement.
+ */
+export interface ElementEnvironnement {
+  id: string
+  /** Nature de l'élément, ex. 'cloture', 'vegetation', 'batiment_voisin'. */
+  type: string
+  etat: EtatElementEnvironnement
+  /** Action décidée par l'utilisateur pour un élément editable/harmonizable. */
+  action_attendue?: string
+  /** Source ayant permis d'identifier cet élément (ex. id de la photo réelle). */
+  source?: string
+  /** Confiance de la détection automatique, entre 0 et 1, si applicable. */
+  confiance?: number
+  /**
+   * Statut de validation humaine de CETTE classification — distinct de
+   * `etat` : un élément peut être classé `editable` par proposition du
+   * modèle tout en restant `validation: 'provisional'` tant qu'Évariste ne
+   * l'a pas confirmé (même doctrine que §24A.3 pour `contraintes_libertes` :
+   * une classification proposée reste sans effet sur la génération tant
+   * qu'elle n'est pas validée — voir contraintes-libertes.ts::etatEffectifEnvironnement).
+   */
+  validation?: StatutValeur
+}
+
 export interface ProjectState {
   project_id: string
   /** Révision immuable — incrémentée à chaque nouvelle confirmation. */
@@ -155,6 +220,8 @@ export interface ProjectState {
   /** Matériaux par élément, avec provenance et confiance (PRD §10). */
   materials: Record<string, ValeurTracee<string>>
   localized_directives: DirectiveLocalisee[]
+  /** Éléments de contexte classés locked/editable/harmonizable (ARCH-002). */
+  environnement: ElementEnvironnement[]
   /** Environnement à conserver, en plus des zones verrouillées. */
   environnement_a_conserver?: string[]
   /**
@@ -183,6 +250,7 @@ export function creerProjectStateVide(projectId: string): ProjectState {
     camera_compatibility: 'Non evaluee',
     materials: {},
     localized_directives: [],
+    environnement: [],
     locked: [],
     variant_count: 0,
     canonical_result_id: null,

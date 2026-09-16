@@ -9,12 +9,14 @@ function etatDe(traitements: ReturnType<typeof determinerParcoursCollecte>['trai
 describe('determinerParcoursCollecte — couverture des 8 questions', () => {
   it('traite toujours les 8 questions du tronc commun, quelle que soit la combinaison', () => {
     const combinaisons: Array<[Parameters<typeof determinerParcoursCollecte>[0], Parameters<typeof determinerParcoursCollecte>[1]]> = [
-      ['photomontage_controle', 'photomontage_administratif'],
-      ['photomontage_controle', 'presentation_client'],
+      ['photomontage_controle', 'administratif_sobre'],
+      ['photomontage_controle', 'presentation_naturelle'],
       ['photomontage_controle', 'commercial'],
-      ['retexturation_revit', 'presentation_client'],
+      ['retexturation_revit', 'presentation_naturelle'],
       ['retexturation_revit', 'commercial'],
-      ['presentation_generative', null],
+      ['retexturation_contextualisee', 'presentation_naturelle'],
+      ['retexturation_contextualisee', 'administratif_sobre'],
+      ['retexturation_contextualisee', 'commercial'],
       [null, null],
     ]
     for (const [mode, style] of combinaisons) {
@@ -24,8 +26,8 @@ describe('determinerParcoursCollecte — couverture des 8 questions', () => {
   })
 })
 
-describe('ENG-004 §4.1 — Photomontage contrôlé + Photomontage administratif', () => {
-  const parcours = determinerParcoursCollecte('photomontage_controle', 'photomontage_administratif')
+describe('ENG-004 §4.1 — Photomontage contrôlé + Administratif sobre', () => {
+  const parcours = determinerParcoursCollecte('photomontage_controle', 'administratif_sobre')
 
   it('est documentée', () => {
     expect(parcours.combinaisonDocumentee).toBe(true)
@@ -50,8 +52,8 @@ describe('ENG-004 §4.1 — Photomontage contrôlé + Photomontage administratif
   })
 })
 
-describe('ENG-004 §4.2 — Photomontage contrôlé + Présentation client', () => {
-  const parcours = determinerParcoursCollecte('photomontage_controle', 'presentation_client')
+describe('ENG-004 §4.2 — Photomontage contrôlé + Présentation naturelle', () => {
+  const parcours = determinerParcoursCollecte('photomontage_controle', 'presentation_naturelle')
 
   it('laisse la question environnement ouverte (réduite, pas retirée)', () => {
     expect(etatDe(parcours.traitements, 'environnement')).toBe('reduite')
@@ -88,12 +90,12 @@ describe('ENG-004 §4.3 — Photomontage contrôlé + Commercial', () => {
 
 describe('ENG-004 §4.4 — Retexturation Revit', () => {
   it('retire la question d\'implantation (sans objet sans photo)', () => {
-    const parcours = determinerParcoursCollecte('retexturation_revit', 'presentation_client')
+    const parcours = determinerParcoursCollecte('retexturation_revit', 'presentation_naturelle')
     expect(etatDe(parcours.traitements, 'mode_implantation')).toBe('retiree')
   })
 
-  it('réduit le style à deux choix et exclut Photomontage administratif (ADR-013)', () => {
-    const parcours = determinerParcoursCollecte('retexturation_revit', 'presentation_client')
+  it('réduit le style à deux choix et exclut Administratif sobre (ADR-013)', () => {
+    const parcours = determinerParcoursCollecte('retexturation_revit', 'presentation_naturelle')
     const traitementStyle = parcours.traitements.find((t) => t.question === 'style')
     expect(traitementStyle?.etat).toBe('reduite')
     expect(traitementStyle?.precision).toMatch(/ADR-013/)
@@ -105,9 +107,50 @@ describe('ENG-004 §4.4 — Retexturation Revit', () => {
   })
 })
 
-describe('Présentation générative — combinaison non documentée par ENG-004', () => {
+describe('ENG-004 §4.5 — Retexturation contextualisée + Présentation naturelle (cas standard)', () => {
+  const parcours = determinerParcoursCollecte('retexturation_contextualisee', 'presentation_naturelle')
+
+  it('est documentée', () => {
+    expect(parcours.combinaisonDocumentee).toBe(true)
+  })
+
+  it('reformule la question environnement en classification par élément (pas une réduction, pas une confirmation)', () => {
+    expect(etatDe(parcours.traitements, 'environnement')).toBe('reformulee')
+  })
+
+  it('retire la question lumière (remplacée par une phrase de référence de contexte)', () => {
+    expect(etatDe(parcours.traitements, 'lumiere')).toBe('retiree')
+  })
+
+  it('sert de traitement par défaut tant que le style n\'est pas confirmé (style=null)', () => {
+    const parcoursSansStyle = determinerParcoursCollecte('retexturation_contextualisee', null)
+    expect(parcoursSansStyle).toEqual(parcours)
+  })
+})
+
+describe('ENG-004 §4.6 — Retexturation contextualisée + Administratif sobre', () => {
+  it('réduit environnement (conservation par défaut), contrairement au cas standard reformulé', () => {
+    const parcours = determinerParcoursCollecte('retexturation_contextualisee', 'administratif_sobre')
+    expect(etatDe(parcours.traitements, 'environnement')).toBe('reduite')
+  })
+})
+
+describe('ENG-004 §4.7 — Retexturation contextualisée + Commercial', () => {
+  const parcours = determinerParcoursCollecte('retexturation_contextualisee', 'commercial')
+
+  it('reformule aussi la question environnement (classification par élément)', () => {
+    expect(etatDe(parcours.traitements, 'environnement')).toBe('reformulee')
+  })
+
+  it('inverse le traitement des éléments secondaires et ajoute la question du moment de la journée', () => {
+    expect(etatDe(parcours.traitements, 'elements_secondaires')).toBe('inversee')
+    expect(parcours.questionsAdditionnelles.map((q) => q.id)).toContain('moment_journee')
+  })
+})
+
+describe('Mode non pressenti — aucune combinaison ne peut être documentée', () => {
   it("ne réduit, ne retire ni ne convertit aucune question — jamais d'invention de règle", () => {
-    const parcours = determinerParcoursCollecte('presentation_generative', 'presentation_client')
+    const parcours = determinerParcoursCollecte(null, 'presentation_naturelle')
     expect(parcours.combinaisonDocumentee).toBe(false)
     expect(parcours.traitements.every((t) => t.etat === 'inchangee')).toBe(true)
     expect(parcours.questionsAdditionnelles).toEqual([])

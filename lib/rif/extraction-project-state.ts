@@ -1,4 +1,6 @@
 import type {
+  ElementEnvironnement,
+  EtatElementEnvironnement,
   ModeProduction,
   PolitiqueElement,
   ProjectState,
@@ -39,6 +41,16 @@ export interface MiseAJourValeurSimple {
   statut: StatutValeur
 }
 
+/** Classification d'un élément de contexte proposée par le modèle (ARCH-002). */
+export interface MiseAJourElementEnvironnement {
+  id: string
+  type: string
+  etat: EtatElementEnvironnement
+  actionAttendue?: string
+  confiance?: number
+  statut: StatutValeur
+}
+
 export interface MiseAJourFicheProjet {
   materiaux?: MiseAJourMateriau[]
   geometrie?: MiseAJourValeurSimple
@@ -58,6 +70,16 @@ export interface MiseAJourFicheProjet {
    * (§24A.3, contraintes-libertes.ts::autoriserLibertesEnAttente).
    */
   contraintesLibertes?: Record<string, PolitiqueElement>
+  /**
+   * Classifications d'éléments de contexte proposées par le modèle
+   * (ARCH-002, D-19). Fusionnées par identifiant ; le backend renseigne
+   * seul `source` (la conversation). `etat` et `statut` sont transmis tels
+   * quels — jamais convertis l'un dans l'autre (harmonizable ↛ editable) ni
+   * l'absence de décision traitée comme une autorisation : voir
+   * contraintes-libertes.ts::etatEffectifEnvironnement pour la garde côté
+   * génération, indépendante de ce module.
+   */
+  environnement?: MiseAJourElementEnvironnement[]
 }
 
 export interface ContexteExtraction {
@@ -98,6 +120,37 @@ function fusionnerValeurTracee(
     editable: true,
     locked: false,
     ...(entree.statut === 'validated' ? { validated_at: new Date().toISOString() } : {}),
+  }
+}
+
+/**
+ * Fusionne une classification d'élément d'environnement proposée. Même
+ * règle de non-régression que `fusionnerValeurTracee` : une classification
+ * déjà validée n'est jamais dégradée par une proposition provisoire.
+ */
+function fusionnerElementEnvironnement(
+  existant: ElementEnvironnement | undefined,
+  entree: MiseAJourElementEnvironnement,
+  champ: string,
+  contexte: ContexteExtraction,
+  ignores: ChampIgnore[],
+): ElementEnvironnement {
+  if (existant?.validation === 'validated' && entree.statut !== 'validated') {
+    ignores.push({
+      champ,
+      raison: `Élément déjà validé (état "${existant.etat}") — proposition provisoire (état "${entree.etat}") ignorée.`,
+    })
+    return existant
+  }
+
+  return {
+    id: entree.id,
+    type: entree.type,
+    etat: entree.etat,
+    source: contexte.sourceId,
+    validation: entree.statut,
+    ...(entree.actionAttendue ? { action_attendue: entree.actionAttendue } : {}),
+    ...(entree.confiance !== undefined ? { confiance: entree.confiance } : {}),
   }
 }
 
@@ -199,6 +252,24 @@ export function appliquerMiseAJourFicheProjet(
       matrice[element] = fusionnee
     }
     suivant.contraintes_libertes = matrice
+  }
+
+  if (miseAJour.environnement) {
+    const existants = new Map(suivant.environnement.map((e) => [e.id, e]))
+    const suivants = [...suivant.environnement]
+    for (const entree of miseAJour.environnement) {
+      const fusionne = fusionnerElementEnvironnement(
+        existants.get(entree.id),
+        entree,
+        `environnement.${entree.id}`,
+        contexte,
+        ignores,
+      )
+      const index = suivants.findIndex((e) => e.id === entree.id)
+      if (index >= 0) suivants[index] = fusionne
+      else suivants.push(fusionne)
+    }
+    suivant.environnement = suivants
   }
 
   return { suivant, ignores }

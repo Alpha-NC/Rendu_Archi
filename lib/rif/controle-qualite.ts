@@ -23,13 +23,17 @@
  *    verdict proposé.
  */
 
-/** Version de la checklist appliquée (PRD §13.4 : `checklist_version`). */
-export const LIB_002_VERSION = 'LIB-002 V1.4'
+import type { ElementEnvironnement } from './project-state'
+import { etatEffectifEnvironnement } from './contraintes-libertes'
 
-/** Grille commune LIB-002 §3 — 15 critères, aucun ajout non documenté. */
+/** Version de la checklist appliquée (PRD §13.4 : `checklist_version`). */
+export const LIB_002_VERSION = 'LIB-002 V1.6'
+
+/** Grille commune LIB-002 V1.6 §3 — 16 critères, aucun ajout non documenté. */
 export const CRITERES_CONTROLE = [
   'cadrage',
   'perspective',
+  'silhouette',
   'volumes',
   'toiture',
   'ouvertures',
@@ -57,6 +61,7 @@ export type CritereControle = (typeof CRITERES_CONTROLE)[number]
 const CRITERES_STRUCTURELS = new Set<CritereControle>([
   'cadrage',
   'perspective',
+  'silhouette',
   'volumes',
   'toiture',
   'ouvertures',
@@ -192,6 +197,94 @@ export function calculerVerdictPropose(rapport: RapportControle): VerdictPropose
   }
 
   return { verdict: 'validation', motif: 'Aucun écart relevé sur les critères applicables.' }
+}
+
+/* =========================================================================
+ * Contrôle de l'environnement (ARCH-002, D-19) — règles déterministes.
+ *
+ * N'implémente PAS l'audit multimodal (qui reste à construire) : ce module
+ * ne fait que qualifier un CONSTAT déjà établi (par un humain ou un futur
+ * audit) sur ce qu'un rendu montre réellement pour un élément donné, au
+ * regard de sa classification dans le ProjectState. Distingue les trois
+ * défauts que la classification locked/editable/harmonizable rend possibles
+ * (D-19, section 9 du lot d'implémentation) :
+ * - un élément `locked` modifié = régression, jamais légitime ;
+ * - un élément `editable` avec une décision explicite mais non traité =
+ *   absence de la modification demandée ;
+ * - un élément `harmonizable` supprimé ou remplacé = transformation
+ *   excessive (seule une amélioration visuelle est autorisée).
+ * ========================================================================= */
+
+/** Ce qu'un rendu montre réellement pour un élément d'environnement donné. */
+export type ConstatElement = 'conserve' | 'modifie' | 'supprime' | 'ameliore'
+
+export interface ConstatEnvironnement {
+  element: ElementEnvironnement
+  constat: ConstatElement
+}
+
+export type DefautEnvironnement =
+  | { type: 'locked_modifie'; element: string; details: string }
+  | { type: 'editable_non_traite'; element: string; details: string }
+  | { type: 'harmonizable_excessif'; element: string; details: string }
+
+/**
+ * Évalue une liste de constats face à la classification de chaque élément.
+ * Pure et déterministe — ne devine jamais le constat lui-même (fourni par
+ * l'appelant), ne tranche que la conformité entre ce constat et l'état
+ * effectif de l'élément (etatEffectifEnvironnement : une classification
+ * proposée mais non validée est déjà traitée comme `locked` en amont).
+ */
+export function evaluerEnvironnement(constats: ConstatEnvironnement[]): DefautEnvironnement[] {
+  const defauts: DefautEnvironnement[] = []
+
+  for (const { element, constat } of constats) {
+    const etat = etatEffectifEnvironnement(element)
+
+    if (etat === 'locked' && constat !== 'conserve') {
+      defauts.push({
+        type: 'locked_modifie',
+        element: element.id,
+        details: `« ${element.id} » est verrouillé mais le rendu le montre ${constat}.`,
+      })
+      continue
+    }
+
+    if (etat === 'editable' && element.action_attendue && constat === 'conserve') {
+      defauts.push({
+        type: 'editable_non_traite',
+        element: element.id,
+        details: `« ${element.id} » a une décision explicite (« ${element.action_attendue} ») mais le rendu le conserve tel quel.`,
+      })
+      continue
+    }
+
+    if (etat === 'harmonizable' && (constat === 'supprime' || constat === 'modifie')) {
+      defauts.push({
+        type: 'harmonizable_excessif',
+        element: element.id,
+        details: `« ${element.id} » n'autorise qu'une amélioration visuelle mais le rendu le montre ${constat}.`,
+      })
+    }
+  }
+
+  return defauts
+}
+
+/**
+ * Convertit des défauts d'environnement en lignes de rapport LIB-002,
+ * pour les fondre dans un `RapportControle` avant `calculerVerdictPropose`
+ * — ce dernier n'est jamais modifié : c'est ici, en amont, que le constat
+ * environnement devient un écart éliminatoire structurel comme un autre.
+ */
+export function defautsEnvironnementVersLignes(defauts: DefautEnvironnement[]): LigneRapport[] {
+  return defauts.map((d) => ({
+    critere: 'environnement',
+    sourceControle: 'Photographie réelle / classification ProjectState',
+    etat: 'non_conforme',
+    ecartObserve: d.details,
+    defautEliminatoire: true,
+  }))
 }
 
 export interface DecisionExport {

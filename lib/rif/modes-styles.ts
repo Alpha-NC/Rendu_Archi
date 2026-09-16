@@ -21,8 +21,6 @@ export interface ContexteChoixMode {
   usageAdministratif: boolean
   /** Correction locale d'un photomontage déjà conforme (LIB-006 §5, dernière ligne). */
   correctionLocalePhotomontageConforme?: boolean
-  /** Présentation client avec liberté d'ambiance explicitement demandée. */
-  libertyAmbianceDemandee?: boolean
 }
 
 export type ResultatChoixMode =
@@ -30,7 +28,17 @@ export type ResultatChoixMode =
   | { mode: 'suspendre'; motif: string }
   | { mode: 'a_confirmer'; motif: string }
 
-/** LIB-006 §5 — Matrice de choix, transcrite sans y ajouter de cas. */
+/**
+ * LIB-006 V1.6 §5 — Matrice de choix, transcrite sans y ajouter de cas.
+ *
+ * D-19 : `retexturation_contextualisee` (cas standard) doit être vérifié
+ * APRÈS les branches Photomontage contrôlé, jamais avant — LIB-006 §6 :
+ * « Photomontage contrôlé prévaut dès qu'un usage documentaire strict est
+ * déclaré [...] Retexturation contextualisée reste le choix par défaut dans
+ * tous les autres cas où une photographie est disponible. » L'incompatibilité
+ * caméra ne bloque jamais ce mode (LIB-006 §4 Prérequis, TEST-007C) : la
+ * correspondance de caméra n'a pas besoin d'être parfaite.
+ */
 export function determinerModeParDefaut(contexte: ContexteChoixMode): ResultatChoixMode {
   if (contexte.correctionLocalePhotomontageConforme) {
     return { mode: 'photomontage_controle', motif: 'Modification locale d\'un photomontage conforme (LIB-006 §5).' }
@@ -58,10 +66,10 @@ export function determinerModeParDefaut(contexte: ContexteChoixMode): ResultatCh
     }
   }
 
-  if (contexte.libertyAmbianceDemandee) {
+  if (contexte.vueRevitExploitable && contexte.photographieReelleFournie && !contexte.usageAdministratif) {
     return {
-      mode: 'presentation_generative',
-      motif: 'Présentation client avec liberté d\'ambiance (LIB-006 §5).',
+      mode: 'retexturation_contextualisee',
+      motif: 'Vue Revit + photo réelle, sans usage administratif strict : cas standard (LIB-006 §4-§5).',
     }
   }
 
@@ -87,7 +95,7 @@ export type ResultatChoixStyle =
   | { style: StyleRendu; motif: string }
   | { style: 'a_confirmer'; motif: string }
 
-/** LIB-005 — section « Sélection automatique », transcrite sans y ajouter de cas. */
+/** LIB-005 V1.6 — section « Sélection automatique », transcrite sans y ajouter de cas. */
 export function determinerStyleParDefaut(contexte: ContexteChoixStyle): ResultatChoixStyle {
   // LIB-005 : Commercial n'est jamais choisi par défaut ni par sélection
   // automatique — seule une demande explicite le permet, quelle que soit
@@ -98,13 +106,24 @@ export function determinerStyleParDefaut(contexte: ContexteChoixStyle): Resultat
 
   if (contexte.photographieReelleFournie && contexte.usageAdministratif) {
     return {
-      style: 'photomontage_administratif',
+      style: 'administratif_sobre',
       motif: 'Photographie réelle fournie pour un usage administratif — style par défaut (LIB-005).',
     }
   }
 
+  // D-19 : depuis V1.6, une photo seule (sans usage administratif) ne
+  // sélectionne plus Administratif sobre — c'est le cas standard de
+  // Retexturation contextualisée, dont Présentation naturelle est le style
+  // par défaut (LIB-005 « Sélection automatique »).
+  if (contexte.photographieReelleFournie && !contexte.usageAdministratif) {
+    return {
+      style: 'presentation_naturelle',
+      motif: 'Photographie réelle sans usage administratif strict — cas standard, Retexturation contextualisée (LIB-005).',
+    }
+  }
+
   if (contexte.contexteReunionClientOuAvantProjet) {
-    return { style: 'presentation_client', motif: 'Réunion client ou avant-projet (LIB-005).' }
+    return { style: 'presentation_naturelle', motif: 'Réunion client ou avant-projet (LIB-005).' }
   }
 
   return {

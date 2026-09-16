@@ -104,7 +104,7 @@ describe('appliquerMiseAJourFicheProjet — fonction pure', () => {
       etat,
       {
         mode: 'photomontage_controle',
-        style: 'photomontage_administratif',
+        style: 'administratif_sobre',
         cameraCompatibility: 'Compatible',
         usage: ['insertion_administrative'],
         interdictions: ['Aucune piscine visible'],
@@ -113,7 +113,7 @@ describe('appliquerMiseAJourFicheProjet — fonction pure', () => {
       contexte,
     )
     expect(suivant.mode).toBe('photomontage_controle')
-    expect(suivant.style).toBe('photomontage_administratif')
+    expect(suivant.style).toBe('administratif_sobre')
     expect(suivant.camera_compatibility).toBe('Compatible')
     expect(suivant.usage).toEqual(['insertion_administrative'])
     expect(suivant.interdictions).toEqual(['Aucune piscine visible'])
@@ -177,5 +177,94 @@ describe('contraintesLibertes — le modèle propose, il n\'autorise jamais (§2
     expect(ignores).toEqual([
       { champ: 'contraintes_libertes.pelouse', raison: expect.stringContaining('retourne en attente') },
     ])
+  })
+})
+
+describe('environnement — classification locked/editable/harmonizable (ARCH-002, D-19)', () => {
+  it('ajoute un élément avec ses métadonnées de traçabilité, la source renseignée par le backend', () => {
+    const etat = creerProjectStateVide('P-1')
+    const { suivant, ignores } = appliquerMiseAJourFicheProjet(
+      etat,
+      {
+        environnement: [
+          { id: 'cloture_sud', type: 'cloture', etat: 'editable', actionAttendue: 'remplacer par du bois', statut: 'validated' },
+        ],
+      },
+      contexte,
+    )
+    expect(ignores).toEqual([])
+    expect(suivant.environnement).toEqual([
+      {
+        id: 'cloture_sud',
+        type: 'cloture',
+        etat: 'editable',
+        source: 'conversation-1',
+        validation: 'validated',
+        action_attendue: 'remplacer par du bois',
+      },
+    ])
+  })
+
+  it('préserve les trois états tels quels — ne convertit jamais harmonizable en editable ni l\'inverse', () => {
+    const etat = creerProjectStateVide('P-1')
+    const { suivant } = appliquerMiseAJourFicheProjet(
+      etat,
+      { environnement: [{ id: 'pelouse', type: 'sol_vegetal', etat: 'harmonizable', statut: 'provisional' }] },
+      contexte,
+    )
+    expect(suivant.environnement[0].etat).toBe('harmonizable')
+  })
+
+  it("ne convertit jamais une absence de décision en autorisation — statut reste 'provisional' si le modèle ne dit pas 'validated'", () => {
+    const etat = creerProjectStateVide('P-1')
+    const { suivant } = appliquerMiseAJourFicheProjet(
+      etat,
+      { environnement: [{ id: 'arbre_est', type: 'vegetation', etat: 'editable', statut: 'provisional' }] },
+      contexte,
+    )
+    expect(suivant.environnement[0].validation).toBe('provisional')
+  })
+
+  it('ne dégrade jamais un élément déjà validé par une proposition provisoire — et le signale', () => {
+    const etat = creerProjectStateVide('P-1')
+    const { suivant: etatValide } = appliquerMiseAJourFicheProjet(
+      etat,
+      { environnement: [{ id: 'voisin_nord', type: 'batiment_voisin', etat: 'locked', statut: 'validated' }] },
+      contexte,
+    )
+    const { suivant, ignores } = appliquerMiseAJourFicheProjet(
+      etatValide,
+      { environnement: [{ id: 'voisin_nord', type: 'batiment_voisin', etat: 'editable', statut: 'provisional' }] },
+      contexte,
+    )
+    expect(suivant.environnement[0].etat).toBe('locked') // inchangé
+    expect(ignores).toEqual([
+      { champ: 'environnement.voisin_nord', raison: expect.stringContaining('déjà validé') },
+    ])
+  })
+
+  it('met à jour un élément existant par id plutôt que de le dupliquer', () => {
+    const etat = {
+      ...creerProjectStateVide('P-1'),
+      environnement: [{ id: 'pelouse', type: 'sol_vegetal', etat: 'locked' as const }],
+    }
+    const { suivant } = appliquerMiseAJourFicheProjet(
+      etat,
+      { environnement: [{ id: 'pelouse', type: 'sol_vegetal', etat: 'harmonizable', statut: 'validated' }] },
+      contexte,
+    )
+    expect(suivant.environnement).toHaveLength(1)
+    expect(suivant.environnement[0].etat).toBe('harmonizable')
+  })
+
+  it('ne mute jamais le ProjectState reçu en entrée', () => {
+    const etat = { ...creerProjectStateVide('P-1'), environnement: [{ id: 'x', type: 'y', etat: 'locked' as const }] }
+    const copie = JSON.parse(JSON.stringify(etat))
+    appliquerMiseAJourFicheProjet(
+      etat,
+      { environnement: [{ id: 'x', type: 'y', etat: 'editable', statut: 'validated' }] },
+      contexte,
+    )
+    expect(etat).toEqual(copie)
   })
 })

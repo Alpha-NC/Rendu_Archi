@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { creerProjectStateVide, type ProjectState } from './project-state'
+import { creerProjectStateVide, type ElementEnvironnement, type ProjectState } from './project-state'
 import {
   autoriserLibertesEnAttente,
   contraintesStructurelles,
   elargitLaLiberte,
+  elementEnvironnementValide,
+  elementsEnvironnementEnAttente,
+  elementsHarmonisables,
+  elementsModifiables,
+  elementsVerrouilles,
+  etatEffectifEnvironnement,
   libertesEnAttente,
   libertesAccordees,
   politiqueEffective,
@@ -206,5 +212,110 @@ describe('elargitLaLiberte — détecte un assouplissement par rapport à une po
   it('passer de conserve à add_authorized/remove_authorized élargit ; l\'inverse non', () => {
     expect(elargitLaLiberte({ presence_policy: 'conserve' }, { presence_policy: 'add_authorized' })).toBe(true)
     expect(elargitLaLiberte({ presence_policy: 'add_authorized' }, { presence_policy: 'conserve' })).toBe(false)
+  })
+})
+
+describe('Modèle d\'environnement V2.1 (ARCH-002) — locked/editable/harmonizable', () => {
+  const batimentVoisin: ElementEnvironnement = { id: 'voisin_nord', type: 'batiment_voisin', etat: 'locked' }
+  const horizon: ElementEnvironnement = { id: 'horizon', type: 'structure_generale_terrain', etat: 'locked' }
+  const clotureEditable: ElementEnvironnement = {
+    id: 'cloture_sud',
+    type: 'cloture',
+    etat: 'editable',
+    action_attendue: 'remplacer par une clôture bois claire',
+    validation: 'validated',
+  }
+  const arbreSupprimable: ElementEnvironnement = {
+    id: 'arbre_est',
+    type: 'vegetation',
+    etat: 'editable',
+    action_attendue: 'supprimer — masque l\'accès projeté',
+    validation: 'validated',
+  }
+  const pelouseHarmonizable: ElementEnvironnement = {
+    id: 'pelouse',
+    type: 'sol_vegetal',
+    etat: 'harmonizable',
+    action_attendue: 'améliorer l\'aspect entretenu',
+    validation: 'validated',
+  }
+  const etat: ProjectState = {
+    ...creerProjectStateVide('P-1'),
+    environnement: [batimentVoisin, horizon, clotureEditable, arbreSupprimable, pelouseHarmonizable],
+  }
+
+  it('classe un bâtiment voisin et un horizon comme verrouillés', () => {
+    const verrouilles = elementsVerrouilles(etat).map((e) => e.id)
+    expect(verrouilles).toContain('voisin_nord')
+    expect(verrouilles).toContain('horizon')
+  })
+
+  it('classe une clôture à remplacer et un arbre à supprimer comme modifiables', () => {
+    const modifiables = elementsModifiables(etat).map((e) => e.id)
+    expect(modifiables).toContain('cloture_sud')
+    expect(modifiables).toContain('arbre_est')
+  })
+
+  it('classe une pelouse médiocre comme harmonisable', () => {
+    expect(elementsHarmonisables(etat).map((e) => e.id)).toContain('pelouse')
+  })
+
+  it("n'inscrit jamais un élément locked dans les modifiables ou harmonisables", () => {
+    expect(elementsModifiables(etat).some((e) => e.id === 'voisin_nord')).toBe(false)
+    expect(elementsHarmonisables(etat).some((e) => e.id === 'voisin_nord')).toBe(false)
+  })
+
+  describe('§24A.3 appliqué à l\'environnement — une proposition non validée reste sans effet', () => {
+    const propositionNonValidee: ElementEnvironnement = {
+      id: 'haie_ouest',
+      type: 'vegetation',
+      etat: 'editable',
+      action_attendue: 'réduire la hauteur',
+      // Pas de `validation: 'validated'` — proposée, pas confirmée.
+    }
+    const etatPropose: ProjectState = { ...creerProjectStateVide('P-1'), environnement: [propositionNonValidee] }
+
+    it("traite l'élément comme locked tant qu'il n'est pas validé — l'absence de décision ne vaut jamais autorisation", () => {
+      expect(etatEffectifEnvironnement(propositionNonValidee)).toBe('locked')
+      expect(elementsVerrouilles(etatPropose).map((e) => e.id)).toContain('haie_ouest')
+      expect(elementsModifiables(etatPropose)).toEqual([])
+    })
+
+    it('expose la proposition en attente pour confirmation', () => {
+      expect(elementsEnvironnementEnAttente(etatPropose).map((e) => e.id)).toEqual(['haie_ouest'])
+    })
+
+    it('un élément harmonizable non validé reste également sans effet', () => {
+      const proposeHarmonizable: ElementEnvironnement = { id: 'pelouse2', type: 'sol_vegetal', etat: 'harmonizable' }
+      expect(etatEffectifEnvironnement(proposeHarmonizable)).toBe('locked')
+    })
+
+    it("un durcissement en locked n'a besoin d'aucune validation", () => {
+      expect(etatEffectifEnvironnement(batimentVoisin)).toBe('locked')
+    })
+  })
+
+  describe('Non-régression — chaque état respecte sa sémantique obligatoire (ARCH-002)', () => {
+    it('locked ne peut jamais être traité comme librement modifiable (couvert par construction : aucune fonction ne le retourne comme editable/harmonizable)', () => {
+      expect(etatEffectifEnvironnement(batimentVoisin)).toBe('locked')
+    })
+
+    it("harmonizable n'autorise jamais une suppression arbitraire — elementEnvironnementValide ne le bloque pas, mais l'action reste bornée à l'amélioration visuelle", () => {
+      // La contrainte est sémantique (documentée) plutôt que structurelle ici :
+      // rien n'empêche de PROPOSER une action de suppression sur un
+      // harmonizable, mais le contrôle qualité (controle-qualite.ts) la
+      // qualifie de transformation excessive — voir evaluerEnvironnement.
+      expect(elementEnvironnementValide(pelouseHarmonizable)).toBe(true)
+    })
+
+    it('editable avec une action explicite validée reste modifiable', () => {
+      expect(elementEnvironnementValide(clotureEditable)).toBe(true)
+      expect(etatEffectifEnvironnement(clotureEditable)).toBe('editable')
+    })
+
+    it('editable validé sans action_attendue est invalide — une validation ne peut pas porter sur une décision non exprimée', () => {
+      const editableSansAction: ElementEnvironnement = { id: 'x', type: 'mobilier', etat: 'editable', validation: 'validated' }
+      expect(elementEnvironnementValide(editableSansAction)).toBe(false)
+    })
   })
 })
