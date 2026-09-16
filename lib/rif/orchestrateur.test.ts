@@ -88,7 +88,7 @@ describe('executerGenerationOuCorrection', () => {
   })
 
   it("refuse et journalise 'operation_refusee' si l'état ne l'autorise pas", async () => {
-    const { depot, evenements } = depotMemoire({ ...dossierPretAGenerer, etat: 'COLLECTE_EN_COURS' })
+    const { depot, evenements } = depotMemoire({ ...dossierPretAGenerer, etat: 'SOURCES_ANALYSEES' })
     const resultat = await executerGenerationOuCorrection(depot, falSucces, {
       dossierId: 'd-1',
       type: 'initial',
@@ -201,7 +201,7 @@ describe('executerGenerationOuCorrection', () => {
 })
 
 describe('executerReprise', () => {
-  it('transitionne A_REPRENDRE -> SOURCES_CONTRÔLÉES sans jamais appeler fal.ai', async () => {
+  it('transitionne A_REPRENDRE -> SOURCES_ANALYSÉES sans jamais appeler fal.ai', async () => {
     const { depot, obtenirEtatCourant, evenements } = depotMemoire({
       ...dossierPretAGenerer,
       etat: 'A_REPRENDRE',
@@ -214,7 +214,7 @@ describe('executerReprise', () => {
     })
 
     expect(resultat.success).toBe(true)
-    expect(obtenirEtatCourant()).toBe('SOURCES_CONTROLEES')
+    expect(obtenirEtatCourant()).toBe('SOURCES_ANALYSEES')
     expect(evenements[0]).toMatchObject({ type: 'reprise_depuis_sources' })
   })
 

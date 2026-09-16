@@ -27,7 +27,7 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
         <h1 className="font-sans text-xl font-semibold tracking-tight text-encre">
           {dossier.etat.replace(/_/g, ' ')}
         </h1>
-        {dossier.etat === 'FICHE_A_CONFIRMER' && <BoutonConfirmerFiche dossierId={dossier.id} />}
+        {dossier.etat === 'CONTEXTE_A_CONFIRMER' && <BoutonConfirmerFiche dossierId={dossier.id} />}
       </div>
 
       <div className="mt-6 grid flex-1 grid-cols-1 gap-6 md:grid-cols-[280px_1fr]">

@@ -4,7 +4,7 @@ import { authentifierRequete, obtenirDepot, repondreOperation, verifierProprieta
 
 /**
  * POST /api/dossiers/[dossierId]/confirmer — action explicite d'Évariste
- * (PRD §9.4) : FICHE_À_CONFIRMER → PRÊT_À_GÉNÉRER, incrémente la révision
+ * (PRD §9.4) : CONTEXTE_À_CONFIRMER → PRÊT_À_GÉNÉRER, incrémente la révision
  * confirmée du ProjectState (PRD §10 : « une modification ultérieure crée
  * une nouvelle révision »). Jamais déclenchée par le LLM — un bouton humain
  * uniquement.

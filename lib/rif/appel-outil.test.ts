@@ -59,7 +59,7 @@ describe('analyserReponseModele — détection des appels fantômes (prémortem 
 
 describe('autoriserOperation — revérification backend (PRD §11, §14)', () => {
   it('refuse une génération hors PRÊT_À_GÉNÉRER', () => {
-    const decision = autoriserOperation('genererRendu', 'COLLECTE_EN_COURS', etatConfirme)
+    const decision = autoriserOperation('genererRendu', 'SOURCES_ANALYSEES', etatConfirme)
     expect(decision.autorisee).toBe(false)
   })
 
@@ -114,9 +114,8 @@ describe('autoriserOperation — revérification backend (PRD §11, §14)', () =
     for (const etat of [
       'BROUILLON',
       'SOURCES_RECUES',
-      'SOURCES_CONTROLEES',
-      'COLLECTE_EN_COURS',
-      'FICHE_A_CONFIRMER',
+      'SOURCES_ANALYSEES',
+      'CONTEXTE_A_CONFIRMER',
     ] as const) {
       expect(autoriserOperation('mettreAJourFicheProjet', etat, etatConfirme).autorisee).toBe(true)
     }
@@ -132,22 +131,22 @@ describe('autoriserOperation — revérification backend (PRD §11, §14)', () =
 describe('autoriserAvancementParcours — le modèle propose, le backend décide (PRD §8)', () => {
   it('autorise une avancée nominale du parcours de collecte', () => {
     expect(
-      autoriserAvancementParcours('SOURCES_CONTROLEES', 'COLLECTE_EN_COURS', etatConfirme).autorisee,
+      autoriserAvancementParcours('SOURCES_RECUES', 'SOURCES_ANALYSEES', etatConfirme).autorisee,
     ).toBe(true)
     expect(
-      autoriserAvancementParcours('COLLECTE_EN_COURS', 'FICHE_A_CONFIRMER', etatConfirme).autorisee,
+      autoriserAvancementParcours('SOURCES_ANALYSEES', 'CONTEXTE_A_CONFIRMER', etatConfirme).autorisee,
     ).toBe(true)
   })
 
   it("refuse PRÊT_À_GÉNÉRER : le passage exige une action explicite d'Évariste (PRD §9.4)", () => {
-    const decision = autoriserAvancementParcours('FICHE_A_CONFIRMER', 'PRET_A_GENERER', etatConfirme)
+    const decision = autoriserAvancementParcours('CONTEXTE_A_CONFIRMER', 'PRET_A_GENERER', etatConfirme)
     expect(decision.autorisee).toBe(false)
     expect(decision.raison).toMatch(/PRET_A_GENERER/)
   })
 
   it("refuse les états de production, qui découlent des opérations et de l'audit", () => {
     for (const cible of ['GENERATION_EN_COURS', 'CONTROLE_A_EXAMINER', 'VALIDE', 'ECHEC'] as const) {
-      expect(autoriserAvancementParcours('COLLECTE_EN_COURS', cible, etatConfirme).autorisee).toBe(false)
+      expect(autoriserAvancementParcours('SOURCES_ANALYSEES', cible, etatConfirme).autorisee).toBe(false)
     }
   })
 
@@ -158,7 +157,7 @@ describe('autoriserAvancementParcours — le modèle propose, le backend décide
   it('reste soumis aux préconditions : pas de contrôle des sources sans vue Revit exploitable', () => {
     const decision = autoriserAvancementParcours(
       'SOURCES_RECUES',
-      'SOURCES_CONTROLEES',
+      'SOURCES_ANALYSEES',
       etatConfirme,
       { vueRevitExploitable: false },
     )
@@ -167,6 +166,6 @@ describe('autoriserAvancementParcours — le modèle propose, le backend décide
   })
 
   it('refuse un saut hors du graphe même vers un état proposable', () => {
-    expect(autoriserAvancementParcours('BROUILLON', 'FICHE_A_CONFIRMER', etatConfirme).autorisee).toBe(false)
+    expect(autoriserAvancementParcours('BROUILLON', 'CONTEXTE_A_CONFIRMER', etatConfirme).autorisee).toBe(false)
   })
 })

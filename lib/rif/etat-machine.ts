@@ -1,7 +1,7 @@
 import type { ProjectState } from './project-state'
 
 /**
- * Machine à états déterministe du dossier (PRD §8).
+ * Machine à états déterministe du dossier (PRD V2.1 §17, D-19).
  *
  * Le LLM peut PROPOSER une transition ; seul ce module, appelé côté
  * backend (Route Handler / Server Action), l'applique. Aucune vérification
@@ -9,15 +9,21 @@ import type { ProjectState } from './project-state'
  * PRD §11 : « masquer un outil au modèle ne constitue pas à lui seul une
  * protection suffisante. »
  *
- * Voir rif-framework/Implementations/RIF-App/DECISIONS.md — D-08.
+ * D-19 : le PRD V2.1 fusionne SOURCES_CONTRÔLÉES et COLLECTE_EN_COURS (deux
+ * états du PRD V1.3) en un seul état SOURCES_ANALYSÉES, et renomme
+ * FICHE_À_CONFIRMER en CONTEXTE_À_CONFIRMER — 12 états au lieu de 13. Les
+ * deux préconditions qui portaient auparavant sur des états distincts
+ * (vue Revit exploitable, données confidentielles traitées) portent
+ * désormais toutes deux sur l'entrée dans SOURCES_ANALYSÉES.
+ *
+ * Voir rif-framework/Implementations/RIF-App/DECISIONS.md — D-08, D-19.
  */
 
 export const ETATS_DOSSIER = [
   'BROUILLON',
   'SOURCES_RECUES',
-  'SOURCES_CONTROLEES',
-  'COLLECTE_EN_COURS',
-  'FICHE_A_CONFIRMER',
+  'SOURCES_ANALYSEES',
+  'CONTEXTE_A_CONFIRMER',
   'PRET_A_GENERER',
   'GENERATION_EN_COURS',
   'CONTROLE_A_EXAMINER',
@@ -34,7 +40,7 @@ export type EtatDossier = (typeof ETATS_DOSSIER)[number]
  * Graphe des transitions autorisées.
  *
  * Le tronc nominal (BROUILLON → ... → CONTRÔLE_À_EXAMINER → un des cinq
- * états terminaux) reprend le PRD §8 à l'identique. Les transitions de
+ * états terminaux) reprend le PRD V2.1 §17 à l'identique. Les transitions de
  * reprise depuis A_CORRIGER / A_REPRENDRE / SUSPENDU / ÉCHEC ne sont PAS
  * explicitement câblées dans le PRD au niveau transition-par-transition :
  * elles sont déduites des contrats d'opérations (§14) et marquées
@@ -43,17 +49,16 @@ export type EtatDossier = (typeof ETATS_DOSSIER)[number]
  */
 const TRANSITIONS_AUTORISEES: Record<EtatDossier, EtatDossier[]> = {
   BROUILLON: ['SOURCES_RECUES'],
-  SOURCES_RECUES: ['SOURCES_CONTROLEES', 'SUSPENDU'],
-  SOURCES_CONTROLEES: ['COLLECTE_EN_COURS', 'SUSPENDU'],
-  COLLECTE_EN_COURS: ['FICHE_A_CONFIRMER', 'SUSPENDU'],
-  FICHE_A_CONFIRMER: ['PRET_A_GENERER', 'COLLECTE_EN_COURS'],
+  SOURCES_RECUES: ['SOURCES_ANALYSEES', 'SUSPENDU'],
+  SOURCES_ANALYSEES: ['CONTEXTE_A_CONFIRMER', 'SUSPENDU'],
+  CONTEXTE_A_CONFIRMER: ['PRET_A_GENERER', 'SOURCES_ANALYSEES'],
   PRET_A_GENERER: ['GENERATION_EN_COURS'],
   GENERATION_EN_COURS: ['CONTROLE_A_EXAMINER', 'ECHEC'],
   CONTROLE_A_EXAMINER: ['VALIDE', 'A_CORRIGER', 'A_REPRENDRE', 'SUSPENDU'],
   VALIDE: [],
   A_CORRIGER: ['GENERATION_EN_COURS'], // inféré : via corrigerRendu (§14.2)
-  A_REPRENDRE: ['SOURCES_CONTROLEES'], // inféré : via reprendreDepuisSources (§14.3)
-  SUSPENDU: ['SOURCES_CONTROLEES', 'COLLECTE_EN_COURS'], // inféré : reprise après levée du blocage
+  A_REPRENDRE: ['SOURCES_ANALYSEES'], // inféré : via reprendreDepuisSources (§14.3)
+  SUSPENDU: ['SOURCES_ANALYSEES'], // inféré : reprise après levée du blocage
   ECHEC: ['PRET_A_GENERER'], // inféré : nouvelle tentative traçable (§18.2)
 }
 
@@ -105,13 +110,13 @@ export function verifierPrecondition(
   }
 
   // PRD §9.1 : la vue Revit est obligatoire pour RIF-App V1.
-  if (vers === 'SOURCES_CONTROLEES' && contexte.vueRevitExploitable === false) {
+  if (vers === 'SOURCES_ANALYSEES' && contexte.vueRevitExploitable === false) {
     return { autorisee: false, raison: 'Vue Revit absente ou inexploitable.' }
   }
 
   // PRD §9.1 : photo de site obligatoire pour un usage administratif.
   if (
-    vers === 'SOURCES_CONTROLEES' &&
+    vers === 'SOURCES_ANALYSEES' &&
     contexte.usageAdministratif &&
     contexte.photoSiteFournie === false
   ) {
@@ -121,7 +126,9 @@ export function verifierPrecondition(
     }
   }
 
-  if (vers === 'COLLECTE_EN_COURS' && contexte.donneesConfidentiellesTraitees === false) {
+  // D-19 : contrôlée séparément dans le PRD V1.3 (état COLLECTE_EN_COURS
+  // distinct) — porte désormais sur SOURCES_ANALYSÉES, l'état fusionné.
+  if (vers === 'SOURCES_ANALYSEES' && contexte.donneesConfidentiellesTraitees === false) {
     return { autorisee: false, raison: 'Données confidentielles détectées non traitées.' }
   }
 

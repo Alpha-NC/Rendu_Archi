@@ -38,7 +38,7 @@ npm run test:watch
 ## Ce qui existe déjà
 
 - `lib/rif/project-state.ts` — types TypeScript du ProjectState.
-- `lib/rif/etat-machine.ts` (+ `.test.ts`) — machine à états déterministe et préconditions de transition (PRD §8, §22).
+- `lib/rif/etat-machine.ts` (+ `.test.ts`) — machine à états déterministe et préconditions de transition (PRD V2.1 §17, D-19 : 12 états, `SOURCES_ANALYSÉES` fusionne `SOURCES_CONTRÔLÉES`+`COLLECTE_EN_COURS`, `FICHE_À_CONFIRMER` renommé `CONTEXTE_À_CONFIRMER`).
 - `lib/rif/appel-outil.ts` (+ `.test.ts`) — garde d'appel d'outil : aucune opération ne part d'un texte parsé, seul un `tool_use` réel déclenche une action ; revérifie l'état du dossier côté backend.
 - `lib/fal/client.ts` (+ `.test.ts`) — client fal.ai (soumission + polling jusqu'à un état terminal, jamais un `IN_QUEUE` présenté comme un succès).
 - `lib/rif/controle-qualite.ts` (+ `.test.ts`) — grille LIB-002, verdict proposé (jamais autoritaire) et garde-fou d'export administratif (PRD §15.3).
@@ -67,7 +67,7 @@ npm run test:watch
 - `app/page.tsx` redirige vers `/dossiers`.
 - `app/dossiers/[dossierId]/FicheProjet.tsx` — fiche projet (PRD §9.4), affichage seul : données validées vs provisoires, sources et rôles, matériaux, références matériau limitées (ADR-014), directives, zones verrouillées, interdictions, réserves, et libertés Contraintes & Libertés proposées mais pas encore confirmées (§24A.3, `libertesEnAttente`). Sans elle, la confirmation exigée au §9.4 se ferait à l'aveugle. L'édition passe par la conversation (`mettreAJourFicheProjet`), jamais par un formulaire.
 - `app/api/dossiers/[dossierId]/generations/[generationId]/audit/route.ts` + `VerdictQualite.tsx` — enregistre le verdict HUMAIN (PRD §15.1) après une génération/correction et transitionne le dossier (`VALIDE`/`A_CORRIGER`/`A_REPRENDRE`/`SUSPENDU`). C'est le seul champ que lit `autoriserExportAdministratif` — jamais un verdict calculé.
-- **Avancement du parcours (D-16)** : `avancerParcours` laisse le modèle PROPOSER une transition (SOURCES_CONTRÔLÉES, COLLECTE_EN_COURS, FICHE_À_CONFIRMER, SUSPENDU) que `autoriserAvancementParcours` valide côté backend. PRÊT_À_GÉNÉRER en est exclu (action humaine, §9.4, bouton `BoutonConfirmerFiche`), comme les états de production, qui découlent des opérations et de l'audit. Le passage BROUILLON → SOURCES_REÇUES est mécanique, fait au dépôt de la première source.
+- **Avancement du parcours (D-16, renommage D-19)** : `avancerParcours` laisse le modèle PROPOSER une transition (SOURCES_ANALYSÉES, CONTEXTE_À_CONFIRMER, SUSPENDU) que `autoriserAvancementParcours` valide côté backend. PRÊT_À_GÉNÉRER en est exclu (action humaine, §9.4, bouton `BoutonConfirmerFiche`), comme les états de production, qui découlent des opérations et de l'audit. Le passage BROUILLON → SOURCES_REÇUES est mécanique, fait au dépôt de la première source.
 - **Confirmation de fiche et Contraintes & Libertés (§24A.3)** : `POST app/api/dossiers/[dossierId]/confirmer` appelle `autoriserLibertesEnAttente` avant d'incrémenter la révision — c'est le seul moment où une liberté proposée par le modèle devient effective sur la génération.
 - `executerGenerationOuCorrection` (`lib/rif/orchestrateur.ts`) renvoie maintenant `imageUrl` (URL signée du rendu) sur succès — nécessaire pour l'afficher avant de voter.
 

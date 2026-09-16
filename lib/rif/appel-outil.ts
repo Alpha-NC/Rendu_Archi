@@ -114,13 +114,12 @@ export function analyserReponseModele(blocs: BlocContenu[]): ResultatAppelOutil 
   return { genre: 'aucun_appel' }
 }
 
-/** États où la fiche projet est encore modifiable (D-15). */
+/** États où la fiche projet est encore modifiable (D-15, D-19). */
 export const ETATS_COLLECTE_OUVERTE: EtatDossier[] = [
   'BROUILLON',
   'SOURCES_RECUES',
-  'SOURCES_CONTROLEES',
-  'COLLECTE_EN_COURS',
-  'FICHE_A_CONFIRMER',
+  'SOURCES_ANALYSEES',
+  'CONTEXTE_A_CONFIRMER',
 ]
 
 export interface DecisionOperation {
@@ -214,9 +213,8 @@ export function autoriserOperation(
  * proposition conversationnelle.
  */
 const ETATS_PROPOSABLES: EtatDossier[] = [
-  'SOURCES_CONTROLEES',
-  'COLLECTE_EN_COURS',
-  'FICHE_A_CONFIRMER',
+  'SOURCES_ANALYSEES',
+  'CONTEXTE_A_CONFIRMER',
   'SUSPENDU',
 ]
 

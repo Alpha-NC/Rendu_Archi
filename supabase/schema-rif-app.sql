@@ -38,10 +38,14 @@ create table if not exists dossiers (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users (id),
   dossier_ref text not null,
+  -- D-19 : 12 états (PRD V2.1 §17), fusion de SOURCES_CONTRÔLÉES +
+  -- COLLECTE_EN_COURS en SOURCES_ANALYSÉES, FICHE_À_CONFIRMER renommé
+  -- CONTEXTE_À_CONFIRMER — jamais exécuté sur un projet réel (D-02/D-03,
+  -- docs/provisioning-supabase.md), donc sans donnée à migrer.
   workflow_state text not null default 'BROUILLON' check (
     workflow_state in (
-      'BROUILLON', 'SOURCES_RECUES', 'SOURCES_CONTROLEES',
-      'COLLECTE_EN_COURS', 'FICHE_A_CONFIRMER', 'PRET_A_GENERER',
+      'BROUILLON', 'SOURCES_RECUES', 'SOURCES_ANALYSEES',
+      'CONTEXTE_A_CONFIRMER', 'PRET_A_GENERER',
       'GENERATION_EN_COURS', 'CONTROLE_A_EXAMINER',
       'VALIDE', 'A_CORRIGER', 'A_REPRENDRE', 'SUSPENDU', 'ECHEC'
     )

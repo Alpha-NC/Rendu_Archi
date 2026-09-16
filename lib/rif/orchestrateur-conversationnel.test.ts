@@ -216,7 +216,7 @@ describe('executerTourConversationnel — corrigerRendu réel', () => {
 })
 
 describe('executerTourConversationnel — reprendreDepuisSources réel', () => {
-  it("n'appelle jamais fal.ai et transitionne vers SOURCES_CONTRÔLÉES", async () => {
+  it("n'appelle jamais fal.ai et transitionne vers SOURCES_ANALYSÉES", async () => {
     const falEspion = vi.fn()
     const { depot, evenements } = depotMemoire({ ...dossierBase, etat: 'A_REPRENDRE' })
     const appelerModele = vi.fn<AppelModele>(async () => ({
@@ -240,7 +240,7 @@ describe('executerTourConversationnel — mettreAJourFicheProjet (D-15)', () => 
   it('persiste la mise à jour dans le ProjectState et journalise', async () => {
     const { depot, evenements, obtenirDossierCourant } = depotMemoire({
       ...dossierBase,
-      etat: 'COLLECTE_EN_COURS',
+      etat: 'SOURCES_ANALYSEES',
     })
     const appelerModele = vi.fn<AppelModele>(async () => ({
       content: [
@@ -255,7 +255,7 @@ describe('executerTourConversationnel — mettreAJourFicheProjet (D-15)', () => 
     }))
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
-      dossier: { ...dossierBase, etat: 'COLLECTE_EN_COURS' },
+      dossier: { ...dossierBase, etat: 'SOURCES_ANALYSEES' },
       historique: [],
       nouveauMessage: 'La façade extension sera en enduit clair.',
       actorId: 'user-1',
@@ -291,34 +291,34 @@ describe('executerTourConversationnel — avancerParcours', () => {
   it('applique une avancée autorisée et la journalise', async () => {
     const { depot, evenements, obtenirDossierCourant } = depotMemoire({
       ...dossierBase,
-      etat: 'SOURCES_CONTROLEES',
+      etat: 'SOURCES_ANALYSEES',
     })
     const appelerModele = vi.fn<AppelModele>(async () => ({
       content: [
         {
           type: 'tool_use',
           name: 'avancerParcours',
-          input: { versEtat: 'COLLECTE_EN_COURS', motif: 'Sources contrôlées, rôles confirmés.' },
+          input: { versEtat: 'CONTEXTE_A_CONFIRMER', motif: 'Sources analysées, rôles confirmés.' },
         },
       ],
     }))
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
-      dossier: { ...dossierBase, etat: 'SOURCES_CONTROLEES' },
+      dossier: { ...dossierBase, etat: 'SOURCES_ANALYSEES' },
       historique: [],
-      nouveauMessage: 'On peut passer à la collecte.',
+      nouveauMessage: 'On peut passer à la confirmation du contexte.',
       actorId: 'user-1',
     })
 
-    expect(resultat).toEqual({ type: 'parcours_avance', versEtat: 'COLLECTE_EN_COURS' })
-    expect(obtenirDossierCourant().etat).toBe('COLLECTE_EN_COURS')
+    expect(resultat).toEqual({ type: 'parcours_avance', versEtat: 'CONTEXTE_A_CONFIRMER' })
+    expect(obtenirDossierCourant().etat).toBe('CONTEXTE_A_CONFIRMER')
     expect(evenements.map((e) => e.type)).toContain('parcours_avance')
   })
 
   it("refuse et journalise une avancée vers PRÊT_À_GÉNÉRER proposée par le modèle (PRD §9.4)", async () => {
     const { depot, evenements, obtenirDossierCourant } = depotMemoire({
       ...dossierBase,
-      etat: 'FICHE_A_CONFIRMER',
+      etat: 'CONTEXTE_A_CONFIRMER',
     })
     const appelerModele = vi.fn<AppelModele>(async () => ({
       content: [
@@ -327,14 +327,14 @@ describe('executerTourConversationnel — avancerParcours', () => {
     }))
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
-      dossier: { ...dossierBase, etat: 'FICHE_A_CONFIRMER' },
+      dossier: { ...dossierBase, etat: 'CONTEXTE_A_CONFIRMER' },
       historique: [],
       nouveauMessage: 'Lance la génération.',
       actorId: 'user-1',
     })
 
     expect(resultat.type).toBe('incident')
-    expect(obtenirDossierCourant().etat).toBe('FICHE_A_CONFIRMER')
+    expect(obtenirDossierCourant().etat).toBe('CONTEXTE_A_CONFIRMER')
     expect(evenements[0].type).toBe('operation_refusee')
   })
 })

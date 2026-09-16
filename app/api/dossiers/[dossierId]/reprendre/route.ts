@@ -11,7 +11,7 @@ import {
  * POST /api/dossiers/[dossierId]/reprendre — reprendreDepuisSources (PRD §14.3).
  *
  * N'appelle jamais fal.ai : réinitialise le parcours vers
- * SOURCES_CONTRÔLÉES pour reconstruire une révision confirmée du
+ * SOURCES_ANALYSÉES pour reconstruire une révision confirmée du
  * ProjectState. Utilisée quand la géométrie ou la caméra a dérivé,
  * l'environnement verrouillé a été altéré, ou plusieurs corrections ont
  * accumulé des régressions — jamais présentée comme une correction locale

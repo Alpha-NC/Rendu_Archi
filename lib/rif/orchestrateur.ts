@@ -166,7 +166,7 @@ export interface ParametresReprise {
 /**
  * Exécute `reprendreDepuisSources` (PRD §14.3). Contrairement aux deux
  * opérations ci-dessus, celle-ci n'appelle jamais fal.ai : elle réinitialise
- * le parcours vers SOURCES_CONTRÔLÉES pour reconstruire une révision
+ * le parcours vers SOURCES_ANALYSÉES pour reconstruire une révision
  * confirmée du ProjectState avant toute nouvelle génération. Ne jamais la
  * présenter ni l'implémenter comme une correction locale (D-09).
  */
@@ -193,7 +193,7 @@ export async function executerReprise(
     }
   }
 
-  await depot.transitionnerDossier(dossier.id, 'SOURCES_CONTROLEES')
+  await depot.transitionnerDossier(dossier.id, 'SOURCES_ANALYSEES')
   await depot.journaliserEvenement(
     dossier.id,
     'reprise_depuis_sources',
