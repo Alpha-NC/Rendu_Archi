@@ -152,3 +152,22 @@ create table if not exists events (
 );
 
 create index if not exists events_dossier_idx on events (dossier_id, created_at desc);
+
+-- =========================================================================
+-- 7. Messages — historique de conversation (PRD §13.5, D-19)
+--
+-- Distinct du journal `events` (déjà append-only) : PRD §13.5, « l'historique
+-- de conversation peut être stocké séparément, mais il ne remplace pas ce
+-- journal ». Texte seul, jamais les blocs tool_use/tool_result bruts de
+-- l'API Anthropic — voir lib/rif/depot.ts::MessageConversation.
+-- =========================================================================
+
+create table if not exists messages (
+  id uuid primary key default gen_random_uuid(),
+  dossier_id uuid not null references dossiers (id) on delete cascade,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists messages_dossier_idx on messages (dossier_id, created_at asc);

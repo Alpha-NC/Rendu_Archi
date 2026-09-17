@@ -1,6 +1,6 @@
 import { creerAppelModele } from '@/lib/rif/claude-client'
 import { genererEtAttendre } from '@/lib/fal/client'
-import { executerTourConversationnel, type MessageConversation } from '@/lib/rif/orchestrateur-conversationnel'
+import { executerTourConversationnel } from '@/lib/rif/orchestrateur-conversationnel'
 import {
   authentifierRequete,
   obtenirDepot,
@@ -10,14 +10,36 @@ import {
 import { NextResponse } from 'next/server'
 
 /**
+ * GET /api/dossiers/[dossierId]/message — historique persisté (PRD §13.5),
+ * pour réafficher la conversation à l'ouverture de la page.
+ */
+export async function GET(_request: Request, { params }: { params: Promise<{ dossierId: string }> }) {
+  const { dossierId } = await params
+  const { user, reponseRefus } = await authentifierRequete()
+  if (reponseRefus) return reponseRefus
+
+  const depot = obtenirDepot()
+  const dossier = await depot.obtenirDossier(dossierId)
+  if (!dossier) {
+    return NextResponse.json(
+      { success: false, error: { code: 'dossier_introuvable', message: 'Dossier introuvable.' } },
+      { status: 404 },
+    )
+  }
+  const refusProprietaire = verifierProprietaire(dossier.ownerId, user.id)
+  if (refusProprietaire) return refusProprietaire
+
+  const historique = await depot.obtenirHistoriqueConversation(dossierId)
+  return NextResponse.json({ success: true, historique }, { status: 200 })
+}
+
+/**
  * POST /api/dossiers/[dossierId]/message — un tour de conversation.
  *
- * L'historique de conversation n'est pas encore persisté côté serveur
- * (PRD §13.5 : « peut être stocké séparément », conception restant à
- * faire) — le client transmet l'historique à chaque appel. Cette route
- * n'est donc qu'un tour isolé, pas encore une session conversationnelle
- * complète ; voir la note en tête de lib/rif/orchestrateur-conversationnel.ts
- * pour le périmètre exact couvert.
+ * L'historique de conversation est persisté côté serveur (PRD §13.5,
+ * lib/rif/depot.ts::MessageConversation) — voir la note en tête de
+ * lib/rif/orchestrateur-conversationnel.ts pour le périmètre exact couvert
+ * (pas encore de boucle multi-tour renvoyant le tool_result au modèle).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ dossierId: string }> }) {
   const { dossierId } = await params
@@ -42,11 +64,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     return repondreCorpsInvalide('Corps de requête JSON attendu.')
   }
 
-  const { message, historique } = (corps as Record<string, unknown>) ?? {}
+  const { message } = (corps as Record<string, unknown>) ?? {}
   if (typeof message !== 'string' || message.trim().length === 0) {
     return repondreCorpsInvalide('Le champ message (texte non vide) est requis.')
   }
-  const historiqueValide: MessageConversation[] = Array.isArray(historique) ? historique : []
 
   let appelerModele
   try {
@@ -66,7 +87,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
 
   const resultat = await executerTourConversationnel(depot, appelerModele, genererEtAttendre, {
     dossier,
-    historique: historiqueValide,
     nouveauMessage: message,
     actorId: user.id,
   })

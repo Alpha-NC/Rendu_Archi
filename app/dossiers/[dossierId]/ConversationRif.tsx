@@ -1,22 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import VerdictQualite from './VerdictQualite'
-
-/**
- * Historique tel que renvoyé au serveur à chaque tour. Simplification
- * assumée tant que la persistance de conversation n'existe pas (PRD §13.5,
- * voir la note en tête de lib/rif/orchestrateur-conversationnel.ts) : on ne
- * renvoie que du texte, jamais les blocs tool_use/tool_result bruts de
- * l'API Anthropic. Le ProjectState (recalculé et injecté dans le prompt
- * système à chaque tour) porte la mémoire structurée ; ce texte ne sert
- * qu'à la fluidité de la conversation visible.
- */
-interface TourHistorique {
-  role: 'user' | 'assistant'
-  content: string
-}
 
 interface MessageAffiche {
   auteur: 'utilisateur' | 'assistant' | 'systeme'
@@ -28,13 +14,28 @@ interface MessageAffiche {
 
 export default function ConversationRif({ dossierId }: { dossierId: string }) {
   const router = useRouter()
-  const [historique, setHistorique] = useState<TourHistorique[]>([])
   const [messages, setMessages] = useState<MessageAffiche[]>([
     { auteur: 'systeme', texte: 'Décris le projet ou dépose tes sources pour commencer.' },
   ])
   const [saisie, setSaisie] = useState('')
   const [enCours, setEnCours] = useState(false)
   const zoneMessages = useRef<HTMLDivElement>(null)
+
+  // Réaffiche la conversation persistée (PRD §13.5) à l'ouverture de la page.
+  useEffect(() => {
+    fetch(`/api/dossiers/${dossierId}/message`)
+      .then((r) => r.json())
+      .then((corps: { success: boolean; historique?: Array<{ role: 'user' | 'assistant'; content: string }> }) => {
+        if (!corps.success || !corps.historique?.length) return
+        setMessages(
+          corps.historique.map((m) => ({
+            auteur: m.role === 'user' ? 'utilisateur' : 'assistant',
+            texte: m.content,
+          })),
+        )
+      })
+      .catch(() => {})
+  }, [dossierId])
 
   function resumerTour(tour: unknown): Pick<MessageAffiche, 'texte' | 'generationId' | 'imageUrl'> {
     if (!tour || typeof tour !== 'object') return { texte: 'Réponse inattendue.' }
@@ -83,7 +84,7 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
       const reponse = await fetch(`/api/dossiers/${dossierId}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: texte, historique }),
+        body: JSON.stringify({ message: texte }),
       })
       const corps = await reponse.json()
 
@@ -102,11 +103,6 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
       // invisible jusqu'à un rafraîchissement manuel.
       const typeTour = (corps.tour as { type?: string } | undefined)?.type
       if (typeTour === 'parcours_avance' || typeTour === 'operation') router.refresh()
-      setHistorique((prev) => [
-        ...prev,
-        { role: 'user', content: texte },
-        { role: 'assistant', content: resume.texte },
-      ])
     } catch {
       setMessages((prev) => [...prev, { auteur: 'systeme', texte: '⚠️ Connexion impossible.' }])
     } finally {

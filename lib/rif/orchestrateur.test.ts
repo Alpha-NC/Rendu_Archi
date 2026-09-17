@@ -51,6 +51,10 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async journaliserEvenement(_id, type, payload, actorId) {
       evenements.push({ type, payload, actorId })
     },
+    async obtenirHistoriqueConversation() {
+      return []
+    },
+    async ajouterMessageConversation() {},
   }
 
   return { depot, evenements, generations, obtenirEtatCourant: () => dossier.etat }

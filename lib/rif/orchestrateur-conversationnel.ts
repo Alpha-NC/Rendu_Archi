@@ -30,15 +30,17 @@ import type { genererEtAttendre } from '../fal/client'
  * Ce que ce module NE fait PAS (délibérément, pour rester honnête sur le
  * périmètre réellement couvert) :
  * - il ne boucle pas automatiquement pour renvoyer le tool_result au modèle
- *   et obtenir un message de clôture en langage naturel — cela suppose une
- *   persistance de conversation (PRD §13.5 : « peut être stockée
- *   séparément ») qui n'est pas encore conçue. L'appelant reçoit le
- *   ResultatOperation et peut afficher un message templated, ou effectuer
- *   un second appel avec le tool_result s'il gère lui-même l'historique ;
+ *   et obtenir un message de clôture en langage naturel. L'historique
+ *   persisté (lib/rif/depot.ts::MessageConversation) ne porte que du texte,
+ *   jamais les blocs tool_use/tool_result bruts de l'API Anthropic — ce
+ *   texte (résumé par `resumerTour`) suffit à la fluidité de la
+ *   conversation visible, mais un second aller-retour modèle avec le
+ *   tool_result réel resterait nécessaire pour un message de clôture
+ *   vraiment rédigé par le modèle ;
  * - il ne gère pas encore les variantes multiples (D-10 encore ouverte).
  */
 
-export interface MessageConversation {
+export interface MessageAppelModele {
   role: 'user' | 'assistant'
   content: string | BlocContenu[]
 }
@@ -46,7 +48,7 @@ export interface MessageConversation {
 export interface AppelModeleParametres {
   system: string
   tools: typeof OUTILS_CONVERSATIONNELS
-  messages: MessageConversation[]
+  messages: MessageAppelModele[]
 }
 
 export interface ReponseModele {
@@ -57,7 +59,6 @@ export type AppelModele = (params: AppelModeleParametres) => Promise<ReponseMode
 
 export interface ContexteConversation {
   dossier: DossierActuel
-  historique: MessageConversation[]
   nouveauMessage: string
   actorId: string
 }
@@ -68,6 +69,33 @@ export type ResultatTour =
   | { type: 'incident'; message: string }
   | { type: 'fiche_mise_a_jour'; champsModifies: string[]; ignores: Array<{ champ: string; raison: string }> }
   | { type: 'parcours_avance'; versEtat: EtatDossier }
+
+/**
+ * Résumé texte d'un tour — c'est CE texte qui est persisté comme message
+ * assistant (PRD §13.5) et affiché côté client (ConversationRif.tsx), pour
+ * qu'ils restent toujours identiques.
+ */
+export function resumerTour(resultat: ResultatTour): string {
+  switch (resultat.type) {
+    case 'message':
+      return resultat.texte
+    case 'incident':
+      return `⚠️ ${resultat.message}`
+    case 'operation': {
+      if (resultat.resultat.success) {
+        // PRD §9.6 : après une génération/correction, le rendu doit entrer
+        // en contrôle qualité — jamais déclaré conforme automatiquement.
+        const enControle = resultat.operation === 'genererRendu' || resultat.operation === 'corrigerRendu'
+        return `✅ ${resultat.operation} exécutée.${enControle ? ' Contrôle qualité requis ci-dessous.' : ''}`
+      }
+      return `❌ ${resultat.operation} a échoué : ${resultat.resultat.error?.message ?? 'raison inconnue'}.`
+    }
+    case 'parcours_avance':
+      return `➡️ Dossier passé en ${resultat.versEtat.replace(/_/g, ' ')}.`
+    case 'fiche_mise_a_jour':
+      return `📋 Fiche projet mise à jour (${resultat.champsModifies.join(', ') || 'aucun champ'}).`
+  }
+}
 
 /**
  * Calcule le contexte de branchement (mode/style résolus + plan de
@@ -117,6 +145,7 @@ export async function executerTourConversationnel(
   contexte: ContexteConversation,
 ): Promise<ResultatTour> {
   const { dossier } = contexte
+  const historique = await depot.obtenirHistoriqueConversation(dossier.id)
   const branchement = calculerContexteBranchement(dossier)
 
   const system = construireSystemPrompt({
@@ -132,9 +161,9 @@ export async function executerTourConversationnel(
   // modèle ne peut que deviner — exactement ce que le Framework interdit.
   //
   // ponytail: les images sont renvoyées à chaque tour de la phase de
-  // collecte (l'historique ne porte que du texte, cf. note en tête). Coût
-  // ~1,5k tokens par image et par tour ; passer par le cache de prompt ou
-  // une persistance de conversation si la facture le justifie.
+  // collecte (l'historique persisté ne porte que du texte, cf. note en
+  // tête). Coût ~1,5k tokens par image et par tour ; passer par le cache de
+  // prompt si la facture le justifie.
   const contenuUtilisateur: BlocContenu[] = []
   if (ETATS_COLLECTE_OUVERTE.includes(dossier.etat) && dossier.projectState.sources.length > 0) {
     const sources = dossier.projectState.sources
@@ -156,8 +185,15 @@ export async function executerTourConversationnel(
   const reponse = await appelerModele({
     system,
     tools: OUTILS_CONVERSATIONNELS,
-    messages: [...contexte.historique, { role: 'user', content: contenuUtilisateur }],
+    messages: [...historique, { role: 'user', content: contenuUtilisateur }],
   })
+
+  /** Persiste le tour (PRD §13.5) puis renvoie le résultat — point de sortie unique. */
+  async function finaliser(resultat: ResultatTour): Promise<ResultatTour> {
+    await depot.ajouterMessageConversation(dossier.id, { role: 'user', content: contexte.nouveauMessage })
+    await depot.ajouterMessageConversation(dossier.id, { role: 'assistant', content: resumerTour(resultat) })
+    return resultat
+  }
 
   const analyse = analyserReponseModele(reponse.content)
 
@@ -166,7 +202,7 @@ export async function executerTourConversationnel(
       .filter((b): b is BlocContenu & { text: string } => b.type === 'text' && typeof b.text === 'string')
       .map((b) => b.text)
       .join('\n\n')
-    return { type: 'message', texte }
+    return finaliser({ type: 'message', texte })
   }
 
   if (analyse.genre === 'appel_simule_detecte') {
@@ -176,16 +212,16 @@ export async function executerTourConversationnel(
       { operationEvoquee: analyse.operationEvoquee, extrait: analyse.extrait },
       contexte.actorId,
     )
-    return {
+    return finaliser({
       type: 'incident',
       message:
         "Une réponse anormale du modèle a été détectée et bloquée avant toute exécution — aucune génération n'a été lancée. Réessaie ta demande.",
-    }
+    })
   }
 
   if (analyse.genre === 'operation_inconnue') {
     await depot.journaliserEvenement(dossier.id, 'operation_inconnue', { nom: analyse.nom }, contexte.actorId)
-    return { type: 'incident', message: "Le modèle a tenté d'appeler un outil qui n'existe pas dans RIF-App." }
+    return finaliser({ type: 'incident', message: "Le modèle a tenté d'appeler un outil qui n'existe pas dans RIF-App." })
   }
 
   // analyse.genre === 'appel_reel' — construction du prompt technique
@@ -202,7 +238,7 @@ export async function executerTourConversationnel(
       actorId: contexte.actorId,
       contexte: { usageAdministratif: dossier.usageAdministratif },
     })
-    return { type: 'operation', operation: 'genererRendu', resultat }
+    return finaliser({ type: 'operation', operation: 'genererRendu', resultat })
   }
 
   if (analyse.operation === 'corrigerRendu') {
@@ -214,7 +250,7 @@ export async function executerTourConversationnel(
         { operation: 'corrigerRendu', raison: 'Paramètres manquants ou invalides.' },
         contexte.actorId,
       )
-      return { type: 'incident', message: 'La demande de correction est incomplète — précise ce qui doit changer et le résultat attendu.' }
+      return finaliser({ type: 'incident', message: 'La demande de correction est incomplète — précise ce qui doit changer et le résultat attendu.' })
     }
     const promptText = construirePromptCorrection(dossier.projectState, {
       elementAModifier: entree.elementAModifier,
@@ -228,21 +264,21 @@ export async function executerTourConversationnel(
       actorId: contexte.actorId,
       contexte: { usageAdministratif: dossier.usageAdministratif },
     })
-    return { type: 'operation', operation: 'corrigerRendu', resultat }
+    return finaliser({ type: 'operation', operation: 'corrigerRendu', resultat })
   }
 
   if (analyse.operation === 'reprendreDepuisSources') {
     const entreeReprise = analyse.entree as { motif?: unknown } | undefined
     const motif = typeof entreeReprise?.motif === 'string' ? entreeReprise.motif : 'Motif non précisé par le modèle.'
     const resultat = await executerReprise(depot, { dossierId: dossier.id, actorId: contexte.actorId, motif })
-    return { type: 'operation', operation: 'reprendreDepuisSources', resultat }
+    return finaliser({ type: 'operation', operation: 'reprendreDepuisSources', resultat })
   }
 
   if (analyse.operation === 'avancerParcours') {
     const entree = analyse.entree as { versEtat?: unknown; motif?: unknown } | undefined
     const versEtat = entree?.versEtat
     if (typeof versEtat !== 'string' || !(ETATS_DOSSIER as readonly string[]).includes(versEtat)) {
-      return { type: 'incident', message: "État cible invalide proposé par le modèle." }
+      return finaliser({ type: 'incident', message: "État cible invalide proposé par le modèle." })
     }
 
     const decision = autoriserAvancementParcours(dossier.etat, versEtat as EtatDossier, dossier.projectState, {
@@ -261,7 +297,7 @@ export async function executerTourConversationnel(
         { operation: 'avancerParcours', versEtat, raison: decision.raison },
         contexte.actorId,
       )
-      return { type: 'incident', message: decision.raison ?? 'Avancement refusé.' }
+      return finaliser({ type: 'incident', message: decision.raison ?? 'Avancement refusé.' })
     }
 
     await depot.transitionnerDossier(dossier.id, versEtat as EtatDossier)
@@ -271,7 +307,7 @@ export async function executerTourConversationnel(
       { versEtat, motif: typeof entree?.motif === 'string' ? entree.motif : null },
       contexte.actorId,
     )
-    return { type: 'parcours_avance', versEtat: versEtat as EtatDossier }
+    return finaliser({ type: 'parcours_avance', versEtat: versEtat as EtatDossier })
   }
 
   // mettreAJourFicheProjet (D-15) — la seule opération qui ne passe pas par
@@ -285,10 +321,10 @@ export async function executerTourConversationnel(
       { operation: 'mettreAJourFicheProjet', raison: decisionExtraction.raison },
       contexte.actorId,
     )
-    return {
+    return finaliser({
       type: 'incident',
       message: decisionExtraction.raison ?? 'Mise à jour de la fiche projet non autorisée dans cet état.',
-    }
+    })
   }
 
   const miseAJour = (analyse.entree ?? {}) as MiseAJourFicheProjet
@@ -302,5 +338,5 @@ export async function executerTourConversationnel(
     { champs: Object.keys(miseAJour), ignores },
     contexte.actorId,
   )
-  return { type: 'fiche_mise_a_jour', champsModifies: Object.keys(miseAJour), ignores }
+  return finaliser({ type: 'fiche_mise_a_jour', champsModifies: Object.keys(miseAJour), ignores })
 }

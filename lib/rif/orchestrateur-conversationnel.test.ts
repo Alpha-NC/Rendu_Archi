@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { creerProjectStateVide } from './project-state'
-import type { DepotDossiers, DossierActuel } from './depot'
+import type { DepotDossiers, DossierActuel, MessageConversation } from './depot'
 import {
   calculerContexteBranchement,
   executerTourConversationnel,
@@ -9,6 +9,7 @@ import {
 
 function depotMemoire(dossierInitial: DossierActuel) {
   const evenements: Array<{ type: string; payload: unknown }> = []
+  const messages: MessageConversation[] = []
   let dossier = { ...dossierInitial }
 
   const depot: DepotDossiers = {
@@ -46,9 +47,15 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async journaliserEvenement(_id, type, payload) {
       evenements.push({ type, payload })
     },
+    async obtenirHistoriqueConversation() {
+      return [...messages]
+    },
+    async ajouterMessageConversation(_id, message) {
+      messages.push(message)
+    },
   }
 
-  return { depot, evenements, obtenirDossierCourant: () => dossier }
+  return { depot, evenements, messages, obtenirDossierCourant: () => dossier }
 }
 
 const dossierBase: DossierActuel = {
@@ -109,14 +116,13 @@ describe('calculerContexteBranchement', () => {
 
 describe("executerTourConversationnel — réponse texte simple", () => {
   it('retourne le texte quand aucun outil n\'est appelé', async () => {
-    const { depot } = depotMemoire(dossierBase)
+    const { depot, messages } = depotMemoire(dossierBase)
     const appelerModele = vi.fn<AppelModele>(async () => ({
       content: [{ type: 'text', text: 'Quelle est la teinte de la façade ?' }],
     }))
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: dossierBase,
-      historique: [],
       nouveauMessage: 'Voici mes documents.',
       actorId: 'user-1',
     })
@@ -124,6 +130,29 @@ describe("executerTourConversationnel — réponse texte simple", () => {
     expect(resultat).toEqual({ type: 'message', texte: 'Quelle est la teinte de la façade ?' })
     // Le prompt système a bien été transmis avec le plan de collecte calculé.
     expect(appelerModele.mock.calls[0][0].system).toMatch(/PLAN DE COLLECTE/)
+    // PRD §13.5 : le tour est persisté (texte seul, jamais les blocs bruts).
+    expect(messages).toEqual([
+      { role: 'user', content: 'Voici mes documents.' },
+      { role: 'assistant', content: 'Quelle est la teinte de la façade ?' },
+    ])
+  })
+
+  it("charge l'historique persisté et le transmet au modèle", async () => {
+    const { depot } = depotMemoire(dossierBase)
+    await depot.ajouterMessageConversation(dossierBase.id, { role: 'user', content: 'Premier message.' })
+    await depot.ajouterMessageConversation(dossierBase.id, { role: 'assistant', content: 'Première réponse.' })
+    const appelerModele = vi.fn<AppelModele>(async () => ({
+      content: [{ type: 'text', text: 'Suite.' }],
+    }))
+
+    await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: dossierBase,
+      nouveauMessage: 'Deuxième message.',
+      actorId: 'user-1',
+    })
+
+    expect(appelerModele.mock.calls[0][0].messages[0]).toEqual({ role: 'user', content: 'Premier message.' })
+    expect(appelerModele.mock.calls[0][0].messages[1]).toEqual({ role: 'assistant', content: 'Première réponse.' })
   })
 })
 
@@ -136,7 +165,6 @@ describe("executerTourConversationnel — appel simulé (prémortem #1)", () => 
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: dossierBase,
-      historique: [],
       nouveauMessage: 'Lance la génération.',
       actorId: 'user-1',
     })
@@ -157,7 +185,6 @@ describe('executerTourConversationnel — genererRendu réel', () => {
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: dossierBase,
-      historique: [],
       nouveauMessage: 'La fiche est bonne, lance.',
       actorId: 'user-1',
     })
@@ -181,7 +208,6 @@ describe('executerTourConversationnel — corrigerRendu réel', () => {
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: { ...dossierBase, etat: 'A_CORRIGER' },
-      historique: [],
       nouveauMessage: 'Corrige la teinte.',
       actorId: 'user-1',
     })
@@ -205,7 +231,6 @@ describe('executerTourConversationnel — corrigerRendu réel', () => {
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: { ...dossierBase, etat: 'A_CORRIGER' },
-      historique: [],
       nouveauMessage: 'Corrige la teinte.',
       actorId: 'user-1',
     })
@@ -225,7 +250,6 @@ describe('executerTourConversationnel — reprendreDepuisSources réel', () => {
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falEspion as never, {
       dossier: { ...dossierBase, etat: 'A_REPRENDRE' },
-      historique: [],
       nouveauMessage: 'Il faut repartir des sources.',
       actorId: 'user-1',
     })
@@ -256,7 +280,6 @@ describe('executerTourConversationnel — mettreAJourFicheProjet (D-15)', () => 
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: { ...dossierBase, etat: 'SOURCES_ANALYSEES' },
-      historique: [],
       nouveauMessage: 'La façade extension sera en enduit clair.',
       actorId: 'user-1',
     })
@@ -277,7 +300,6 @@ describe('executerTourConversationnel — mettreAJourFicheProjet (D-15)', () => 
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: { ...dossierBase, etat: 'GENERATION_EN_COURS' },
-      historique: [],
       nouveauMessage: 'Change le style en Commercial.',
       actorId: 'user-1',
     })
@@ -305,7 +327,6 @@ describe('executerTourConversationnel — avancerParcours', () => {
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: { ...dossierBase, etat: 'SOURCES_ANALYSEES' },
-      historique: [],
       nouveauMessage: 'On peut passer à la confirmation du contexte.',
       actorId: 'user-1',
     })
@@ -328,7 +349,6 @@ describe('executerTourConversationnel — avancerParcours', () => {
 
     const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: { ...dossierBase, etat: 'CONTEXTE_A_CONFIRMER' },
-      historique: [],
       nouveauMessage: 'Lance la génération.',
       actorId: 'user-1',
     })
@@ -348,7 +368,6 @@ describe('executerTourConversationnel — sources jointes au modèle (D-06, PRD 
 
     await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: { ...dossierBase, etat: 'SOURCES_RECUES' },
-      historique: [],
       nouveauMessage: 'Voici mes documents.',
       actorId: 'user-1',
     })
@@ -374,7 +393,6 @@ describe('executerTourConversationnel — sources jointes au modèle (D-06, PRD 
 
     await executerTourConversationnel(depot, appelerModele, falSucces, {
       dossier: dossierBase,
-      historique: [],
       nouveauMessage: 'On en est où ?',
       actorId: 'user-1',
     })

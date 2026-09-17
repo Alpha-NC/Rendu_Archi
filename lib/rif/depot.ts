@@ -64,6 +64,17 @@ export interface ParametresAuditQualite {
   validatedBy: string
 }
 
+/**
+ * Tour de conversation persisté (PRD §13.5 : « l'historique de conversation
+ * peut être stocké séparément »). Texte seul, jamais les blocs
+ * tool_use/tool_result bruts de l'API Anthropic — voir la note en tête de
+ * orchestrateur-conversationnel.ts pour le raisonnement.
+ */
+export interface MessageConversation {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface DepotDossiers {
   creerDossier(params: ParametresNouveauDossier): Promise<{ id: string; dossierRef: string }>
 
@@ -131,4 +142,9 @@ export interface DepotDossiers {
     payload: Record<string, unknown>,
     actorId?: string,
   ): Promise<void>
+
+  /** Historique de conversation, du plus ancien au plus récent (PRD §13.5). */
+  obtenirHistoriqueConversation(dossierId: string): Promise<MessageConversation[]>
+
+  ajouterMessageConversation(dossierId: string, message: MessageConversation): Promise<void>
 }

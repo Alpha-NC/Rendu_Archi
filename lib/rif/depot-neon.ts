@@ -3,6 +3,7 @@ import { resolverUrlSignee, televerserFichier } from '../storage/vercel-blob'
 import type {
   DepotDossiers,
   DossierActuel,
+  MessageConversation,
   ParametresAuditQualite,
   ParametresFichierResultat,
   ParametresFichierSource,
@@ -15,25 +16,22 @@ import type { EtatDossier } from './etat-machine'
 
 /**
  * Implémentation Neon PostgreSQL de DepotDossiers (schéma : neon/schema.sql)
- * — cible PRD V2.1 §16 (D-19).
+ * — cible PRD V2.1 §16 (D-19). Backend réellement actif depuis la bascule
+ * du 17.09.2026 (`app/api/dossiers/_lib/reponse.ts::obtenirDepot`).
  *
- * Statut : additif, non branché. `app/api/dossiers/_lib/reponse.ts::obtenirDepot`
- * appelle encore `creerDepotSupabase` — aucune Route Handler ne consomme ce
- * module. La bascule reste à faire, avec l'authentification mono-utilisateur
- * (PRD §16.5, pas encore tranchée : ce module accepte `ownerId`/`actorId`/
- * `validatedBy` comme des identifiants opaques, sans présumer comment ils
- * sont établis).
+ * `ownerId`/`actorId`/`validatedBy` viennent de Neon Auth
+ * (`lib/auth/server.ts`), traités ici comme de simples identifiants opaques.
  *
- * Non testée contre un projet Neon réel — même statut que depot-supabase.ts
- * ne l'a jamais été contre un projet Supabase réel. La logique métier qui
- * compte est testée indépendamment dans orchestrateur.test.ts via un dépôt
- * en mémoire ; ce fichier n'est que la traduction SQL/Blob de l'interface.
- * Seul le contrat d'ordonnancement de `resolverUrlsSignees` (partagé avec
- * depot-supabase.ts, même risque) est testé ici (depot-neon.test.ts).
+ * Non testée contre un projet Neon réel dans cette suite — la logique
+ * métier qui compte est testée indépendamment dans orchestrateur.test.ts via
+ * un dépôt en mémoire ; ce fichier n'est que la traduction SQL/Blob de
+ * l'interface. Seul le contrat d'ordonnancement de `resolverUrlsSignees`
+ * (une source de bug classique avec `= any(...)`, qui ne garantit aucun
+ * ordre de retour) est testé ici (depot-neon.test.ts).
  *
  * Fichiers : chaque opération de stockage passe par
  * lib/storage/vercel-blob.ts, jamais par un accès direct à `@vercel/blob`
- * ici — même séparation que depot-supabase.ts avec `client.storage`.
+ * ici.
  */
 
 const URL_SIGNEE_DUREE_SECONDES = 300
@@ -58,7 +56,7 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
 
       // project_id posé après coup, une fois l'id réel du dossier connu —
       // creerProjectStateVide a besoin d'un identifiant que l'insertion
-      // seule peut fournir (même contrainte que depot-supabase.ts).
+      // seule peut fournir.
       await sql`update dossiers set project_state = ${JSON.stringify(creerProjectStateVide(id))}::jsonb where id = ${id}`
 
       return { id, dossierRef }
@@ -92,7 +90,7 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
         etat: data.workflow_state as EtatDossier,
         projectState,
         // PRD §10 : absence du champ 'usage' = traité comme administratif
-        // par prudence (jamais l'inverse) — même règle que depot-supabase.ts.
+        // par prudence (jamais l'inverse).
         usageAdministratif:
           !Array.isArray(projectState?.usage) || projectState.usage.includes('insertion_administrative'),
       }
@@ -110,9 +108,8 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
 
       const lignes = await sql`select id, storage_key from files where id = any(${fileIds})`
 
-      // `any(...)` ne garantit AUCUN ordre de retour, comme le `.in()` de
-      // Supabase — même contrat, même risque, même correctif : on réordonne
-      // sur fileIds plutôt que de faire confiance à l'ordre de la base.
+      // `any(...)` ne garantit AUCUN ordre de retour : on réordonne sur
+      // fileIds plutôt que de faire confiance à l'ordre de la base.
       const clesParId = new Map(lignes.map((f) => [f.id as string, f.storage_key as string]))
 
       return await Promise.all(
@@ -206,13 +203,25 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
         `
       } catch (erreur) {
         // Un échec de journalisation ne doit pas faire échouer l'opération
-        // métier elle-même, mais ne doit jamais rester silencieux (même
-        // règle que depot-supabase.ts).
+        // métier elle-même, mais ne doit jamais rester silencieux.
         console.error(
           `Échec de journalisation (${type}) pour le dossier ${dossierId} :`,
           erreur instanceof Error ? erreur.message : erreur,
         )
       }
+    },
+
+    async obtenirHistoriqueConversation(dossierId): Promise<MessageConversation[]> {
+      const lignes = await sql`
+        select role, content from messages where dossier_id = ${dossierId} order by created_at asc
+      `
+      return lignes.map((l) => ({ role: l.role as MessageConversation['role'], content: l.content as string }))
+    },
+
+    async ajouterMessageConversation(dossierId, message: MessageConversation) {
+      await sql`
+        insert into messages (dossier_id, role, content) values (${dossierId}, ${message.role}, ${message.content})
+      `
     },
   }
 }

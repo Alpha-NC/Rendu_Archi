@@ -11,10 +11,9 @@ vi.mock('../storage/vercel-blob', () => ({
 /**
  * Seule la résolution d'URLs signées est testée ici : c'est le seul endroit
  * de ce fichier où une erreur est invisible en relecture. `any(...)` ne
- * garantit aucun ordre de retour, comme le `.in()` de Supabase, et les
- * appelants apparient par index — un désordre étiquetterait la vue Revit
- * comme photo de site (inversion de la hiérarchie d'autorité du Framework).
- * Même contrat, même risque, même test que depot-supabase.test.ts.
+ * garantit aucun ordre de retour, et les appelants apparient par index — un
+ * désordre étiquetterait la vue Revit comme photo de site (inversion de la
+ * hiérarchie d'autorité du Framework).
  */
 function sqlQuiRenvoieDansLeDesordre(): NeonQueryFunction<false, false> {
   const sql = (async (_strings: TemplateStringsArray, ...ids: unknown[]) => {
