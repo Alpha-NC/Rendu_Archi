@@ -1,6 +1,6 @@
 import type { ProjectState, RoleSource } from './project-state'
 import type { EtatDossier } from './etat-machine'
-import type { VerdictControle } from './controle-qualite'
+import type { LigneRapport, VerdictControle } from './controle-qualite'
 
 /**
  * Interface d'accès aux données du dossier — sépare la logique métier
@@ -68,6 +68,56 @@ export interface ParametresAuditQualite {
   verdictHuman: VerdictControle
   reserves?: string
   validatedBy: string
+}
+
+/**
+ * Historique des générations (PRD §10.7, Chantier A backend-completion) —
+ * une vue complète d'une ligne `generations`, jamais une URL de fichier en
+ * dur : `resultFileId` est un identifiant interne, résolu en URL signée à
+ * la demande par `resolverUrlsSignees` (jamais stocké comme source de
+ * vérité, PRD §12).
+ */
+export interface GenerationDetail {
+  id: string
+  dossierId: string
+  type: 'initial' | 'correction' | 'restart_from_sources'
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out'
+  batchId: string
+  variantIndex: number
+  isCanonical: boolean
+  projectStateRevision: number
+  promptText: string
+  sourceFileIds: string[]
+  resultFileId: string | null
+  providerRequestId: string | null
+  costActual: number | null
+  startedAt: string
+  completedAt: string | null
+}
+
+export interface ParametresRapportQualite {
+  generationId: string
+  checklistVersion: string
+  report: LigneRapport[]
+  verdictProposed: VerdictControle
+}
+
+/**
+ * Vue complète d'une ligne `quality_audits` — `report`/`verdictProposed`
+ * sont écrits par un audit multimodal (Chantier E), `verdictHuman` reste la
+ * seule autorité pour l'export administratif (PRD §15.1/§15.3, inchangé).
+ */
+export interface QualityAuditDetail {
+  id: string
+  generationId: string
+  checklistVersion: string
+  report: LigneRapport[]
+  verdictProposed: VerdictControle | null
+  verdictHuman: VerdictControle | null
+  reserves: string | null
+  validatedBy: string | null
+  validatedAt: string | null
+  createdAt: string
 }
 
 /**
@@ -140,6 +190,45 @@ export interface DepotDossiers {
   enregistrerAuditQualite(params: ParametresAuditQualite): Promise<{ id: string }>
 
   transitionnerDossier(dossierId: string, versEtat: EtatDossier): Promise<void>
+
+  /** Historique des générations d'un dossier, les plus récentes d'abord (PRD §10.7). */
+  listerGenerations(dossierId: string): Promise<GenerationDetail[]>
+
+  /**
+   * Une génération précise, ou `null`. Ne vérifie PAS l'appartenance au
+   * dossier attendu — défense en profondeur à la charge de l'appelant
+   * (comme `verifierProprietaire`), pour ne jamais confondre deux dossiers.
+   */
+  obtenirGeneration(generationId: string): Promise<GenerationDetail | null>
+
+  /**
+   * Marque une génération comme canonique pour son dossier et retire ce
+   * statut à toute autre génération du même dossier — au plus une
+   * canonique par dossier (Chantier C, arbitrage D-19 : seul un verdict
+   * humain validant peut déclencher ceci, jamais un calcul automatique ;
+   * voir l'appel dans la Route Handler d'audit).
+   */
+  definirGenerationCanonique(dossierId: string, generationId: string): Promise<void>
+
+  /** Dernier audit qualité d'une génération (rapport + les deux verdicts), ou `null` si aucun. */
+  obtenirAuditQualite(generationId: string): Promise<QualityAuditDetail | null>
+
+  /**
+   * Enregistre un rapport qualité multimodal (Chantier E) — verdict
+   * PROPOSÉ uniquement, jamais `verdictHuman` (distinct, voir
+   * `enregistrerAuditQualite`/`enregistrerVerdictHumain`).
+   */
+  creerRapportQualite(params: ParametresRapportQualite): Promise<{ id: string }>
+
+  /**
+   * Ajoute le verdict humain à un audit déjà créé par
+   * `creerRapportQualite` (mise à jour, jamais une nouvelle ligne — un seul
+   * audit par cycle génération/contrôle).
+   */
+  enregistrerVerdictHumain(
+    auditId: string,
+    params: { verdictHuman: VerdictControle; reserves?: string; validatedBy: string },
+  ): Promise<void>
 
   /** Journal append-only (PRD §13.5, §18). */
   journaliserEvenement(

@@ -3,6 +3,7 @@ import {
   authentifierRequete,
   obtenirDepot,
   repondreCorpsInvalide,
+  repondreDossierIntrouvable,
   repondreOperation,
   verifierProprietaire,
 } from '../../_lib/reponse'
@@ -24,9 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
 
   const depot = obtenirDepot()
   const dossier = await depot.obtenirDossier(dossierId)
-  if (!dossier) {
-    return repondreOperation({ success: false, error: { code: 'dossier_introuvable', message: 'Dossier introuvable.' } })
-  }
+  if (!dossier) return repondreDossierIntrouvable()
   const refusProprietaire = verifierProprietaire(dossier.ownerId, user.id)
   if (refusProprietaire) return refusProprietaire
 

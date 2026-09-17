@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth/server'
 import { sql } from '@/lib/neon/client'
@@ -22,7 +23,7 @@ export async function authentifierRequete() {
     return {
       user: null,
       reponseRefus: NextResponse.json(
-        { success: false, error: { code: 'non_authentifie', message: 'Authentification requise.' } },
+        { success: false, error: { code: 'non_authentifie', message: 'Authentification requise.' }, requestId: randomUUID() },
         { status: 401 },
       ),
     }
@@ -41,9 +42,25 @@ export async function authentifierRequete() {
 export function verifierProprietaire(ownerId: string, userId: string) {
   if (ownerId !== userId) {
     return NextResponse.json(
-      { success: false, error: { code: 'acces_refuse', message: "Ce dossier n'appartient pas à cet utilisateur." } },
+      { success: false, error: { code: 'acces_refuse', message: "Ce dossier n'appartient pas à cet utilisateur." }, requestId: randomUUID() },
       { status: 403 },
     )
+  }
+  return null
+}
+
+/**
+ * Défense en profondeur (Chantier F, backend-completion) : un `generationId`
+ * est un identifiant global, pas scopé à un dossier — sans ce contrôle, un
+ * propriétaire du dossier A pourrait référencer une génération du dossier B
+ * (audit, comparaison, canonicalisation). Même 404 que « génération
+ * inexistante » — ne révèle jamais qu'un identifiant existe ailleurs.
+ * Prend le `dossierId` DE LA GÉNÉRATION (pas la génération entière), pour
+ * que l'appelant garde le contrôle du narrowing TypeScript sur son `null`.
+ */
+export function verifierGenerationDuDossier(generationDossierId: string, dossierId: string) {
+  if (generationDossierId !== dossierId) {
+    return repondreErreur('generation_introuvable', 'Génération introuvable dans ce dossier.', 404)
   }
   return null
 }
@@ -54,6 +71,7 @@ export function obtenirDepot() {
 
 const STATUT_PAR_CODE: Record<string, number> = {
   dossier_introuvable: 404,
+  generation_introuvable: 404,
   transition_refusee: 409,
   fal_ai_echec: 502,
   reponse_inexploitable: 502,
@@ -66,12 +84,21 @@ const STATUT_PAR_CODE: Record<string, number> = {
 export function repondreOperation(resultat: ResultatOperation) {
   if (resultat.success) return NextResponse.json(resultat, { status: 200 })
   const statut = STATUT_PAR_CODE[resultat.error?.code ?? ''] ?? 500
-  return NextResponse.json(resultat, { status: statut })
+  return NextResponse.json({ ...resultat, requestId: randomUUID() }, { status: statut })
 }
 
 export function repondreCorpsInvalide(message: string) {
   return NextResponse.json(
-    { success: false, error: { code: 'corps_invalide', message } },
+    { success: false, error: { code: 'corps_invalide', message }, requestId: randomUUID() },
     { status: 400 },
   )
+}
+
+/** Erreur générique standardisée (Chantier I) — {success:false, error:{code,message}, requestId}. */
+export function repondreErreur(code: string, message: string, status: number) {
+  return NextResponse.json({ success: false, error: { code, message }, requestId: randomUUID() }, { status })
+}
+
+export function repondreDossierIntrouvable() {
+  return repondreErreur('dossier_introuvable', 'Dossier introuvable.', 404)
 }

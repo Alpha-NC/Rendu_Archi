@@ -53,6 +53,20 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async ajouterMessageConversation(_id, message) {
       messages.push(message)
     },
+    async listerGenerations() {
+      return []
+    },
+    async obtenirGeneration() {
+      return null
+    },
+    async definirGenerationCanonique() {},
+    async obtenirAuditQualite() {
+      return null
+    },
+    async creerRapportQualite() {
+      return { id: 'audit-1' }
+    },
+    async enregistrerVerdictHumain() {},
   }
 
   return { depot, evenements, messages, obtenirDossierCourant: () => dossier }
