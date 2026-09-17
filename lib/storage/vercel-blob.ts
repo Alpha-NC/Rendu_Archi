@@ -1,4 +1,4 @@
-import { del, get, put } from '@vercel/blob'
+import { del, get, issueSignedToken, presignUrl, put } from '@vercel/blob'
 
 /**
  * Adaptateur de stockage Vercel Blob — cible PRD V2.1 §16.1/§16.4 (D-19).
@@ -16,17 +16,13 @@ import { del, get, put } from '@vercel/blob'
  * (`BLOB_READ_WRITE_TOKEN`), jamais exposé au navigateur (PRD §18 :
  * « aucun secret de provider [...] exposé côté client »).
  *
- * Différence avec Supabase Storage à documenter pour depot-neon.ts :
- * Supabase fournit une URL signée à courte durée de vie que le navigateur
- * peut utiliser directement (`createSignedUrl`). `@vercel/blob` n'a pas
- * d'équivalent aussi direct pour une simple lecture authentifiée — la
- * primitive `presignUrl` existe mais suppose un jeton de délégation
- * (`issueSignedToken`), conçu pour l'upload direct depuis le navigateur,
- * pas pour une lecture ponctuelle. Servir un fichier au client passera
- * donc par une Route Handler authentifiée qui lit le blob ici
- * (`lireFichier`) et le retransmet (proxy) — jamais par une redirection
- * vers une URL Vercel. Décision d'architecture à trancher explicitement
- * quand `depot-neon.ts` sera écrit, pas prise ici.
+ * Correction (17.09.2026, en écrivant depot-neon.ts) : un tour précédent de
+ * ce fichier affirmait qu'aucun équivalent à `createSignedUrl` (Supabase)
+ * n'existait côté Vercel Blob — faux, trouvé en creusant les types du SDK
+ * plus loin. `issueSignedToken` + `presignUrl` composent exactement la même
+ * garantie : une URL de lecture à durée de vie limitée, vérifiée par le CDN
+ * sans jeton porteur, utilisable telle quelle par le navigateur, fal.ai ou
+ * l'API Anthropic — voir `resolverUrlSignee` ci-dessous.
  *
  * Chaque fonction est un fin wrapper testable : les tests mockent
  * `@vercel/blob` directement (`vi.mock`), pas d'injection de dépendance
@@ -78,4 +74,25 @@ export async function lireFichier(pathname: string): Promise<{ contenu: ArrayBuf
 /** Supprime un fichier. Idempotent côté SDK (pas d'erreur si déjà absent). */
 export async function supprimerFichier(pathname: string): Promise<void> {
   await del(pathname)
+}
+
+/**
+ * Équivalent de `createSignedUrl` (Supabase) : une URL de lecture pour un
+ * blob privé, valable `dureeSecondes`, vérifiée par le CDN sans jeton
+ * porteur — utilisable directement par le navigateur, ou transmise à un
+ * fournisseur externe (fal.ai, API Anthropic) qui doit pouvoir récupérer
+ * l'image sans connaître notre jeton serveur.
+ *
+ * Composition en deux appels (`issueSignedToken` puis `presignUrl`), tous
+ * deux authentifiés par `BLOB_READ_WRITE_TOKEN` côté serveur — jamais
+ * exposés au client.
+ */
+export async function resolverUrlSignee(pathname: string, dureeSecondes: number): Promise<string> {
+  const validUntil = Date.now() + dureeSecondes * 1000
+  const { clientSigningToken, delegationToken } = await issueSignedToken({ pathname, operations: ['get'], validUntil })
+  const { presignedUrl } = await presignUrl(
+    { clientSigningToken, delegationToken },
+    { operation: 'get', pathname, validUntil, access: 'private' },
+  )
+  return presignedUrl
 }

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
+    "@neondatabase/serverless": "^1.1.0",
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.115.0",
     "@vercel/blob": "^2.8.0",

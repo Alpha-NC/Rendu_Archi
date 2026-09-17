@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { del, get, put } from '@vercel/blob'
-import { lireFichier, supprimerFichier, televerserFichier } from './vercel-blob'
+import { del, get, issueSignedToken, presignUrl, put } from '@vercel/blob'
+import { lireFichier, resolverUrlSignee, supprimerFichier, televerserFichier } from './vercel-blob'
 
 vi.mock('@vercel/blob', () => ({
   put: vi.fn(),
   get: vi.fn(),
   del: vi.fn(),
+  issueSignedToken: vi.fn(),
+  presignUrl: vi.fn(),
 }))
 
 describe('televerserFichier', () => {
@@ -66,6 +68,30 @@ describe('lireFichier', () => {
   it('lève une erreur explicite sur un statut inattendu (ex. 304)', async () => {
     vi.mocked(get).mockResolvedValue({ statusCode: 304, stream: null, headers: new Headers(), blob: {} } as never)
     await expect(lireFichier('x')).rejects.toThrow(/introuvable/)
+  })
+})
+
+describe('resolverUrlSignee', () => {
+  it('compose issueSignedToken puis presignUrl pour produire une URL de lecture temporaire', async () => {
+    vi.mocked(issueSignedToken).mockResolvedValue({
+      delegationToken: 'delegation-abc',
+      clientSigningToken: 'signing-abc',
+      validUntil: 0,
+    } as never)
+    vi.mocked(presignUrl).mockResolvedValue({
+      presignedUrl: 'https://exemple.public.blob.vercel-storage.com/user-1/dossier-1/sources/x.png?vercel-blob-delegation=...',
+    } as never)
+
+    const url = await resolverUrlSignee('user-1/dossier-1/sources/x.png', 300)
+
+    expect(issueSignedToken).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: 'user-1/dossier-1/sources/x.png', operations: ['get'] }),
+    )
+    expect(presignUrl).toHaveBeenCalledWith(
+      { clientSigningToken: 'signing-abc', delegationToken: 'delegation-abc' },
+      expect.objectContaining({ operation: 'get', pathname: 'user-1/dossier-1/sources/x.png', access: 'private' }),
+    )
+    expect(url).toBe('https://exemple.public.blob.vercel-storage.com/user-1/dossier-1/sources/x.png?vercel-blob-delegation=...')
   })
 })
 
