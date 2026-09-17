@@ -52,7 +52,7 @@ async function main() {
   }
 
   console.log(`${enAttente.length} migration(s) à appliquer : ${enAttente.map((m) => m.nom).join(', ')}`)
-  const resultat = await appliquerMigrationsEnAttente(creerExecuteurMigration(sql), migrations, appliquees)
+  const resultat = await appliquerMigrationsEnAttente(creerExecuteurMigration(databaseUrl), migrations, appliquees)
 
   for (const version of resultat.appliquees) {
     console.log(`  OK  ${version}`)
