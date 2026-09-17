@@ -4,6 +4,7 @@ import { upload } from '@vercel/blob/client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ACTIONS_DIRECTIVE, type DirectiveLocalisee, type RoleSource, type SourceDossier } from '@/lib/rif/project-state'
+import { lireReponseApi } from '@/lib/rif/reponse-client'
 import { TAILLE_SOURCE_MAX_OCTETS } from '@/lib/storage/contraintes-source'
 
 // Reprend la disposition du prototype de référence (docs/rif_chat_prototype.jsx,
@@ -53,10 +54,7 @@ export default function DepotSources({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
       })
-      const corps = await reponse.json()
-      if (!reponse.ok || !corps.success) {
-        throw new Error(corps.error?.message ?? 'Confirmation du rôle impossible.')
-      }
+      await lireReponseApi(reponse)
       router.refresh()
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
@@ -78,10 +76,7 @@ export default function DepotSources({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, target }),
       })
-      const corps = await reponse.json()
-      if (!reponse.ok || !corps.success) {
-        throw new Error(corps.error?.message ?? 'Confirmation de la directive impossible.')
-      }
+      await lireReponseApi(reponse)
       router.refresh()
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
@@ -117,10 +112,7 @@ export default function DepotSources({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pathname: blob.pathname, originalName: fichier.name, role }),
       })
-      const corps = await reponse.json()
-      if (!reponse.ok || !corps.success) {
-        throw new Error(corps.error?.message ?? 'Dépôt du fichier impossible.')
-      }
+      await lireReponseApi(reponse)
       router.refresh()
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
