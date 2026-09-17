@@ -47,6 +47,14 @@ export interface BlocContenu {
   text?: string
   /** Bloc image sortant (voir orchestrateur-conversationnel : sources du dossier). */
   source?: { type: 'url'; url: string }
+  /** Identifiant d'un bloc tool_use entrant — pairé par tool_use_id ci-dessous (Chantier H). */
+  id?: string
+  /** Bloc tool_result sortant : pairé à un tool_use par cet identifiant. */
+  tool_use_id?: string
+  /** Contenu d'un bloc tool_result sortant. */
+  content?: string
+  /** Signale au modèle que l'outil a échoué (bloc tool_result sortant). */
+  is_error?: boolean
 }
 
 export type ResultatAppelOutil =

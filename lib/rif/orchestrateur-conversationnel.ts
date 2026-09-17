@@ -27,18 +27,25 @@ import type { genererEtAttendre } from '../fal/client'
  *    003) — jamais fourni par le modèle lui-même (PRD §9.5) ;
  * 5. l'exécution transactionnelle déjà construite (orchestrateur.ts).
  *
- * Ce que ce module NE fait PAS (délibérément, pour rester honnête sur le
- * périmètre réellement couvert) :
- * - il ne boucle pas automatiquement pour renvoyer le tool_result au modèle
- *   et obtenir un message de clôture en langage naturel. L'historique
- *   persisté (lib/rif/depot.ts::MessageConversation) ne porte que du texte,
- *   jamais les blocs tool_use/tool_result bruts de l'API Anthropic — ce
- *   texte (résumé par `resumerTour`) suffit à la fluidité de la
- *   conversation visible, mais un second aller-retour modèle avec le
- *   tool_result réel resterait nécessaire pour un message de clôture
- *   vraiment rédigé par le modèle ;
- * - il ne gère pas encore les variantes multiples (D-10 encore ouverte).
+ * Boucle tool_use → tool_result (Chantier H, backend-completion) : quand un
+ * `tool_use` réel est exécuté, `finaliser` renvoie le résultat au modèle
+ * sous forme de `tool_result` et récupère sa réponse en langage naturel
+ * pour clore le tour — bornée à `MAX_APPELS_MODELE_PAR_TOUR` (2) appels
+ * modèle : l'appel initial, puis au plus un aller-retour de clôture, jamais
+ * une chaîne d'opérations. Si le modèle tente d'enchaîner un second
+ * `tool_use` réel au lieu de clore en texte, il n'est JAMAIS exécuté — seul
+ * un texte est accepté à ce second tour, l'incident est journalisé. Comme
+ * partout ailleurs, l'historique persisté (lib/rif/depot.ts::MessageConversation)
+ * ne porte que du texte, jamais les blocs tool_use/tool_result bruts de
+ * l'API Anthropic — le texte de clôture (modèle si disponible, sinon le
+ * résumé templated `resumerTour`) est ce qui est persisté et affiché.
+ *
+ * Ce que ce module NE fait PAS encore :
+ * - il ne gère pas les variantes multiples (D-10 encore ouverte).
  */
+
+/** Chantier H : jamais plus de 2 appels modèle par tour (initial + une clôture) — aucune chaîne d'opérations. */
+const MAX_APPELS_MODELE_PAR_TOUR = 2
 
 export interface MessageAppelModele {
   role: 'user' | 'assistant'
@@ -187,11 +194,71 @@ export async function executerTourConversationnel(
     tools: OUTILS_CONVERSATIONNELS,
     messages: [...historique, { role: 'user', content: contenuUtilisateur }],
   })
+  let appelsModele = 1
 
-  /** Persiste le tour (PRD §13.5) puis renvoie le résultat — point de sortie unique. */
-  async function finaliser(resultat: ResultatTour): Promise<ResultatTour> {
+  /**
+   * Persiste le tour (PRD §13.5) puis renvoie le résultat — point de sortie
+   * unique. Quand `toolUseId` est fourni (un `tool_use` réel a été exécuté),
+   * renvoie le résultat au modèle en `tool_result` pour une clôture en
+   * langage naturel (Chantier H) — bornée par MAX_APPELS_MODELE_PAR_TOUR ;
+   * si la clôture échoue ou n'est pas disponible, le résumé templated
+   * (`resumerTour`) reste le texte affiché/persisté, le tour n'échoue jamais
+   * pour autant.
+   */
+  async function finaliser(resultat: ResultatTour, toolUseId?: string): Promise<ResultatTour> {
     await depot.ajouterMessageConversation(dossier.id, { role: 'user', content: contexte.nouveauMessage })
-    await depot.ajouterMessageConversation(dossier.id, { role: 'assistant', content: resumerTour(resultat) })
+    let texteAffiche = resumerTour(resultat)
+
+    if (toolUseId && appelsModele < MAX_APPELS_MODELE_PAR_TOUR) {
+      appelsModele += 1
+      try {
+        const estIncident = resultat.type === 'incident' || (resultat.type === 'operation' && !resultat.resultat.success)
+        const reponseCloture = await appelerModele({
+          system,
+          tools: OUTILS_CONVERSATIONNELS,
+          messages: [
+            ...historique,
+            { role: 'user', content: contenuUtilisateur },
+            { role: 'assistant', content: reponse.content },
+            {
+              role: 'user',
+              content: [{ type: 'tool_result', tool_use_id: toolUseId, content: texteAffiche, is_error: estIncident }],
+            },
+          ],
+        })
+
+        const analyseCloture = analyserReponseModele(reponseCloture.content)
+        if (analyseCloture.genre === 'aucun_appel') {
+          const texteModele = reponseCloture.content
+            .filter((b): b is BlocContenu & { text: string } => b.type === 'text' && typeof b.text === 'string')
+            .map((b) => b.text)
+            .join('\n\n')
+          if (texteModele.trim()) texteAffiche = texteModele
+        } else {
+          // Le modèle a tenté d'enchaîner une seconde opération dans le
+          // même tour au lieu de clore en texte — jamais exécutée (aucune
+          // chaîne d'opérations non revue, PRD §11). Le résumé templated
+          // reste le texte affiché.
+          await depot.journaliserEvenement(
+            dossier.id,
+            'boucle_outil_limite_atteinte',
+            { genre: analyseCloture.genre },
+            contexte.actorId,
+          )
+        }
+      } catch (erreur) {
+        // La clôture est un enrichissement, jamais une condition de succès
+        // du tour : l'opération elle-même est déjà acquise et journalisée.
+        await depot.journaliserEvenement(
+          dossier.id,
+          'boucle_outil_cloture_echec',
+          { message: erreur instanceof Error ? erreur.message : 'erreur inconnue' },
+          contexte.actorId,
+        )
+      }
+    }
+
+    await depot.ajouterMessageConversation(dossier.id, { role: 'assistant', content: texteAffiche })
     return resultat
   }
 
@@ -227,6 +294,8 @@ export async function executerTourConversationnel(
   // analyse.genre === 'appel_reel' — construction du prompt technique
   // réel (ENG-002/003), jamais fourni par le modèle (PRD §9.5).
   const sourceFileIds = dossier.projectState.sources.map((s) => s.id)
+  // Chantier H : id du tool_use réel, pour pairer le tool_result de clôture.
+  const toolUseId = reponse.content.find((b) => b.type === 'tool_use')?.id
 
   if (analyse.operation === 'genererRendu') {
     const promptText = construirePromptGeneration(dossier.projectState)
@@ -238,7 +307,7 @@ export async function executerTourConversationnel(
       actorId: contexte.actorId,
       contexte: { usageAdministratif: dossier.usageAdministratif },
     })
-    return finaliser({ type: 'operation', operation: 'genererRendu', resultat })
+    return finaliser({ type: 'operation', operation: 'genererRendu', resultat }, toolUseId)
   }
 
   if (analyse.operation === 'corrigerRendu') {
@@ -250,7 +319,7 @@ export async function executerTourConversationnel(
         { operation: 'corrigerRendu', raison: 'Paramètres manquants ou invalides.' },
         contexte.actorId,
       )
-      return finaliser({ type: 'incident', message: 'La demande de correction est incomplète — précise ce qui doit changer et le résultat attendu.' })
+      return finaliser({ type: 'incident', message: 'La demande de correction est incomplète — précise ce qui doit changer et le résultat attendu.' }, toolUseId)
     }
     const promptText = construirePromptCorrection(dossier.projectState, {
       elementAModifier: entree.elementAModifier,
@@ -264,21 +333,21 @@ export async function executerTourConversationnel(
       actorId: contexte.actorId,
       contexte: { usageAdministratif: dossier.usageAdministratif },
     })
-    return finaliser({ type: 'operation', operation: 'corrigerRendu', resultat })
+    return finaliser({ type: 'operation', operation: 'corrigerRendu', resultat }, toolUseId)
   }
 
   if (analyse.operation === 'reprendreDepuisSources') {
     const entreeReprise = analyse.entree as { motif?: unknown } | undefined
     const motif = typeof entreeReprise?.motif === 'string' ? entreeReprise.motif : 'Motif non précisé par le modèle.'
     const resultat = await executerReprise(depot, { dossierId: dossier.id, actorId: contexte.actorId, motif })
-    return finaliser({ type: 'operation', operation: 'reprendreDepuisSources', resultat })
+    return finaliser({ type: 'operation', operation: 'reprendreDepuisSources', resultat }, toolUseId)
   }
 
   if (analyse.operation === 'avancerParcours') {
     const entree = analyse.entree as { versEtat?: unknown; motif?: unknown } | undefined
     const versEtat = entree?.versEtat
     if (typeof versEtat !== 'string' || !(ETATS_DOSSIER as readonly string[]).includes(versEtat)) {
-      return finaliser({ type: 'incident', message: "État cible invalide proposé par le modèle." })
+      return finaliser({ type: 'incident', message: "État cible invalide proposé par le modèle." }, toolUseId)
     }
 
     const decision = autoriserAvancementParcours(dossier.etat, versEtat as EtatDossier, dossier.projectState, {
@@ -297,7 +366,7 @@ export async function executerTourConversationnel(
         { operation: 'avancerParcours', versEtat, raison: decision.raison },
         contexte.actorId,
       )
-      return finaliser({ type: 'incident', message: decision.raison ?? 'Avancement refusé.' })
+      return finaliser({ type: 'incident', message: decision.raison ?? 'Avancement refusé.' }, toolUseId)
     }
 
     await depot.transitionnerDossier(dossier.id, versEtat as EtatDossier)
@@ -307,7 +376,7 @@ export async function executerTourConversationnel(
       { versEtat, motif: typeof entree?.motif === 'string' ? entree.motif : null },
       contexte.actorId,
     )
-    return finaliser({ type: 'parcours_avance', versEtat: versEtat as EtatDossier })
+    return finaliser({ type: 'parcours_avance', versEtat: versEtat as EtatDossier }, toolUseId)
   }
 
   // mettreAJourFicheProjet (D-15) — la seule opération qui ne passe pas par
@@ -324,7 +393,7 @@ export async function executerTourConversationnel(
     return finaliser({
       type: 'incident',
       message: decisionExtraction.raison ?? 'Mise à jour de la fiche projet non autorisée dans cet état.',
-    })
+    }, toolUseId)
   }
 
   const miseAJour = (analyse.entree ?? {}) as MiseAJourFicheProjet
@@ -338,5 +407,5 @@ export async function executerTourConversationnel(
     { champs: Object.keys(miseAJour), ignores },
     contexte.actorId,
   )
-  return finaliser({ type: 'fiche_mise_a_jour', champsModifies: Object.keys(miseAJour), ignores })
+  return finaliser({ type: 'fiche_mise_a_jour', champsModifies: Object.keys(miseAJour), ignores }, toolUseId)
 }

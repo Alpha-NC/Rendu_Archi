@@ -426,3 +426,97 @@ describe('executerTourConversationnel — sources jointes au modèle (D-06, PRD 
     expect(blocs.filter((b) => b.type === 'image')).toHaveLength(0)
   })
 })
+
+describe('executerTourConversationnel — boucle tool_use → tool_result (Chantier H)', () => {
+  it('renvoie le résultat au modèle en tool_result et utilise sa clôture en langage naturel', async () => {
+    contexteFetchOk()
+    const { depot, messages } = depotMemoire(dossierBase)
+    const appelerModele = vi.fn<AppelModele>()
+    appelerModele
+      .mockResolvedValueOnce({ content: [{ type: 'tool_use', id: 'tool-1', name: 'genererRendu', input: {} }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Voilà ton rendu, il est prêt à être contrôlé.' }] })
+
+    const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: dossierBase,
+      nouveauMessage: 'Lance la génération.',
+      actorId: 'user-1',
+    })
+
+    expect(resultat.type).toBe('operation')
+    expect(appelerModele).toHaveBeenCalledTimes(2)
+
+    // Le second appel pair bien le tool_result au tool_use par id, et porte
+    // le résultat réel de l'opération (jamais un texte inventé).
+    const messagesSecondAppel = appelerModele.mock.calls[1][0].messages
+    const dernierMessage = messagesSecondAppel.at(-1)!
+    expect(dernierMessage.content).toEqual([
+      { type: 'tool_result', tool_use_id: 'tool-1', content: expect.stringContaining('genererRendu'), is_error: false },
+    ])
+
+    // Le texte de clôture RÉDIGÉ PAR LE MODÈLE est ce qui est affiché/persisté.
+    expect(messages.at(-1)).toEqual({ role: 'assistant', content: 'Voilà ton rendu, il est prêt à être contrôlé.' })
+  })
+
+  it("marque is_error sur le tool_result quand l'opération a échoué", async () => {
+    const { depot } = depotMemoire({ ...dossierBase, etat: 'A_CORRIGER' })
+    const falEchec = vi.fn<typeof import('../fal/client').genererEtAttendre>(async () => ({
+      statut: 'echec' as const,
+      code: 'fal_ai_echec' as const,
+      message: 'Panne fournisseur.',
+    }))
+    const appelerModele = vi.fn<AppelModele>()
+    appelerModele
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'tool-2', name: 'corrigerRendu', input: { elementAModifier: 'Façade', resultatAttendu: 'Plus claire' } }],
+      })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'La correction a échoué, on réessaie ?' }] })
+
+    await executerTourConversationnel(depot, appelerModele, falEchec, {
+      dossier: { ...dossierBase, etat: 'A_CORRIGER' },
+      nouveauMessage: 'Corrige la façade.',
+      actorId: 'user-1',
+    })
+
+    const toolResult = (appelerModele.mock.calls[1][0].messages.at(-1)!.content as Array<{ is_error?: boolean }>)[0]
+    expect(toolResult.is_error).toBe(true)
+  })
+
+  it("n'exécute jamais un second tool_use enchaîné par le modèle (limite d'itérations)", async () => {
+    contexteFetchOk()
+    const { depot, evenements } = depotMemoire(dossierBase)
+    const appelerModele = vi.fn<AppelModele>()
+    appelerModele
+      .mockResolvedValueOnce({ content: [{ type: 'tool_use', id: 'tool-3', name: 'genererRendu', input: {} }] })
+      // Le modèle tente d'enchaîner une seconde opération au lieu de clore en texte.
+      .mockResolvedValueOnce({ content: [{ type: 'tool_use', id: 'tool-4', name: 'genererRendu', input: {} }] })
+
+    await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: dossierBase,
+      nouveauMessage: 'Lance la génération.',
+      actorId: 'user-1',
+    })
+
+    // Un seul appel fal.ai réel — jamais un second déclenché par la tentative de chaînage.
+    expect(falSucces).toHaveBeenCalledTimes(1)
+    expect(appelerModele).toHaveBeenCalledTimes(2) // jamais un 3ᵉ appel modèle
+    expect(evenements.some((e) => e.type === 'boucle_outil_limite_atteinte')).toBe(true)
+  })
+
+  it('reste sur le résumé templated si la clôture échoue (le tour ne plante jamais pour autant)', async () => {
+    contexteFetchOk()
+    const { depot, messages } = depotMemoire(dossierBase)
+    const appelerModele = vi.fn<AppelModele>()
+    appelerModele
+      .mockResolvedValueOnce({ content: [{ type: 'tool_use', id: 'tool-5', name: 'genererRendu', input: {} }] })
+      .mockRejectedValueOnce(new Error('Réseau indisponible.'))
+
+    const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: dossierBase,
+      nouveauMessage: 'Lance la génération.',
+      actorId: 'user-1',
+    })
+
+    expect(resultat.type).toBe('operation') // l'opération reste acquise
+    expect(messages.at(-1)).toEqual({ role: 'assistant', content: expect.stringContaining('genererRendu exécutée') })
+  })
+})
