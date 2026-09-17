@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { creerClassifieurDirectives, interpreterDirectives } from '@/lib/rif/detection-directives'
 import { creerClassifieurRole, interpreterDetection, type ImageSource } from '@/lib/rif/detection-role'
+import { lireFichier, supprimerFichier } from '@/lib/storage/vercel-blob'
+import { MIME_SOURCES_ACCEPTEES, TAILLE_SOURCE_MAX_OCTETS, validerPathnameSource } from '@/lib/storage/contraintes-source'
 import type { RoleSource } from '@/lib/rif/project-state'
 import { authentifierRequete, obtenirDepot, repondreCorpsInvalide, verifierProprietaire } from '../../_lib/reponse'
 
@@ -13,16 +15,21 @@ const ROLES_ACCEPTES: RoleSource[] = [
   'existing_building_photo',
 ]
 
-const MIME_SUPPORTES: ImageSource['mimeType'][] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-
 /**
  * POST /api/dossiers/[dossierId]/sources — dépôt d'une source (PRD §9.1).
  *
- * Le rôle est désormais détecté automatiquement depuis le contenu de
- * l'image (`lib/rif/detection-role.ts`) : le slot où l'utilisateur dépose
- * le fichier n'est plus qu'un indice (`role` dans le formulaire, optionnel),
- * jamais une autorité — un désaccord entre l'indice et la détection vaut
- * ambiguïté, jamais un tranchage silencieux en faveur de l'un des deux.
+ * PRD V2.1 §16.1 (D-19) : le fichier a déjà été téléversé directement du
+ * navigateur vers Vercel Blob (`./token/route.ts` a émis le jeton) — les
+ * Vercel Functions limitent le corps d'une requête à 4,5 Mo, incompatible
+ * avec des exports Revit ou rendus réels. Cette route ne reçoit plus qu'un
+ * petit JSON de métadonnées ; le contenu est relu depuis Blob (`lireFichier`)
+ * pour la détection de rôle, qui a besoin des octets réels de l'image.
+ *
+ * Le rôle est détecté automatiquement depuis le contenu de l'image
+ * (`lib/rif/detection-role.ts`) : le slot où l'utilisateur dépose le fichier
+ * n'est plus qu'un indice (`role`, optionnel), jamais une autorité — un
+ * désaccord entre l'indice et la détection vaut ambiguïté, jamais un
+ * tranchage silencieux en faveur de l'un des deux.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ dossierId: string }> }) {
   const { dossierId } = await params
@@ -40,31 +47,55 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
   const refusProprietaire = verifierProprietaire(dossier.ownerId, user.id)
   if (refusProprietaire) return refusProprietaire
 
-  let formulaire: FormData
+  let corps: unknown
   try {
-    formulaire = await request.formData()
+    corps = await request.json()
   } catch {
-    return repondreCorpsInvalide('Corps de requête multipart/form-data attendu.')
+    return repondreCorpsInvalide('Corps de requête JSON attendu.')
   }
 
-  const fichier = formulaire.get('fichier')
-  const roleIndice = formulaire.get('role')
-
-  if (!(fichier instanceof File)) {
-    return repondreCorpsInvalide('Le champ fichier (fichier binaire) est requis.')
+  const { pathname, originalName, role: roleIndice } = (corps as Record<string, unknown>) ?? {}
+  if (typeof pathname !== 'string' || typeof originalName !== 'string') {
+    return repondreCorpsInvalide('Les champs pathname et originalName (texte) sont requis.')
   }
-  if (roleIndice !== null && (typeof roleIndice !== 'string' || !ROLES_ACCEPTES.includes(roleIndice as RoleSource))) {
+  // Même contrôle que ./token/route.ts — un pathname d'un autre dossier ne
+  // doit jamais pouvoir être rattaché à celui-ci.
+  try {
+    validerPathnameSource(pathname, dossierId)
+  } catch {
+    return repondreCorpsInvalide('Le fichier déposé ne correspond pas à ce dossier.')
+  }
+  if (roleIndice !== undefined && roleIndice !== null && (typeof roleIndice !== 'string' || !ROLES_ACCEPTES.includes(roleIndice as RoleSource))) {
     return repondreCorpsInvalide(`Le champ role, s'il est fourni, doit être l'un de : ${ROLES_ACCEPTES.join(', ')}.`)
   }
-  if (!MIME_SUPPORTES.includes(fichier.type as ImageSource['mimeType'])) {
-    return repondreCorpsInvalide(
-      `Format non pris en charge pour la détection automatique du rôle : ${fichier.type || 'inconnu'}. Formats acceptés : ${MIME_SUPPORTES.join(', ')}.`,
+
+  let contenu: ArrayBuffer
+  let contentType: string
+  try {
+    const fichier = await lireFichier(pathname)
+    contenu = fichier.contenu
+    contentType = fichier.contentType
+  } catch (erreur) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: 'stockage_echec', message: erreur instanceof Error ? erreur.message : 'Fichier introuvable dans le stockage.' },
+      },
+      { status: 502 },
     )
   }
 
-  // Contrôle minimal avant collecte (PRD §9.1 : format, taille, intégrité).
-  const TAILLE_MAX_OCTETS = 25 * 1024 * 1024
-  if (fichier.size === 0 || fichier.size > TAILLE_MAX_OCTETS) {
+  // Type et taille réels (Vercel Blob), jamais la déclaration du client —
+  // le jeton d'upload les contraignait déjà, ceci est la défense en
+  // profondeur côté lecture.
+  if (!(MIME_SOURCES_ACCEPTEES as readonly string[]).includes(contentType)) {
+    await supprimerFichier(pathname)
+    return repondreCorpsInvalide(
+      `Format non pris en charge pour la détection automatique du rôle : ${contentType || 'inconnu'}. Formats acceptés : ${MIME_SOURCES_ACCEPTEES.join(', ')}.`,
+    )
+  }
+  if (contenu.byteLength === 0 || contenu.byteLength > TAILLE_SOURCE_MAX_OCTETS) {
+    await supprimerFichier(pathname)
     return repondreCorpsInvalide('Fichier vide ou dépassant la taille maximale acceptée (25 Mo).')
   }
 
@@ -84,13 +115,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     )
   }
 
-  const contenu = await fichier.arrayBuffer()
-
   let detection
   try {
     detection = await classifieurRole(
-      { base64: Buffer.from(contenu).toString('base64'), mimeType: fichier.type as ImageSource['mimeType'] },
-      fichier.name,
+      { base64: Buffer.from(contenu).toString('base64'), mimeType: contentType as ImageSource['mimeType'] },
+      originalName,
     )
   } catch (erreur) {
     return NextResponse.json(
@@ -109,14 +138,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     roleIndice as RoleSource | null ?? undefined,
   )
 
-  const resultat = await depot.enregistrerFichierSource({
-    dossierId,
-    ownerId: user.id,
-    roleDetecte: role_detected,
-    originalName: fichier.name,
-    contenu,
-    mimeType: fichier.type || 'application/octet-stream',
-  })
+  let resultat: { id: string; storageKey: string }
+  try {
+    resultat = await depot.enregistrerFichierSource({
+      dossierId,
+      roleDetecte: role_detected,
+      originalName,
+      storageKey: pathname,
+      mimeType: contentType,
+      sizeBytes: contenu.byteLength,
+    })
+  } catch (erreur) {
+    // Le blob existe déjà dans le stockage mais aucune ligne `files` ne le
+    // référence — orphelin nettoyé plutôt que laissé facturé sans usage.
+    await supprimerFichier(pathname)
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: 'persistance_echec', message: erreur instanceof Error ? erreur.message : 'Enregistrement de la source impossible.' },
+      },
+      { status: 500 },
+    )
+  }
 
   // ADR-015, PRD §9.2 : une source annotée est convertie en directives
   // localisées structurées — jamais transmise brute au moteur d'image. Ne
@@ -128,7 +171,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
       const classifieurDirectives = creerClassifieurDirectives()
       const detections = await classifieurDirectives({
         base64: Buffer.from(contenu).toString('base64'),
-        mimeType: fichier.type as ImageSource['mimeType'],
+        mimeType: contentType as ImageSource['mimeType'],
       })
       directivesExtraites = interpreterDirectives(detections, resultat.id)
     } catch (erreur) {
@@ -169,7 +212,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
       roleDetecte: role_detected,
       roleIndice,
       ambigu,
-      nomOriginal: fichier.name,
+      nomOriginal: originalName,
       directivesExtraites: directivesExtraites.length,
     },
     user.id,

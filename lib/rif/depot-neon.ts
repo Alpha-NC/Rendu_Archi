@@ -162,22 +162,18 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
     },
 
     async enregistrerFichierSource(params: ParametresFichierSource) {
-      const extension = params.originalName.split('.').pop() ?? 'bin'
-      // Nom technique nettoyé côté serveur (PRD §9.1) — l'utilisateur ne
-      // renomme jamais rien lui-même.
-      const safeName = `${params.roleDetecte}-${Date.now()}.${extension}`
-      const storageKey = `${params.ownerId}/${params.dossierId}/sources/${safeName}`
-
-      await televerserFichier(storageKey, params.contenu, params.mimeType)
+      // Upload déjà fait (navigateur → Vercel Blob en direct, gate 4,5 Mo des
+      // Vercel Functions) — cette fonction n'écrit plus que les métadonnées.
+      const safeName = params.storageKey.split('/').pop() ?? params.originalName
 
       const lignes = await sql`
         insert into files (dossier_id, role_detected, original_name, safe_name, storage_key, mime_type, size_bytes)
-        values (${params.dossierId}, ${params.roleDetecte}, ${params.originalName}, ${safeName}, ${storageKey}, ${params.mimeType}, ${params.contenu.byteLength})
+        values (${params.dossierId}, ${params.roleDetecte}, ${params.originalName}, ${safeName}, ${params.storageKey}, ${params.mimeType}, ${params.sizeBytes})
         returning id
       `
       const id = lignes[0]?.id as string | undefined
       if (!id) throw new Error('Enregistrement de la source impossible.')
-      return { id, storageKey }
+      return { id, storageKey: params.storageKey }
     },
 
     async enregistrerAuditQualite(params: ParametresAuditQualite) {

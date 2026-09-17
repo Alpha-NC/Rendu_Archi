@@ -1,8 +1,10 @@
 'use client'
 
+import { upload } from '@vercel/blob/client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ACTIONS_DIRECTIVE, type DirectiveLocalisee, type RoleSource, type SourceDossier } from '@/lib/rif/project-state'
+import { TAILLE_SOURCE_MAX_OCTETS } from '@/lib/storage/contraintes-source'
 
 // Reprend la disposition du prototype de référence (docs/rif_chat_prototype.jsx,
 // annexe PRD §27) : vue Revit obligatoire, photo et axonométrie facultatives.
@@ -92,12 +94,28 @@ export default function DepotSources({
     setEnCours(role)
     setErreur(null)
     try {
-      const corpsFormulaire = new FormData()
-      corpsFormulaire.set('fichier', fichier)
-      corpsFormulaire.set('role', role)
+      if (fichier.size === 0 || fichier.size > TAILLE_SOURCE_MAX_OCTETS) {
+        throw new Error('Fichier vide ou dépassant la taille maximale acceptée (25 Mo).')
+      }
+
+      // PRD V2.1 §16.1 (D-19) : upload direct navigateur → Vercel Blob — le
+      // corps d'une Vercel Function est plafonné à 4,5 Mo, incompatible avec
+      // des exports Revit ou rendus réels. Le jeton (émis par
+      // .../sources/token) est contraint en type/taille/portée, jamais le
+      // jeton maître.
+      const extension = fichier.name.split('.').pop() ?? 'bin'
+      // eslint-disable-next-line react-hooks/purity -- deposer() n'exécute qu'en réponse à un événement (onChange), jamais pendant le rendu.
+      const pathname = `${dossierId}/sources/${role}-${Date.now()}.${extension}`
+      const blob = await upload(pathname, fichier, {
+        access: 'private',
+        contentType: fichier.type,
+        handleUploadUrl: `/api/dossiers/${dossierId}/sources/token`,
+      })
+
       const reponse = await fetch(`/api/dossiers/${dossierId}/sources`, {
         method: 'POST',
-        body: corpsFormulaire,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pathname: blob.pathname, originalName: fichier.name, role }),
       })
       const corps = await reponse.json()
       if (!reponse.ok || !corps.success) {

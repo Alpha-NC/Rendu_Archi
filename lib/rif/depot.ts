@@ -47,13 +47,19 @@ export interface ParametresNouveauDossier {
   implementationVersion: string
 }
 
+/**
+ * PRD V2.1 §16.1 (upload direct navigateur → Vercel Blob, gate 4,5 Mo des
+ * Vercel Functions) : le fichier est déjà dans le stockage privé
+ * (`storageKey`) quand ce dépôt est appelé — plus de `contenu` binaire ici,
+ * seulement les métadonnées à écrire dans `files`.
+ */
 export interface ParametresFichierSource {
   dossierId: string
-  ownerId: string
   roleDetecte: RoleSource
   originalName: string
-  contenu: ArrayBuffer
+  storageKey: string
   mimeType: string
+  sizeBytes: number
 }
 
 export interface ParametresAuditQualite {
