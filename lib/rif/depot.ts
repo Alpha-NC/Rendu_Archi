@@ -131,13 +131,29 @@ export interface MessageConversation {
   content: string
 }
 
+/**
+ * Résumé dossier pour le dashboard (Chantier J, backend-completion) — les
+ * champs dérivés (dernière génération, canonique, décompte) sont CALCULÉS
+ * à la lecture, jamais des colonnes dupliquées de `generations`.
+ */
+export interface DossierResume {
+  id: string
+  dossierRef: string
+  etat: EtatDossier
+  createdAt: string
+  updatedAt: string
+  nombreGenerations: number
+  derniereGeneration: { id: string; status: GenerationDetail['status']; startedAt: string } | null
+  generationCanoniqueId: string | null
+}
+
 export interface DepotDossiers {
   creerDossier(params: ParametresNouveauDossier): Promise<{ id: string; dossierRef: string }>
 
   obtenirDossier(dossierId: string): Promise<DossierActuel | null>
 
   /** Dossiers dont l'utilisateur est propriétaire, les plus récents d'abord. */
-  listerDossiers(ownerId: string): Promise<Array<{ id: string; dossierRef: string; etat: EtatDossier }>>
+  listerDossiers(ownerId: string): Promise<DossierResume[]>
 
   /**
    * Persiste un ProjectState mis à jour (D-15, extraction-project-state.ts).

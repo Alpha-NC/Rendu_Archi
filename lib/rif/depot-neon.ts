@@ -3,6 +3,7 @@ import { resolverUrlSignee, televerserFichier } from '../storage/vercel-blob'
 import type {
   DepotDossiers,
   DossierActuel,
+  DossierResume,
   GenerationDetail,
   MessageConversation,
   ParametresAuditQualite,
@@ -34,6 +35,25 @@ function mapGeneration(d: Record<string, unknown>): GenerationDetail {
     costActual: d.cost_actual != null ? Number(d.cost_actual) : null,
     startedAt: (d.started_at as Date).toISOString(),
     completedAt: d.completed_at ? (d.completed_at as Date).toISOString() : null,
+  }
+}
+
+function mapDossierResume(d: Record<string, unknown>): DossierResume {
+  return {
+    id: d.id as string,
+    dossierRef: d.dossier_ref as string,
+    etat: d.workflow_state as EtatDossier,
+    createdAt: (d.created_at as Date).toISOString(),
+    updatedAt: (d.updated_at as Date).toISOString(),
+    nombreGenerations: Number(d.nombre_generations),
+    derniereGeneration: d.derniere_generation_id
+      ? {
+          id: d.derniere_generation_id as string,
+          status: d.derniere_generation_status as GenerationDetail['status'],
+          startedAt: (d.derniere_generation_started_at as Date).toISOString(),
+        }
+      : null,
+    generationCanoniqueId: (d.generation_canonique_id as string | null) ?? null,
   }
 }
 
@@ -101,16 +121,32 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
     },
 
     async listerDossiers(ownerId) {
+      // Chantier J (dashboard) : décompte, dernière génération et
+      // canonique CALCULÉS à la lecture (LATERAL JOIN, pas de colonnes
+      // dupliquées) — index existant sur generations(dossier_id, started_at).
       const lignes = await sql`
-        select id, dossier_ref, workflow_state from dossiers
-        where owner_id = ${ownerId}
-        order by created_at desc
+        select
+          d.id, d.dossier_ref, d.workflow_state, d.created_at, d.updated_at,
+          coalesce(compte.n, 0) as nombre_generations,
+          derniere.id as derniere_generation_id,
+          derniere.status as derniere_generation_status,
+          derniere.started_at as derniere_generation_started_at,
+          canonique.id as generation_canonique_id
+        from dossiers d
+        left join lateral (
+          select g.id, g.status, g.started_at from generations g
+          where g.dossier_id = d.id order by g.started_at desc limit 1
+        ) derniere on true
+        left join lateral (
+          select count(*) as n from generations g where g.dossier_id = d.id
+        ) compte on true
+        left join lateral (
+          select g.id from generations g where g.dossier_id = d.id and g.is_canonical = true limit 1
+        ) canonique on true
+        where d.owner_id = ${ownerId}
+        order by d.created_at desc
       `
-      return lignes.map((d) => ({
-        id: d.id as string,
-        dossierRef: d.dossier_ref as string,
-        etat: d.workflow_state as EtatDossier,
-      }))
+      return lignes.map(mapDossierResume)
     },
 
     async obtenirDossier(dossierId): Promise<DossierActuel | null> {

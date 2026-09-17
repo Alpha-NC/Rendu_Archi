@@ -17,7 +17,18 @@ function depotMemoire(dossierInitial: DossierActuel) {
       throw new Error('Non utilisé dans ces tests.')
     },
     async listerDossiers() {
-      return [{ id: dossier.id, dossierRef: 'RIF-TEST', etat: dossier.etat }]
+      return [
+        {
+          id: dossier.id,
+          dossierRef: 'RIF-TEST',
+          etat: dossier.etat,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          nombreGenerations: 0,
+          derniereGeneration: null,
+          generationCanoniqueId: null,
+        },
+      ]
     },
     async obtenirDossier(id) {
       return id === dossier.id ? dossier : null
