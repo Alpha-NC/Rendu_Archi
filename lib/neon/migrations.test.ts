@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   appliquerMigrationsEnAttente,
-  decouperInstructions,
   migrationsEnAttente,
   type ExecuteurMigration,
   type Migration,
@@ -10,24 +9,6 @@ import {
 function migration(version: string, sql = 'select 1'): Migration {
   return { version, nom: `${version}_test.sql`, sql }
 }
-
-describe('decouperInstructions', () => {
-  it('découpe plusieurs instructions et retire les lignes de commentaire', () => {
-    const instructions = decouperInstructions(`
-      -- commentaire à ignorer
-      create table if not exists a (id uuid);
-      create index if not exists a_idx on a (id);
-    `)
-    expect(instructions).toEqual([
-      'create table if not exists a (id uuid)',
-      'create index if not exists a_idx on a (id)',
-    ])
-  })
-
-  it('ignore les lignes vides et ne renvoie rien pour un fichier vide', () => {
-    expect(decouperInstructions('\n  \n-- rien que des commentaires\n')).toEqual([])
-  })
-})
 
 describe('migrationsEnAttente', () => {
   it("base vide : toutes les migrations sont en attente, triées par version", () => {

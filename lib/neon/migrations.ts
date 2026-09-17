@@ -18,27 +18,6 @@ export interface Migration {
   sql: string
 }
 
-/**
- * Découpe un fichier de migration en instructions individuelles pour les
- * exécuter une par une dans une transaction (le driver HTTP Neon ne prend
- * qu'une instruction par appel).
- *
- * ponytail : découpage naïf sur `;` après retrait des lignes de commentaire
- * `--` — casserait sur un point-virgule dans une chaîne ou un corps de
- * fonction. Accepté tant que les migrations ne contiennent que du DDL
- * simple (comme neon/schema.sql aujourd'hui) ; à revoir avec un vrai
- * parseur SQL si une migration a besoin de fonctions/triggers.
- */
-export function decouperInstructions(sqlBrut: string): string[] {
-  return sqlBrut
-    .split('\n')
-    .filter((ligne) => !ligne.trim().startsWith('--'))
-    .join('\n')
-    .split(';')
-    .map((instruction) => instruction.trim())
-    .filter(Boolean)
-}
-
 /** Migrations non encore appliquées, triées par version croissante. */
 export function migrationsEnAttente(migrations: Migration[], appliquees: ReadonlySet<string>): Migration[] {
   return [...migrations]
