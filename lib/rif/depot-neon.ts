@@ -15,9 +15,9 @@ import { creerProjectStateVide } from './project-state'
 import type { EtatDossier } from './etat-machine'
 
 /**
- * Implémentation Neon PostgreSQL de DepotDossiers (schéma : neon/schema.sql)
- * — cible PRD V2.1 §16 (D-19). Backend réellement actif depuis la bascule
- * du 17.09.2026 (`app/api/dossiers/_lib/reponse.ts::obtenirDepot`).
+ * Implémentation Neon PostgreSQL de DepotDossiers (schéma :
+ * neon/migrations/) — cible PRD V2.1 §16 (D-19). Backend réellement actif
+ * depuis la bascule du 17.09.2026 (`app/api/dossiers/_lib/reponse.ts::obtenirDepot`).
  *
  * `ownerId`/`actorId`/`validatedBy` viennent de Neon Auth
  * (`lib/auth/server.ts`), traités ici comme de simples identifiants opaques.
