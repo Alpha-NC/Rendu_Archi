@@ -1,0 +1,78 @@
+import { describe, expect, it, vi } from 'vitest'
+import { del, get, put } from '@vercel/blob'
+import { lireFichier, supprimerFichier, televerserFichier } from './vercel-blob'
+
+vi.mock('@vercel/blob', () => ({
+  put: vi.fn(),
+  get: vi.fn(),
+  del: vi.fn(),
+}))
+
+describe('televerserFichier', () => {
+  it('téléverse en accès privé, sans suffixe aléatoire ni écrasement silencieux', async () => {
+    vi.mocked(put).mockResolvedValue({
+      pathname: 'user-1/dossier-1/sources/revit_view-123.jpg',
+      url: 'https://exemple.public.blob.vercel-storage.com/user-1/dossier-1/sources/revit_view-123.jpg',
+      contentType: 'image/jpeg',
+    } as never)
+
+    const resultat = await televerserFichier(
+      'user-1/dossier-1/sources/revit_view-123.jpg',
+      new ArrayBuffer(8),
+      'image/jpeg',
+    )
+
+    expect(put).toHaveBeenCalledWith(
+      'user-1/dossier-1/sources/revit_view-123.jpg',
+      expect.any(ArrayBuffer),
+      { access: 'private', contentType: 'image/jpeg', addRandomSuffix: false, allowOverwrite: false },
+    )
+    expect(resultat).toEqual({
+      pathname: 'user-1/dossier-1/sources/revit_view-123.jpg',
+      url: 'https://exemple.public.blob.vercel-storage.com/user-1/dossier-1/sources/revit_view-123.jpg',
+      contentType: 'image/jpeg',
+    })
+  })
+})
+
+describe('lireFichier', () => {
+  it('lit un fichier privé et renvoie son contenu et son type', async () => {
+    const octets = new TextEncoder().encode('contenu-test')
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(octets)
+        controller.close()
+      },
+    })
+    vi.mocked(get).mockResolvedValue({
+      statusCode: 200,
+      stream,
+      headers: new Headers(),
+      blob: { contentType: 'image/png', size: octets.byteLength } as never,
+    } as never)
+
+    const resultat = await lireFichier('user-1/dossier-1/sources/x.png')
+
+    expect(get).toHaveBeenCalledWith('user-1/dossier-1/sources/x.png', { access: 'private' })
+    expect(resultat.contentType).toBe('image/png')
+    expect(Array.from(new Uint8Array(resultat.contenu))).toEqual(Array.from(octets))
+  })
+
+  it('lève une erreur explicite si le fichier est introuvable, jamais un résultat vide silencieux', async () => {
+    vi.mocked(get).mockResolvedValue(null)
+    await expect(lireFichier('inexistant')).rejects.toThrow(/introuvable/)
+  })
+
+  it('lève une erreur explicite sur un statut inattendu (ex. 304)', async () => {
+    vi.mocked(get).mockResolvedValue({ statusCode: 304, stream: null, headers: new Headers(), blob: {} } as never)
+    await expect(lireFichier('x')).rejects.toThrow(/introuvable/)
+  })
+})
+
+describe('supprimerFichier', () => {
+  it('délègue au SDK avec le pathname fourni', async () => {
+    vi.mocked(del).mockResolvedValue(undefined)
+    await supprimerFichier('user-1/dossier-1/sources/x.png')
+    expect(del).toHaveBeenCalledWith('user-1/dossier-1/sources/x.png')
+  })
+})
