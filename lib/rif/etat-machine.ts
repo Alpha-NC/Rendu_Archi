@@ -90,7 +90,7 @@ export interface ResultatPrecondition {
  * L'accès aux données réelles du dossier (fichiers en base, statut de
  * confirmation explicite d'Évariste, etc.) est injecté par l'appelant via
  * `contexte` plutôt que chargé ici, pour garder cette fonction pure et
- * testable sans dépendance à Supabase.
+ * testable sans dépendance à une base réelle.
  */
 export function verifierPrecondition(
   depuis: EtatDossier,

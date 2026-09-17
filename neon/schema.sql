@@ -1,29 +1,21 @@
 -- Schéma Neon PostgreSQL — RIF-App (PRD V2.1 §16, D-19)
 --
--- Port de supabase/schema-rif-app.sql vers la cible Neon. Différences
--- délibérées, pas un oubli :
---
 -- 1. Aucune RLS, aucune policy. PRD V2.1 §16.3 : « Le navigateur ne se
 --    connecte jamais directement à Neon [...] la V2.1 ne dépend donc pas
 --    d'un accès anonyme direct à la base ni d'un système RLS exposé au
---    navigateur. » La RLS était la défense de Supabase contre un accès
---    client direct ; ce risque n'existe plus dans cette architecture — la
---    défense en profondeur reste `verifierProprietaire` côté Route Handler
---    (app/api/dossiers/_lib/reponse.ts), inchangée.
--- 2. `auth.users` (fourni par Supabase Auth) remplacé par Neon Auth (Managed
---    Better Auth) : owner_id/validated_by/actor_id référencent
---    neon_auth."user" (id), provisionné par `neon deploy` (neon.ts, auth:
---    true) — jamais une table `users` maison.
--- 3. `profiles` (rôle client/supervisor) supprimé, pas porté. PRD V2.1
---    §16.5 : « aucune gestion d'organisation, aucun système de rôles
---    complexe. » Autrefois D-03 gardait un compte de supervision
---    Alpha_no_code — le PRD V2.1 le retire explicitement du périmètre.
+--    navigateur. » La défense en profondeur reste `verifierProprietaire`
+--    côté Route Handler (app/api/dossiers/_lib/reponse.ts).
+-- 2. Utilisateurs gérés par Neon Auth (Managed Better Auth) :
+--    owner_id/validated_by/actor_id référencent neon_auth."user" (id),
+--    provisionné par `neon deploy` (neon.ts, auth: true) — jamais une table
+--    `users` maison.
+-- 3. Aucun rôle de supervision distinct. PRD V2.1 §16.5 : « aucune gestion
+--    d'organisation, aucun système de rôles complexe. »
 -- 4. Aucune section stockage : les fichiers vont dans Vercel Blob
 --    (lib/storage/vercel-blob.ts), jamais dans Postgres.
 --
 -- Exécuté sur la branche production du projet Neon réel le 17.09.2026 (D-19,
--- bascule). Aucune donnée réelle à migrer : le projet Supabase actuel n'a
--- jamais reçu de dossier réel (audit du 12.09.2026).
+-- bascule).
 
 -- =========================================================================
 -- 2. Dossiers — source de vérité du ProjectState (PRD §10, §13.1)

@@ -4,10 +4,8 @@ import type { VerdictControle } from './controle-qualite'
 
 /**
  * Interface d'accès aux données du dossier — sépare la logique métier
- * (`orchestrateur.ts`) de Supabase, pour pouvoir tester la première avec un
- * dépôt en mémoire plutôt qu'une vraie base (aucun projet Supabase n'existe
- * encore pour RIF-App — D-02/D-03 tranchées, provisioning à faire par
- * Alpha No_Code).
+ * (`orchestrateur.ts`) du backend réel (Neon, `depot-neon.ts`), pour pouvoir
+ * tester la première avec un dépôt en mémoire plutôt qu'une vraie base.
  */
 
 export interface DossierActuel {

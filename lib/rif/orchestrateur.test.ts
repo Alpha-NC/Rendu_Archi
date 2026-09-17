@@ -3,7 +3,7 @@ import { creerProjectStateVide } from './project-state'
 import type { DepotDossiers, DossierActuel, PatchGeneration } from './depot'
 import { executerGenerationOuCorrection, executerReprise } from './orchestrateur'
 
-/** Dépôt en mémoire — aucun Supabase requis pour tester la logique métier. */
+/** Dépôt en mémoire — aucune base réelle requise pour tester la logique métier. */
 function depotMemoire(dossierInitial: DossierActuel) {
   const evenements: Array<{ type: string; payload: unknown; actorId?: string }> = []
   const generations = new Map<string, { statut?: string; patch?: PatchGeneration }>()

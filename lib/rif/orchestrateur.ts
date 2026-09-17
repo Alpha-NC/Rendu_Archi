@@ -4,8 +4,8 @@ import type { genererEtAttendre, ResultatGeneration } from '../fal/client'
 
 /**
  * Orchestrateur des trois opérations techniques (PRD §14). Logique pure,
- * injectée avec un `DepotDossiers` et un client fal.ai — testable sans
- * Supabase ni réseau réel.
+ * injectée avec un `DepotDossiers` et un client fal.ai — testable sans base
+ * réelle ni réseau réel.
  *
  * Chaque fonction ici est le point où convergent les deux garde-fous déjà
  * construits : `autoriserOperation` (préconditions revérifiées côté backend,

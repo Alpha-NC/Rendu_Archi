@@ -2,12 +2,8 @@ import { del, get, issueSignedToken, presignUrl, put } from '@vercel/blob'
 
 /**
  * Adaptateur de stockage Vercel Blob — cible PRD V2.1 §16.1/§16.4 (D-19).
- *
- * Statut : module additif, non encore branché sur `DepotDossiers`
- * (`lib/rif/depot.ts`) ni sur aucune Route Handler. Aucun fichier existant
- * modifié, aucun basculement effectué — Supabase Storage reste le
- * stockage réellement utilisé jusqu'à ce que `depot-neon.ts` (à écrire)
- * consomme ce module.
+ * Stockage réellement actif depuis la bascule Neon, consommé par
+ * `lib/rif/depot-neon.ts`.
  *
  * Choix d'accès : chaque fichier est stocké en `access: 'private'`
  * (`@vercel/blob` ≥ 2.x le permet réellement — vérifié dans les types du
@@ -15,14 +11,6 @@ import { del, get, issueSignedToken, presignUrl, put } from '@vercel/blob'
  * atteignable par son URL seule : sa lecture exige le jeton serveur
  * (`BLOB_READ_WRITE_TOKEN`), jamais exposé au navigateur (PRD §18 :
  * « aucun secret de provider [...] exposé côté client »).
- *
- * Correction (17.09.2026, en écrivant depot-neon.ts) : un tour précédent de
- * ce fichier affirmait qu'aucun équivalent à `createSignedUrl` (Supabase)
- * n'existait côté Vercel Blob — faux, trouvé en creusant les types du SDK
- * plus loin. `issueSignedToken` + `presignUrl` composent exactement la même
- * garantie : une URL de lecture à durée de vie limitée, vérifiée par le CDN
- * sans jeton porteur, utilisable telle quelle par le navigateur, fal.ai ou
- * l'API Anthropic — voir `resolverUrlSignee` ci-dessous.
  *
  * Chaque fonction est un fin wrapper testable : les tests mockent
  * `@vercel/blob` directement (`vi.mock`), pas d'injection de dépendance
@@ -77,11 +65,10 @@ export async function supprimerFichier(pathname: string): Promise<void> {
 }
 
 /**
- * Équivalent de `createSignedUrl` (Supabase) : une URL de lecture pour un
- * blob privé, valable `dureeSecondes`, vérifiée par le CDN sans jeton
- * porteur — utilisable directement par le navigateur, ou transmise à un
- * fournisseur externe (fal.ai, API Anthropic) qui doit pouvoir récupérer
- * l'image sans connaître notre jeton serveur.
+ * URL de lecture temporaire pour un blob privé, valable `dureeSecondes`,
+ * vérifiée par le CDN sans jeton porteur — utilisable directement par le
+ * navigateur, ou transmise à un fournisseur externe (fal.ai, API Anthropic)
+ * qui doit pouvoir récupérer l'image sans connaître notre jeton serveur.
  *
  * Composition en deux appels (`issueSignedToken` puis `presignUrl`), tous
  * deux authentifiés par `BLOB_READ_WRITE_TOKEN` côté serveur — jamais

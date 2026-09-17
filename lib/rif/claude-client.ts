@@ -6,8 +6,8 @@ import type { AppelModele } from './orchestrateur-conversationnel'
  * Implémentation réelle d'AppelModele avec le SDK Anthropic — D-06 :
  * Claude Sonnet 5 (`claude-sonnet-5`).
  *
- * Non testée contre l'API réelle dans cette suite (comme depot-supabase.ts
- * pour Supabase) : la logique qui compte est testée indépendamment dans
+ * Non testée contre l'API réelle dans cette suite (comme depot-neon.ts pour
+ * Neon) : la logique qui compte est testée indépendamment dans
  * orchestrateur-conversationnel.test.ts via un AppelModele en mémoire. Ce
  * fichier n'est que l'adaptateur SDK, à vérifier en Phase 0B avec une vraie
  * clé API.
