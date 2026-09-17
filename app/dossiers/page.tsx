@@ -1,23 +1,24 @@
 import { redirect } from 'next/navigation'
-import { creerClientServeur } from '@/lib/supabase/server'
-import { creerDepotSupabase } from '@/lib/rif/depot-supabase'
+import { auth } from '@/lib/auth/server'
+import { sql } from '@/lib/neon/client'
+import { creerDepotNeon } from '@/lib/rif/depot-neon'
 import BoutonNouveauDossier from './BoutonNouveauDossier'
+
+// Neon Auth lit la session à chaque requête : rendu dynamique obligatoire.
+export const dynamic = 'force-dynamic'
 
 /**
  * Liste des dossiers de l'utilisateur (PRD §7 : périmètre V1, un dossier à
  * la fois — pas de traitement par lot).
  */
 export default async function PageDossiers() {
-  const supabase = await creerClientServeur()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: session } = await auth.getSession()
 
   // Le proxy garantit déjà une session sur cette route ; garde-fou local.
-  if (!user) redirect('/connexion')
+  if (!session?.user) redirect('/connexion')
 
-  const depot = creerDepotSupabase(supabase)
-  const dossiers = await depot.listerDossiers(user.id)
+  const depot = creerDepotNeon(sql)
+  const dossiers = await depot.listerDossiers(session.user.id)
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-12">

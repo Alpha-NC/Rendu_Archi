@@ -2,13 +2,14 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { creerClientNavigateur } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth/client'
 import { cibleRedirectionSure } from '@/lib/securite/redirection-sure'
 
 /**
- * Authentification individuelle (Supabase Auth) — remplace le mot de passe
- * unique partagé du formulaire V2 (PRD §17 : « Authentification individuelle
- * obligatoire avant tout dossier réel, même avec un seul utilisateur »).
+ * Authentification individuelle (Neon Auth, D-19 bascule) — remplace le mot
+ * de passe unique partagé du formulaire V2 (PRD §17 : « Authentification
+ * individuelle obligatoire avant tout dossier réel, même avec un seul
+ * utilisateur »).
  */
 export default function PageConnexion() {
   return (
@@ -31,8 +32,7 @@ function FormulaireConnexion() {
     setErreur(null)
     setEnCours(true)
 
-    const supabase = creerClientNavigateur()
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await authClient.signIn.email({
       email,
       password: motDePasse,
     })

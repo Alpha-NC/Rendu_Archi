@@ -16,10 +16,10 @@ export async function PATCH(
   { params }: { params: Promise<{ dossierId: string; directiveId: string }> },
 ) {
   const { dossierId, directiveId } = await params
-  const { user, supabase, reponseRefus } = await authentifierRequete()
+  const { user, reponseRefus } = await authentifierRequete()
   if (reponseRefus) return reponseRefus
 
-  const depot = obtenirDepot(supabase)
+  const depot = obtenirDepot()
   const dossier = await depot.obtenirDossier(dossierId)
   if (!dossier) {
     return NextResponse.json(

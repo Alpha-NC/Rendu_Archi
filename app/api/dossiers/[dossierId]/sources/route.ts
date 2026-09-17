@@ -26,10 +26,10 @@ const MIME_SUPPORTES: ImageSource['mimeType'][] = ['image/jpeg', 'image/png', 'i
  */
 export async function POST(request: Request, { params }: { params: Promise<{ dossierId: string }> }) {
   const { dossierId } = await params
-  const { user, supabase, reponseRefus } = await authentifierRequete()
+  const { user, reponseRefus } = await authentifierRequete()
   if (reponseRefus) return reponseRefus
 
-  const depot = obtenirDepot(supabase)
+  const depot = obtenirDepot()
   const dossier = await depot.obtenirDossier(dossierId)
   if (!dossier) {
     return NextResponse.json(

@@ -1,24 +1,25 @@
 import { notFound, redirect } from 'next/navigation'
-import { creerClientServeur } from '@/lib/supabase/server'
-import { creerDepotSupabase } from '@/lib/rif/depot-supabase'
+import { auth } from '@/lib/auth/server'
+import { sql } from '@/lib/neon/client'
+import { creerDepotNeon } from '@/lib/rif/depot-neon'
 import DepotSources from './DepotSources'
 import ConversationRif from './ConversationRif'
 import BoutonConfirmerFiche from './BoutonConfirmerFiche'
 import FicheProjet from './FicheProjet'
 
+// Neon Auth lit la session à chaque requête : rendu dynamique obligatoire.
+export const dynamic = 'force-dynamic'
+
 export default async function PageDossier({ params }: { params: Promise<{ dossierId: string }> }) {
   const { dossierId } = await params
-  const supabase = await creerClientServeur()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: session } = await auth.getSession()
 
-  if (!user) redirect('/connexion')
+  if (!session?.user) redirect('/connexion')
 
-  const depot = creerDepotSupabase(supabase)
+  const depot = creerDepotNeon(sql)
   const dossier = await depot.obtenirDossier(dossierId)
 
-  if (!dossier || dossier.ownerId !== user.id) notFound()
+  if (!dossier || dossier.ownerId !== session.user.id) notFound()
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">

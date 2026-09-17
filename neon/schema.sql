@@ -10,10 +10,10 @@
 --    client direct ; ce risque n'existe plus dans cette architecture — la
 --    défense en profondeur reste `verifierProprietaire` côté Route Handler
 --    (app/api/dossiers/_lib/reponse.ts), inchangée.
--- 2. `auth.users` (fourni par Supabase Auth) remplacé par une table `users`
---    minimale — Neon n'a pas d'équivalent intégré. Aucune ligne semée ici :
---    peupler cette table est le lot « authentification mono-utilisateur »
---    (PRD V2.1 §16.5), pas celui-ci.
+-- 2. `auth.users` (fourni par Supabase Auth) remplacé par Neon Auth (Managed
+--    Better Auth) : owner_id/validated_by/actor_id référencent
+--    neon_auth."user" (id), provisionné par `neon deploy` (neon.ts, auth:
+--    true) — jamais une table `users` maison.
 -- 3. `profiles` (rôle client/supervisor) supprimé, pas porté. PRD V2.1
 --    §16.5 : « aucune gestion d'organisation, aucun système de rôles
 --    complexe. » Autrefois D-03 gardait un compte de supervision
@@ -21,28 +21,22 @@
 -- 4. Aucune section stockage : les fichiers vont dans Vercel Blob
 --    (lib/storage/vercel-blob.ts), jamais dans Postgres.
 --
--- Non exécuté depuis cet environnement — action utilisateur, comme pour
--- supabase/schema-rif-app.sql (docs/provisioning-supabase.md). Aucune
--- donnée réelle à migrer : le projet Supabase actuel n'a jamais reçu de
--- dossier réel (D-19, audit du 12.09.2026).
-
--- =========================================================================
--- 1. Utilisateurs — remplace auth.users (Supabase Auth n'existe plus ici)
--- =========================================================================
-
-create table if not exists users (
-  id uuid primary key default gen_random_uuid(),
-  email text not null unique,
-  created_at timestamptz not null default now()
-);
+-- Exécuté sur la branche production du projet Neon réel le 17.09.2026 (D-19,
+-- bascule). Aucune donnée réelle à migrer : le projet Supabase actuel n'a
+-- jamais reçu de dossier réel (audit du 12.09.2026).
 
 -- =========================================================================
 -- 2. Dossiers — source de vérité du ProjectState (PRD §10, §13.1)
+--
+-- owner_id référence neon_auth."user" (id) : Neon Auth (Managed Better Auth,
+-- activé via neon.ts) provisionne lui-même ce schéma/cette table à l'exécution
+-- de `neon deploy` — pas de table `users` maison à créer ici (correction du
+-- 17.09.2026 : la première version de ce fichier en créait une, redondante).
 -- =========================================================================
 
 create table if not exists dossiers (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references users (id),
+  owner_id uuid not null references neon_auth."user" (id),
   dossier_ref text not null,
   -- D-19 : 12 états (PRD V2.1 §17) — voir lib/rif/etat-machine.ts.
   workflow_state text not null default 'BROUILLON' check (
@@ -140,7 +134,7 @@ create table if not exists quality_audits (
     )
   ),
   reserves text,
-  validated_by uuid references users (id),
+  validated_by uuid references neon_auth."user" (id),
   validated_at timestamptz,
   created_at timestamptz not null default now()
 );
@@ -161,7 +155,7 @@ create table if not exists events (
   dossier_id uuid not null references dossiers (id) on delete cascade,
   event_type text not null,
   payload jsonb not null default '{}'::jsonb,
-  actor_id uuid references users (id),
+  actor_id uuid references neon_auth."user" (id),
   created_at timestamptz not null default now()
 );
 

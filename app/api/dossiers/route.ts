@@ -1,24 +1,23 @@
 import { NextResponse } from 'next/server'
-import { creerDepotSupabase } from '@/lib/rif/depot-supabase'
 import { FRAMEWORK_VERSION, IMPLEMENTATION_VERSION } from '@/lib/rif/versions'
-import { authentifierRequete } from './_lib/reponse'
+import { authentifierRequete, obtenirDepot } from './_lib/reponse'
 
 /** GET /api/dossiers — liste les dossiers de l'utilisateur courant. */
 export async function GET() {
-  const { user, supabase, reponseRefus } = await authentifierRequete()
+  const { user, reponseRefus } = await authentifierRequete()
   if (reponseRefus) return reponseRefus
 
-  const depot = creerDepotSupabase(supabase)
+  const depot = obtenirDepot()
   const dossiers = await depot.listerDossiers(user.id)
   return NextResponse.json({ success: true, dossiers })
 }
 
 /** POST /api/dossiers — crée un nouveau dossier en BROUILLON. */
 export async function POST() {
-  const { user, supabase, reponseRefus } = await authentifierRequete()
+  const { user, reponseRefus } = await authentifierRequete()
   if (reponseRefus) return reponseRefus
 
-  const depot = creerDepotSupabase(supabase)
+  const depot = obtenirDepot()
   try {
     const { id, dossierRef } = await depot.creerDossier({
       ownerId: user.id,

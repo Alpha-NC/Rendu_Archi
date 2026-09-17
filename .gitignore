@@ -43,3 +43,4 @@ next-env.d.ts
 
 # CLI Supabase (npx supabase) — cache local
 supabase/.temp/
+.neon

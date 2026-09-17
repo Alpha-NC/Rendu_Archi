@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { creerClientServeur } from '@/lib/supabase/server'
-import { creerDepotSupabase } from '@/lib/rif/depot-supabase'
+import { auth } from '@/lib/auth/server'
+import { sql } from '@/lib/neon/client'
+import { creerDepotNeon } from '@/lib/rif/depot-neon'
 import type { ResultatOperation } from '@/lib/rif/orchestrateur'
 
 /**
@@ -15,15 +16,11 @@ import type { ResultatOperation } from '@/lib/rif/orchestrateur'
  * obligatoire avant tout dossier réel — jamais de mot de passe partagé.
  */
 export async function authentifierRequete() {
-  const supabase = await creerClientServeur()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: session } = await auth.getSession()
 
-  if (!user) {
+  if (!session?.user) {
     return {
       user: null,
-      supabase,
       reponseRefus: NextResponse.json(
         { success: false, error: { code: 'non_authentifie', message: 'Authentification requise.' } },
         { status: 401 },
@@ -31,7 +28,7 @@ export async function authentifierRequete() {
     }
   }
 
-  return { user, supabase, reponseRefus: null }
+  return { user: session.user, reponseRefus: null }
 }
 
 /**
@@ -51,8 +48,8 @@ export function verifierProprietaire(ownerId: string, userId: string) {
   return null
 }
 
-export function obtenirDepot(supabase: Awaited<ReturnType<typeof creerClientServeur>>) {
-  return creerDepotSupabase(supabase)
+export function obtenirDepot() {
+  return creerDepotNeon(sql)
 }
 
 const STATUT_PAR_CODE: Record<string, number> = {
