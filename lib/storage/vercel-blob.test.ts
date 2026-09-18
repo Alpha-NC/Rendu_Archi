@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { del, get, issueSignedToken, presignUrl, put } from '@vercel/blob'
-import { lireFichier, resolverUrlSignee, supprimerFichier, televerserFichier } from './vercel-blob'
+import { lireFichier, resolverUrlSignee, supprimerFichier, televerserFichier, verifierBlobConfigure } from './vercel-blob'
 
 vi.mock('@vercel/blob', () => ({
   put: vi.fn(),
@@ -100,5 +100,34 @@ describe('supprimerFichier', () => {
     vi.mocked(del).mockResolvedValue(undefined)
     await supprimerFichier('user-1/dossier-1/sources/x.png')
     expect(del).toHaveBeenCalledWith('user-1/dossier-1/sources/x.png')
+  })
+})
+
+describe('verifierBlobConfigure — Lot 2 Source Lifecycle (D-23)', () => {
+  const original = process.env.BLOB_READ_WRITE_TOKEN
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.BLOB_READ_WRITE_TOKEN
+    else process.env.BLOB_READ_WRITE_TOKEN = original
+  })
+
+  it('lève une erreur explicite si la variable est absente', () => {
+    delete process.env.BLOB_READ_WRITE_TOKEN
+    expect(() => verifierBlobConfigure()).toThrow(/BLOB_READ_WRITE_TOKEN/)
+  })
+
+  it('lève une erreur explicite si la variable est une chaîne vide (le bug diagnostiqué)', () => {
+    process.env.BLOB_READ_WRITE_TOKEN = ''
+    expect(() => verifierBlobConfigure()).toThrow(/BLOB_READ_WRITE_TOKEN/)
+  })
+
+  it('lève une erreur explicite si la variable ne contient que des espaces', () => {
+    process.env.BLOB_READ_WRITE_TOKEN = '   '
+    expect(() => verifierBlobConfigure()).toThrow(/BLOB_READ_WRITE_TOKEN/)
+  })
+
+  it('ne lève rien si la variable est réellement configurée', () => {
+    process.env.BLOB_READ_WRITE_TOKEN = 'vercel_blob_rw_test_token'
+    expect(() => verifierBlobConfigure()).not.toThrow()
   })
 })

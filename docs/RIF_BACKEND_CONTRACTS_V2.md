@@ -1,6 +1,6 @@
 # RIF-App — Contrats backend V2 (geometry-first)
 
-**Statut :** Draft — créé le 18 septembre 2026, mis à jour le 18 septembre 2026 (soir, post-RDV Évariste, §17-19) puis le 18 septembre 2026 (Lot 1 RenderTarget, §9bis, §10, §11, §16-18). Décrit le backend réellement en place, y compris le workflow geometry-first (ADR-021/022, D-20/D-21/D-22) et le modèle `Project → RenderTarget → Generations` (D-22). Objectif explicite : permettre à Codex de construire/adapter le frontend sans deviner un contrat. **Constat Lot 1 : `RenderTarget`/`OutputType`/`QualityProfile` sont désormais réellement implémentés côté backend (§9bis) ; aucune UI ne les exploite encore (chantier `feat/rif-ux-ui-desktop`, non touché par ce lot, §17 point 7).**
+**Statut :** Draft — créé le 18 septembre 2026, mis à jour le 18 septembre 2026 (soir, post-RDV Évariste, §17-19), puis (Lot 1 RenderTarget, §9bis, §10, §11, §16-18), puis (Lot 2 Source Lifecycle, §2.3-2.5, §15, §17). Décrit le backend réellement en place : workflow geometry-first (ADR-021/022, D-20/D-21/D-22), modèle `Project → RenderTarget → Generations` (D-22), et cycle de vie des sources — versioning, remplacement, assets temporaires (D-23). Objectif explicite : permettre à Codex de construire/adapter le frontend sans deviner un contrat. **Constat Lot 2 : les 4 sources principales sont désormais versionnées et remplaçables sans perte silencieuse ; les photos terrain temporaires ont un domaine complet (upload, liste, suppression réelle) ; le bug de jeton Blob (« Failed to retrieve the client token ») est diagnostiqué et corrigé côté code — la configuration réelle de `BLOB_READ_WRITE_TOKEN` en local reste une action utilisateur.**
 
 **Format 3D final : À CONFIRMER.** RVT est le candidat principal, IFC une alternative possible. Aucun fournisseur d'extraction géométrique n'est choisi. Rien dans ce contrat ne doit être lu comme un engagement sur l'un ou l'autre.
 
@@ -60,7 +60,7 @@ Le dossier expose `etat: EtatDossier` (GET dossier, page serveur) — c'est le s
 2. Upload direct vers Blob (`@vercel/blob/client`).
 3. `POST /api/dossiers/[dossierId]/sources` — corps `{ pathname, originalName, role?: RoleSource }` :
    - `role` est un **indice**, jamais une autorité — la classification réelle vient de `detection-role.ts`.
-   - Réponse `201 { success:true, fileId, role: RoleSource, ambigu: boolean }`.
+   - Réponse `201 { success:true, fileId, role: RoleSource, ambigu: boolean, remplace: boolean }` (`remplace`, Lot 2 D-23 — voir §2.3).
    - Si `ambigu:true`, une confirmation humaine est requise via `PATCH .../sources/[fileId]` (corps `{ role_confirmed: RoleSource }`).
    - Si le rôle est `annotated_source`/`annotated_render`, des `localized_directives` peuvent être extraites automatiquement — visibles dans la fiche projet (§9), confirmables via `PATCH .../directives/[directiveId]` (corps `{ status: 'validated' | 'rejected' }`) si leur statut est `unknown`.
 4. Le dossier passe mécaniquement `BROUILLON → SOURCES_RECUES` au premier dépôt.
@@ -73,10 +73,64 @@ Pipeline **distinct**, jamais fusionné avec `.../sources` (pas d'image, pas de 
 2. Upload direct vers Blob.
 3. `POST /api/dossiers/[dossierId]/modele-3d` — corps `{ pathname, originalName, format: string, sizeBytes?: number }` :
    - `format` est une chaîne libre déclarée par le client (ex. `"rvt"`, `"ifc"`) — **jamais validée contre une liste fermée**.
-   - Réponse `201 { success:true, fileId, source: SourceModele3D }`.
-   - Écrit `ProjectState.modele3D` avec `extractionStatus: 'UPLOADED'` — **ne lance aucune extraction**.
+   - Réponse `201 { success:true, fileId, source: SourceModele3D, remplace: boolean }` (Lot 2, D-23).
+   - Écrit `ProjectState.modele3D` avec `extractionStatus: 'UPLOADED'` — **ne lance aucune extraction**, même en cas de remplacement (nouvelle source = nouveau cycle, jamais un statut hérité).
 
 **Il n'existe aujourd'hui aucune route qui fait progresser `extractionStatus` au-delà de `UPLOADED`** : aucun fournisseur d'extraction n'est branché (§4). Le frontend doit afficher cet état sans prétendre qu'un traitement est en cours.
+
+### 2.3 Versioning et remplacement (Lot 2 Source Lifecycle, D-23)
+
+**Quatre rôles PRINCIPAUX** (`model_3d`, `revit_view`, `site_photo`, `axonometry` — `lib/rif/sources.ts::ROLES_PRINCIPAUX`) ont une identité unique par dossier : au plus une version **active** à la fois. Les autres rôles (`material_reference`, `annotated_source`, `existing_building_photo`, `render`, `annotated_render`) restent multi-valués, jamais concernés par ce qui suit.
+
+- **Remplacement automatique, aucun paramètre client requis** : déposer un fichier sur `.../sources` (ou `.../modele-3d`) alors qu'une version active du même rôle existe déjà déclenche un remplacement — jamais un doublon silencieux, jamais un écrasement destructeur. Le champ `remplace: true` dans la réponse le confirme.
+- **Historique préservé** : l'ancienne version passe au statut `replaced` (`replaced_at`, `replaced_by` posés), jamais supprimée physiquement ni de la base ni de Blob.
+- **Versionnement** : chaque remplacement incrémente `version` (entier, démarre à 1). `GET /api/dossiers/[dossierId]/sources/[fileId]/versions` → `{ success:true, role, versions: FichierSourceDetail[] }` — accepte l'id de **n'importe quelle** version (active ou remplacée) du rôle, retourne tout l'historique de ce rôle, la plus récente d'abord.
+- **Atomicité** : le remplacement est une transaction unique (marquer l'ancienne `replaced` puis insérer la nouvelle `active`, jamais l'inverse — un index unique partiel en base empêche structurellement deux versions actives simultanées du même rôle). Un échec à n'importe quelle étape annule tout : l'ancienne version reste active, aucune source cassée à moitié.
+- **`ProjectState.sources`** ne garde jamais qu'UNE entrée par rôle principal : l'ancienne est retirée du tableau au moment du remplacement (elle reste consultable via `.../versions`, juste plus via la fiche projet courante).
+
+```ts
+FichierSourceDetail {
+  id, dossierId, roleDetected: RoleSource, roleConfirmed: RoleSource | null,
+  originalName, storageKey, mimeType, sizeBytes,
+  version: number,
+  sourceStatus: 'active' | 'replaced' | 'deleted',
+  replacedAt: string | null, replacedByFileId: string | null,
+  createdAt,
+}
+```
+
+**Aucune route DELETE pour les sources principales** — décision explicite (DECISIONS.md D-23) : une source principale peut être référencée par des générations passées (`sourceFileIds`), des audits qualité, ou une chaîne de versions — une suppression physique casserait la capacité de rejouer/auditer l'historique. Le remplacement est la seule mutation possible.
+
+### 2.4 Photos terrain temporaires (`TEMPORARY_PROJECT_ASSETS`, Lot 2 — implémenté)
+
+Domaine **séparé** de `files`/`ProjectState.sources` (PRD Geometry-First §15) : pas de rôle, pas de version, pas de remplacement, jamais une autorité géométrique/environnement — une aide à la compréhension multimodale seulement.
+
+- `POST /api/dossiers/[dossierId]/temporary-assets/token` → jeton Blob (≤ 20 Mo par fichier — généreux au-delà des 8-10 Mo confirmés par Évariste ; aucune limite de nombre de fichiers imposée côté serveur).
+- `POST /api/dossiers/[dossierId]/temporary-assets` — corps `{ pathname, originalName, mimeType, sizeBytes }` → `201 { success:true, asset: TemporaryAssetDetail }`.
+- `GET /api/dossiers/[dossierId]/temporary-assets` → `{ success:true, assets: TemporaryAssetDetail[] }`.
+- `DELETE /api/dossiers/[dossierId]/temporary-assets/[assetId]` → suppression **réelle** (blob + ligne) — sûre ici, jamais référencé ailleurs, contrairement aux sources principales (§2.3).
+- **Multi-upload** : un appel par fichier (pas de route batch) ; le frontage (`DepotSources.tsx`) envoie par lots de 3 en concurrence limitée, jamais tout en parallèle — un échec individuel n'annule jamais les fichiers déjà réussis.
+- **Rétention** : `expiresAt` existe sur `TemporaryAssetDetail` mais reste **informatif** — aucune purge automatique n'est implémentée (rétention envisagée 3-6 mois, décision produit non exécutée).
+
+```ts
+TemporaryAssetDetail {
+  id, dossierId, originalName, storageKey, mimeType, sizeBytes,
+  createdAt, expiresAt: string | null,
+}
+```
+
+### 2.5 Bug corrigé : jeton Blob « Failed to retrieve the client token » (Lot 2, D-23)
+
+**Symptôme observé** : `POST .../sources/token` → 400, le navigateur n'affichant que le message générique du SDK client Vercel Blob, jamais le détail serveur réel.
+
+**Cause racine** : `@vercel/blob/dist/client.js` lève `BlobError("Failed to retrieve the client token")` dès que la réponse HTTP de la route de jeton n'est pas `ok` (`res.ok === false`) — **quel que soit le corps JSON réellement renvoyé**. Le message d'erreur détaillé que nos routes construisaient n'atteignait donc jamais le navigateur par ce chemin. Dans l'environnement de développement local audité, la cause immédiate du 400 était `BLOB_READ_WRITE_TOKEN` **absent ou vide** (le SDK serveur — `readEnv` — traite une chaîne vide comme absente et lève « No blob credentials found » à l'intérieur de `handleUpload`).
+
+**Correctif appliqué** (toutes les routes `.../token`) :
+- `lib/storage/vercel-blob.ts::verifierBlobConfigure()` vérifie explicitement la variable AVANT tout appel SDK, journalise côté serveur (`console.error`) et répond `500 { error: { code: 'configuration_manquante', message: 'Stockage indisponible côté serveur — réessayez plus tard.' } }` — jamais l'erreur SDK brute.
+- Tout échec restant de `handleUpload` (pathname invalide, etc.) répond désormais un message humanisé constant (« Impossible de préparer l'envoi du fichier. Réessayez. ») ; le détail exact reste en log serveur uniquement (mission Lot 2 §22).
+- Côté client (`DepotSources.tsx`), tout appel à `upload()` est isolé dans son propre `try/catch` : une erreur du SDK Vercel Blob (quel que soit son message brut) est systématiquement remplacée par le même message humanisé avant d'atteindre l'utilisateur.
+
+**Ce que ce correctif NE résout PAS** : la configuration réelle de `BLOB_READ_WRITE_TOKEN` en environnement local reste absente au moment de ce lot — c'est un secret que l'agent ne peut ni lire ni fournir lui-même ; sa configuration reste une action utilisateur.
 
 ---
 
@@ -369,6 +423,8 @@ Toutes les routes sous `/api/dossiers/[dossierId]/**` vérifient `verifierPropri
 | `cible_invalide` | 400 | `.../generer` | `renderTargetId` fourni introuvable ou hors de ce dossier (Lot 1, D-22) |
 | `cible_introuvable` | 404 | `.../render-targets/[id]`, `.../activer` | Cible de rendu inexistante ou hors de ce dossier |
 | `cible_differente` | 409 | `.../generations/comparer` | Les deux générations ne partagent pas la même cible de rendu |
+| `source_introuvable` | 404 | `.../sources/[fileId]`, `.../sources/[fileId]/versions` | Source inexistante ou hors de ce dossier |
+| `asset_introuvable` | 404 | `.../temporary-assets/[assetId]` | Photo temporaire inexistante ou hors de ce dossier |
 
 ---
 
@@ -389,7 +445,7 @@ Ce que le frontend peut/doit brancher sans appel supplémentaire, une fois le `P
 
 ---
 
-## 17. Gaps connus — mis à jour le 18.09.2026 (Lot 1 RenderTarget)
+## 17. Gaps connus — mis à jour le 18.09.2026 (Lot 2 Source Lifecycle)
 
 **Résolu depuis la version précédente de ce document** par le chantier frontend desktop (`ProjectCockpit.tsx`, `ProjectDashboard.tsx` et les composants associés) — ne plus présumer ces gaps ouverts :
 
@@ -400,25 +456,21 @@ Ce que le frontend peut/doit brancher sans appel supplémentaire, une fois le `P
 - ~~`lireReponseApi` non branché partout~~ → confirmé branché sur les 7 composants qui appellent l'API (`BoutonNouveauDossier`, `BoutonConfirmerFiche`, `ConversationRif`, `DepotSources`, `NewProjectWizard`, `ProjectCockpit`, `VerdictQualite`).
 - ~~`derniereGeneration`/agrégats non affichés~~ → le dashboard affiche `nombreGenerations`, la présence d'une génération canonique et la date de dernière activité par carte projet.
 - ~~`OutputType` inexistant dans le schéma~~ (Lot 1, D-22) → implémenté : `render_targets.output_type`, exposé sur `RenderTarget` et dérivé pour `GenerationDetail`/le rapport qualité via `render_target_id`. Voir §9bis.
+- ~~Aucune route de remplacement/suppression d'une source déjà déposée~~ (Lot 2, D-23) → remplacement versionné automatique pour les 4 rôles principaux (§2.3), historique consultable (`.../sources/[fileId]/versions`). Suppression toujours volontairement absente pour ces rôles (décision documentée, §2.3) — ce n'est pas un oubli.
+- ~~`TEMPORARY_PROJECT_ASSETS` non implémenté~~ (Lot 2, D-23) → domaine complet (§2.4) : upload, liste, suppression réelle. Rétention `expiresAt` reste informative, aucune purge automatique.
+- ~~Bug « Failed to retrieve the client token » non diagnostiqué~~ (Lot 2, D-23) → diagnostiqué et corrigé côté code (§2.5). Cause locale : `BLOB_READ_WRITE_TOKEN` absent/vide — configuration réelle toujours une action utilisateur.
 
 **Gaps réellement encore ouverts :**
 
 1. **Aucune route d'extraction géométrique** — normal tant qu'aucun fournisseur n'est choisi (§4) ; le prochain cycle de test (§19) précède ce choix.
 2. **Une seule variante par génération** (D-10 non tranchée).
 3. **`sourceControlePourCritere` pas encore consommée par `controle-multimodal.ts`** — le pack de contraintes n'influence pas encore réellement le rapport multimodal, seulement le prompt de génération (§5, §11.1).
-4. **Aucune route de remplacement/suppression d'une source déjà déposée** — seule `PATCH .../sources/[fileId]` (confirmation de rôle) existe. Besoin confirmé par Évariste (`docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §18), non construit.
-5. **`TEMPORARY_PROJECT_ASSETS` (photos terrain en volume) non implémenté** — concept produit seulement (§18).
-6. **Aucun système de quota/crédits** — besoin confirmé par Évariste, aucune implémentation ni schéma.
-7. **Aucune UI pour les cibles de rendu** (Lot 1, D-22) — le contrat existe (§9bis) mais `ProjectCockpit.tsx`/`ProjectDashboard.tsx` (chantier `feat/rif-ux-ui-desktop`, non touché par ce lot) n'affichent pas encore de sélecteur de cible, de création de cible, ni de vue « canonique par cible » — ils continuent d'afficher la sémantique legacy dossier-large (§10.4).
-8. **`neon/migrations/0002_render_targets.sql` non appliquée en production** — testée en lecture seule (`db:migrate:status`, détectée en attente), volontairement pas appliquée sans validation explicite.
+4. **Aucun système de quota/crédits** — besoin confirmé par Évariste, aucune implémentation ni schéma.
+5. **Aucune UI pour les cibles de rendu, ni pour le remplacement/versioning/photos temporaires** — le contrat existe (§9bis, §2.3-2.4) mais `ProjectCockpit.tsx`/`ProjectDashboard.tsx` (chantier `feat/rif-ux-ui-desktop`, non touché par les Lots 1-2) n'exploitent aucun des deux. `DepotSources.tsx` (frontend minimal, hors chantier UX) expose lui le remplacement et le multi-upload temporaire, mais reste une interface simple, non le cockpit.
+6. **`neon/migrations/0002_render_targets.sql` et `0003_source_lifecycle.sql` non appliquées en production** — toutes deux testées en lecture seule (`db:migrate:status`, détectées en attente), volontairement pas appliquées sans validation explicite.
+7. **Test Blob réel non exécuté** (Lot 2) — `BLOB_READ_WRITE_TOKEN` local absent/vide (la cause même du bug corrigé, §2.5), aucun test d'upload réel possible depuis cet environnement sans que l'utilisateur configure un jeton réel.
 
-Ces points sont soit hors du contrôle du frontend (fournisseur d'extraction, D-10, priorisation du rapport multimodal, migration), soit des besoins produit confirmés et volontairement non construits dans leur lot respectif (remplacement de source, assets temporaires, quotas, UI render-targets) — voir DECISIONS.md D-21/D-22 pour les arbitrages explicites.
-
-## 18. Stockage temporaire des photos terrain — concept confirmé, non implémenté
-
-Voir `docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §15 pour le détail produit. Aucun schéma, route ou champ n'existe pour `TEMPORARY_PROJECT_ASSETS` — aucun rôle de source, route ou table. Ce contrat le documente pour que Codex sache qu'il est **acté côté produit mais pas encore contractuel** — ne pas le construire par anticipation sans un contrat backend réel qui l'expose.
-
-(`OutputType`/`RenderTarget`, documentés ici sous le même intitulé jusqu'au Lot 1, sont désormais implémentés — voir §9bis. Ne plus les citer comme non implémentés.)
+Ces points sont soit hors du contrôle du frontend (fournisseur d'extraction, D-10, priorisation du rapport multimodal, migrations, jeton Blob), soit des besoins produit confirmés et volontairement non construits (quotas, cockpit render-targets/sources) — voir DECISIONS.md D-21/D-22/D-23 pour les arbitrages explicites.
 
 ## 19. Prochain cycle de test — rappel
 

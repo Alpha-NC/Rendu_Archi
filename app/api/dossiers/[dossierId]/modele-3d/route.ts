@@ -53,21 +53,52 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     return repondreCorpsInvalide('Le fichier déposé ne correspond pas à ce dossier.')
   }
 
-  const resultat = await depot.enregistrerFichierSource({
-    dossierId,
-    roleDetecte: 'model_3d',
-    originalName,
-    storageKey: pathname,
-    mimeType: 'application/octet-stream',
-    // Déclaré par le client (taille déjà connue avant upload, File.size) —
-    // même confiance que originalName, jamais revérifié depuis le blob ici
-    // (fichier potentiellement volumineux, pas de relecture systématique).
-    sizeBytes: typeof sizeBytes === 'number' && sizeBytes >= 0 ? sizeBytes : 0,
-  })
+  const sizeBytesValide = typeof sizeBytes === 'number' && sizeBytes >= 0 ? sizeBytes : 0
 
-  const source3D = creerSourceModele3D(resultat.id, format)
+  // Lot 2 Source Lifecycle (D-23) : un modèle 3D déjà déposé n'est plus
+  // écrasé silencieusement — un nouveau dépôt sur ce dossier devient un
+  // REMPLACEMENT versionné (ancienne ligne `files` marquée `replaced`,
+  // jamais supprimée). `obtenirSourceActivePourRole` fait foi, pas
+  // `ProjectState.modele3D` (qui n'est qu'une projection de cette même
+  // ligne, mise à jour juste après ici).
+  const actif = await depot.obtenirSourceActivePourRole(dossierId, 'model_3d')
+
+  let fileId: string
+  let evenement: string
+  if (actif) {
+    const resultat = await depot.remplacerFichierSource({
+      dossierId,
+      ancienFileId: actif.id,
+      roleDetecte: 'model_3d',
+      originalName,
+      storageKey: pathname,
+      mimeType: 'application/octet-stream',
+      sizeBytes: sizeBytesValide,
+    })
+    fileId = resultat.id
+    evenement = 'modele_3d_remplace'
+  } else {
+    const resultat = await depot.enregistrerFichierSource({
+      dossierId,
+      roleDetecte: 'model_3d',
+      originalName,
+      storageKey: pathname,
+      mimeType: 'application/octet-stream',
+      // Déclaré par le client (taille déjà connue avant upload, File.size) —
+      // même confiance que originalName, jamais revérifié depuis le blob ici
+      // (fichier potentiellement volumineux, pas de relecture systématique).
+      sizeBytes: sizeBytesValide,
+    })
+    fileId = resultat.id
+    evenement = 'modele_3d_depose'
+  }
+
+  // Nouvelle source = nouveau cycle d'extraction : jamais hériter du statut
+  // d'un fichier remplacé (voir lib/rif/geometrie-3d.ts::creerSourceModele3D,
+  // repart toujours à UPLOADED).
+  const source3D = creerSourceModele3D(fileId, format)
   await depot.mettreAJourProjectState(dossierId, { ...dossier.projectState, modele3D: source3D })
-  await depot.journaliserEvenement(dossierId, 'modele_3d_depose', { fileId: resultat.id, format }, user.id)
+  await depot.journaliserEvenement(dossierId, evenement, { fileId, format, ancienFileId: actif?.id }, user.id)
 
-  return NextResponse.json({ success: true, fileId: resultat.id, source: source3D })
+  return NextResponse.json({ success: true, fileId, source: source3D, remplace: Boolean(actif) })
 }

@@ -18,6 +18,13 @@ import type {
 import { creerProjectStateVide } from './project-state'
 import type { EtatDossier } from './etat-machine'
 import type { ParametresNouveauRenderTarget, RenderTarget } from './render-targets'
+import type {
+  FichierSourceDetail,
+  ParametresNouvelAssetTemporaire,
+  ParametresRemplacementSource,
+  TemporaryAssetDetail,
+} from './sources'
+import type { RoleSource } from './project-state'
 
 /**
  * Sentinelle utilisée pour normaliser `render_target_id is null` dans les
@@ -46,6 +53,37 @@ function mapGeneration(d: Record<string, unknown>): GenerationDetail {
     completedAt: d.completed_at ? (d.completed_at as Date).toISOString() : null,
     renderTargetId: (d.render_target_id as string | null) ?? null,
     parentGenerationId: (d.parent_generation_id as string | null) ?? null,
+  }
+}
+
+function mapFichierSource(d: Record<string, unknown>): FichierSourceDetail {
+  return {
+    id: d.id as string,
+    dossierId: d.dossier_id as string,
+    roleDetected: d.role_detected as RoleSource,
+    roleConfirmed: (d.role_confirmed as RoleSource | null) ?? null,
+    originalName: d.original_name as string,
+    storageKey: d.storage_key as string,
+    mimeType: (d.mime_type as string | null) ?? null,
+    sizeBytes: d.size_bytes != null ? Number(d.size_bytes) : null,
+    version: d.version as number,
+    sourceStatus: d.source_status as FichierSourceDetail['sourceStatus'],
+    replacedAt: d.replaced_at ? (d.replaced_at as Date).toISOString() : null,
+    replacedByFileId: (d.replaced_by as string | null) ?? null,
+    createdAt: (d.created_at as Date).toISOString(),
+  }
+}
+
+function mapTemporaryAsset(d: Record<string, unknown>): TemporaryAssetDetail {
+  return {
+    id: d.id as string,
+    dossierId: d.dossier_id as string,
+    originalName: d.original_name as string,
+    storageKey: d.storage_key as string,
+    mimeType: (d.mime_type as string | null) ?? null,
+    sizeBytes: d.size_bytes != null ? Number(d.size_bytes) : null,
+    createdAt: (d.created_at as Date).toISOString(),
+    expiresAt: d.expires_at ? (d.expires_at as Date).toISOString() : null,
   }
 }
 
@@ -437,6 +475,115 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
       `
       const data = lignes[0]
       return data ? mapRenderTarget(data) : null
+    },
+
+    async obtenirFichierSource(fileId) {
+      const lignes = await sql`
+        select id, dossier_id, role_detected, role_confirmed, original_name, safe_name, storage_key,
+               mime_type, size_bytes, version, source_status, replaced_at, replaced_by, created_at
+        from files where id = ${fileId}
+      `
+      const data = lignes[0]
+      return data ? mapFichierSource(data) : null
+    },
+
+    async obtenirSourceActivePourRole(dossierId, role) {
+      const lignes = await sql`
+        select id, dossier_id, role_detected, role_confirmed, original_name, safe_name, storage_key,
+               mime_type, size_bytes, version, source_status, replaced_at, replaced_by, created_at
+        from files
+        where dossier_id = ${dossierId}
+          and coalesce(role_confirmed, role_detected) = ${role}
+          and source_status = 'active'
+        limit 1
+      `
+      const data = lignes[0]
+      return data ? mapFichierSource(data) : null
+    },
+
+    async listerVersionsSource(dossierId, role) {
+      const lignes = await sql`
+        select id, dossier_id, role_detected, role_confirmed, original_name, safe_name, storage_key,
+               mime_type, size_bytes, version, source_status, replaced_at, replaced_by, created_at
+        from files
+        where dossier_id = ${dossierId} and coalesce(role_confirmed, role_detected) = ${role}
+        order by version desc
+      `
+      return lignes.map(mapFichierSource)
+    },
+
+    async remplacerFichierSource(params: ParametresRemplacementSource) {
+      const safeName = params.storageKey.split('/').pop() ?? params.originalName
+      const ancien = await sql`select version from files where id = ${params.ancienFileId}`
+      const versionPrecedente = (ancien[0]?.version as number | undefined) ?? 0
+      const nouvelleVersion = versionPrecedente + 1
+
+      // Une seule transaction, ordre important : l'ancienne version doit
+      // devenir `replaced` AVANT l'insertion de la nouvelle `active` — sinon
+      // l'index unique partiel (neon/migrations/0003, « une seule active par
+      // rôle ») refuserait l'insertion tant que l'ancienne reste active. Si
+      // l'insertion échoue pour une autre raison, la transaction entière est
+      // annulée : l'ancienne version redevient/reste `active`, jamais de
+      // source cassée à moitié (mission Lot 2 §6).
+      const resultats = await sql.transaction([
+        sql`update files set source_status = 'replaced', replaced_at = now() where id = ${params.ancienFileId}`,
+        sql`
+          insert into files (dossier_id, role_detected, original_name, safe_name, storage_key, mime_type, size_bytes, version, source_status)
+          values (${params.dossierId}, ${params.roleDetecte}, ${params.originalName}, ${safeName}, ${params.storageKey}, ${params.mimeType}, ${params.sizeBytes}, ${nouvelleVersion}, 'active')
+          returning id
+        `,
+      ])
+      const ligneInseree = resultats[1] as Array<{ id: string }>
+      const id = ligneInseree[0]?.id
+      if (!id) throw new Error('Enregistrement de la nouvelle version impossible.')
+
+      // `replaced_by` est un pointeur de confort (navigation avant dans
+      // l'historique) — posé après coup puisque l'id de la nouvelle ligne
+      // n'existe qu'une fois l'insertion faite. Un échec ici ne remet jamais
+      // en cause le remplacement déjà acté (source_status déjà cohérent) ;
+      // journalisé plutôt que silencieux.
+      try {
+        await sql`update files set replaced_by = ${id} where id = ${params.ancienFileId}`
+      } catch (erreur) {
+        console.error(
+          `Échec de pose de replaced_by pour ${params.ancienFileId} → ${id} :`,
+          erreur instanceof Error ? erreur.message : erreur,
+        )
+      }
+
+      return { id, storageKey: params.storageKey, version: nouvelleVersion }
+    },
+
+    async creerAssetTemporaire(params: ParametresNouvelAssetTemporaire) {
+      const lignes = await sql`
+        insert into temporary_assets (dossier_id, original_name, storage_key, mime_type, size_bytes)
+        values (${params.dossierId}, ${params.originalName}, ${params.storageKey}, ${params.mimeType}, ${params.sizeBytes})
+        returning id, dossier_id, original_name, storage_key, mime_type, size_bytes, created_at, expires_at
+      `
+      const data = lignes[0]
+      if (!data) throw new Error("Enregistrement de l'asset temporaire impossible.")
+      return mapTemporaryAsset(data)
+    },
+
+    async listerAssetsTemporaires(dossierId) {
+      const lignes = await sql`
+        select id, dossier_id, original_name, storage_key, mime_type, size_bytes, created_at, expires_at
+        from temporary_assets where dossier_id = ${dossierId} order by created_at desc
+      `
+      return lignes.map(mapTemporaryAsset)
+    },
+
+    async obtenirAssetTemporaire(assetId) {
+      const lignes = await sql`
+        select id, dossier_id, original_name, storage_key, mime_type, size_bytes, created_at, expires_at
+        from temporary_assets where id = ${assetId}
+      `
+      const data = lignes[0]
+      return data ? mapTemporaryAsset(data) : null
+    },
+
+    async supprimerAssetTemporaire(assetId) {
+      await sql`delete from temporary_assets where id = ${assetId}`
     },
   }
 }

@@ -2,6 +2,12 @@ import type { ProjectState, RoleSource } from './project-state'
 import type { EtatDossier } from './etat-machine'
 import type { LigneRapport, VerdictControle } from './controle-qualite'
 import type { ParametresNouveauRenderTarget, RenderTarget } from './render-targets'
+import type {
+  FichierSourceDetail,
+  ParametresNouvelAssetTemporaire,
+  ParametresRemplacementSource,
+  TemporaryAssetDetail,
+} from './sources'
 
 /**
  * Interface d'accès aux données du dossier — sépare la logique métier
@@ -289,4 +295,36 @@ export interface DepotDossiers {
 
   /** Une cible de rendu précise, ou `null`. Ne vérifie pas l'appartenance au dossier — à la charge de l'appelant (même contrat que `obtenirGeneration`). */
   obtenirRenderTarget(renderTargetId: string): Promise<RenderTarget | null>
+
+  /** Une ligne `files` précise (n'importe quel rôle/statut), ou `null`. Ne vérifie pas l'appartenance au dossier — à la charge de l'appelant. */
+  obtenirFichierSource(fileId: string): Promise<FichierSourceDetail | null>
+
+  /**
+   * Lot 2 Source Lifecycle (D-23) — la version ACTIVE d'un rôle principal
+   * pour ce dossier, ou `null` s'il n'en existe pas encore (premier dépôt).
+   * Le rôle effectif est `coalesce(role_confirmed, role_detected)` — voir
+   * lib/rif/sources.ts::ROLES_PRINCIPAUX.
+   */
+  obtenirSourceActivePourRole(dossierId: string, role: string): Promise<FichierSourceDetail | null>
+
+  /** Toutes les versions (actives et remplacées) d'un rôle, la plus récente d'abord. */
+  listerVersionsSource(dossierId: string, role: string): Promise<FichierSourceDetail[]>
+
+  /**
+   * Remplace une source principale déjà active : insère la nouvelle version
+   * (`version = ancienne + 1`, `source_status = 'active'`) et marque
+   * l'ancienne `replaced` dans la même transaction — jamais l'un sans
+   * l'autre, jamais de trou où deux versions seraient actives ou aucune.
+   */
+  remplacerFichierSource(params: ParametresRemplacementSource): Promise<{ id: string; storageKey: string; version: number }>
+
+  /** Lot 2 (D-23) — assets temporaires (photos terrain), domaine séparé de `files`. */
+  creerAssetTemporaire(params: ParametresNouvelAssetTemporaire): Promise<TemporaryAssetDetail>
+
+  listerAssetsTemporaires(dossierId: string): Promise<TemporaryAssetDetail[]>
+
+  obtenirAssetTemporaire(assetId: string): Promise<TemporaryAssetDetail | null>
+
+  /** Suppression réelle (ligne + charge à l'appelant de supprimer le blob) — sûre car jamais référencé par une génération/un audit. */
+  supprimerAssetTemporaire(assetId: string): Promise<void>
 }

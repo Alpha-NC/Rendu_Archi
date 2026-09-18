@@ -18,6 +18,28 @@ import { del, get, issueSignedToken, presignUrl, put } from '@vercel/blob'
  * `lib/fal/client.ts` pour ses parties non testées contre le réseau réel.
  */
 
+/**
+ * Lot 2 Source Lifecycle (D-23) — diagnostic du bug observé localement :
+ * `POST .../sources/token` répondait 400, le navigateur n'affichant que
+ * « Vercel Blob: Failed to retrieve the client token » (message générique
+ * du SDK client — `@vercel/blob/dist/client.js` le lève dès que la réponse
+ * HTTP n'est pas `ok`, quel que soit le corps JSON réellement renvoyé ;
+ * notre message d'erreur détaillé n'atteint donc jamais le navigateur par
+ * ce chemin). Cause racine confirmée : `BLOB_READ_WRITE_TOKEN` absent ou
+ * vide fait échouer `handleUpload` en interne (`readEnv` du SDK traite une
+ * chaîne vide comme absente). Cette fonction rend cette cause explicite et
+ * loggable AVANT d'appeler `handleUpload`, pour que le serveur journalise
+ * clairement « configuration manquante » plutôt qu'une erreur SDK opaque —
+ * appelée par chaque route `.../token` (sources, modele-3d, temporary-assets).
+ */
+export function verifierBlobConfigure(): void {
+  if (!process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
+    throw new Error(
+      "BLOB_READ_WRITE_TOKEN absent ou vide dans l'environnement serveur — impossible d'émettre un jeton d'upload Vercel Blob.",
+    )
+  }
+}
+
 export interface FichierTeleverse {
   pathname: string
   url: string

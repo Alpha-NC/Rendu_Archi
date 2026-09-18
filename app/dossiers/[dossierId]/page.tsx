@@ -21,6 +21,9 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
 
   if (!dossier || dossier.ownerId !== session.user.id) notFound()
 
+  // Lot 2 Source Lifecycle (D-23) — domaine séparé de project_state.sources.
+  const assetsTemporaires = await depot.listerAssetsTemporaires(dossier.id)
+
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">
       <p className="font-mono text-xs uppercase tracking-widest text-encre-douce">{dossier.dossierRef}</p>
@@ -38,6 +41,7 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
             sources={dossier.projectState.sources}
             directives={dossier.projectState.localized_directives}
             modele3D={dossier.projectState.modele3D}
+            assetsTemporaires={assetsTemporaires}
           />
           {/* PRD §9.4 : la fiche doit être visible — sans elle, la
               confirmation demandée juste au-dessus se ferait à l'aveugle. */}

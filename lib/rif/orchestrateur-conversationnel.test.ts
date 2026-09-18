@@ -87,6 +87,28 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async obtenirRenderTarget() {
       return null
     },
+    async obtenirFichierSource() {
+      return null
+    },
+    async obtenirSourceActivePourRole() {
+      return null
+    },
+    async listerVersionsSource() {
+      return []
+    },
+    async remplacerFichierSource() {
+      throw new Error('Non utilisé dans ces tests.')
+    },
+    async creerAssetTemporaire() {
+      throw new Error('Non utilisé dans ces tests.')
+    },
+    async listerAssetsTemporaires() {
+      return []
+    },
+    async obtenirAssetTemporaire() {
+      return null
+    },
+    async supprimerAssetTemporaire() {},
   }
 
   return { depot, evenements, messages, obtenirDossierCourant: () => dossier }

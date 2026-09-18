@@ -4,6 +4,7 @@ import { creerClassifieurRole, interpreterDetection, type ImageSource } from '@/
 import { lireFichier, supprimerFichier } from '@/lib/storage/vercel-blob'
 import { MIME_SOURCES_ACCEPTEES, TAILLE_SOURCE_MAX_OCTETS, validerPathnameSource } from '@/lib/storage/contraintes-source'
 import type { RoleSource } from '@/lib/rif/project-state'
+import { estRolePrincipal } from '@/lib/rif/sources'
 import { authentifierRequete, obtenirDepot, repondreCorpsInvalide, verifierProprietaire } from '../../_lib/reponse'
 
 const ROLES_ACCEPTES: RoleSource[] = [
@@ -30,6 +31,12 @@ const ROLES_ACCEPTES: RoleSource[] = [
  * n'est plus qu'un indice (`role`, optionnel), jamais une autorité — un
  * désaccord entre l'indice et la détection vaut ambiguïté, jamais un
  * tranchage silencieux en faveur de l'un des deux.
+ *
+ * Lot 2 Source Lifecycle (D-23) : si le rôle effectif est PRINCIPAL (vue
+ * projet, photo réelle, axonométrie — `lib/rif/sources.ts::ROLES_PRINCIPAUX`)
+ * et qu'une version active existe déjà, ce dépôt devient un REMPLACEMENT
+ * versionné (`depot.remplacerFichierSource`) plutôt qu'un doublon —
+ * l'ancienne version reste en base au statut `replaced`, jamais supprimée.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ dossierId: string }> }) {
   const { dossierId } = await params
@@ -138,16 +145,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     roleIndice as RoleSource | null ?? undefined,
   )
 
+  // Lot 2 Source Lifecycle (D-23) : un rôle PRINCIPAL (vue projet, photo
+  // réelle, axonométrie) déjà actif n'est plus dupliqué silencieusement —
+  // un nouveau dépôt du même rôle devient un remplacement versionné.
+  // `model_3d` ne passe jamais par cette route (voir .../modele-3d) ; les
+  // autres rôles (référence matériau, source annotée...) restent
+  // multi-valués, jamais concernés par ce remplacement.
+  const roleEffectif = role_confirmed ?? role_detected
+  const sourceActive = estRolePrincipal(roleEffectif)
+    ? await depot.obtenirSourceActivePourRole(dossierId, roleEffectif)
+    : null
+
   let resultat: { id: string; storageKey: string }
   try {
-    resultat = await depot.enregistrerFichierSource({
-      dossierId,
-      roleDetecte: role_detected,
-      originalName,
-      storageKey: pathname,
-      mimeType: contentType,
-      sizeBytes: contenu.byteLength,
-    })
+    resultat = sourceActive
+      ? await depot.remplacerFichierSource({
+          dossierId,
+          ancienFileId: sourceActive.id,
+          roleDetecte: role_detected,
+          originalName,
+          storageKey: pathname,
+          mimeType: contentType,
+          sizeBytes: contenu.byteLength,
+        })
+      : await depot.enregistrerFichierSource({
+          dossierId,
+          roleDetecte: role_detected,
+          originalName,
+          storageKey: pathname,
+          mimeType: contentType,
+          sizeBytes: contenu.byteLength,
+        })
   } catch (erreur) {
     // Le blob existe déjà dans le stockage mais aucune ligne `files` ne le
     // référence — orphelin nettoyé plutôt que laissé facturé sans usage.
@@ -186,11 +214,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
 
   // Le fichier existe dans le stockage/la table `files`, mais tant qu'il
   // n'apparaît pas dans project_state.sources, ni la conversation ni
-  // l'interface ne savent qu'il a été déposé (PRD §10).
+  // l'interface ne savent qu'il a été déposé (PRD §10). Remplacement :
+  // l'ancienne entrée du même rôle principal est retirée, jamais laissée à
+  // côté de la nouvelle (une seule entrée par rôle principal, comme en base).
+  const sourcesConservees = sourceActive
+    ? dossier.projectState.sources.filter((s) => s.id !== sourceActive.id)
+    : dossier.projectState.sources
   await depot.mettreAJourProjectState(dossierId, {
     ...dossier.projectState,
     sources: [
-      ...dossier.projectState.sources,
+      ...sourcesConservees,
       { id: resultat.id, role_detected, ...(role_confirmed ? { role_confirmed } : {}), status: 'valid' },
     ],
     localized_directives: [...dossier.projectState.localized_directives, ...directivesExtraites],
@@ -206,9 +239,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
 
   await depot.journaliserEvenement(
     dossierId,
-    'source_deposee',
+    sourceActive ? 'source_remplacee' : 'source_deposee',
     {
       fileId: resultat.id,
+      ancienFileId: sourceActive?.id,
       roleDetecte: role_detected,
       roleIndice,
       ambigu,
@@ -219,7 +253,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
   )
 
   return NextResponse.json(
-    { success: true, fileId: resultat.id, role: role_detected, ambigu },
+    { success: true, fileId: resultat.id, role: role_detected, ambigu, remplace: Boolean(sourceActive) },
     { status: 201 },
   )
 }

@@ -5,9 +5,27 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ACTIONS_DIRECTIVE, type DirectiveLocalisee, type RoleSource, type SourceDossier } from '@/lib/rif/project-state'
 import type { SourceModele3D } from '@/lib/rif/geometrie-3d'
+import type { TemporaryAssetDetail } from '@/lib/rif/sources'
 import { lireReponseApi } from '@/lib/rif/reponse-client'
 import { TAILLE_SOURCE_MAX_OCTETS } from '@/lib/storage/contraintes-source'
 import { TAILLE_MODELE_3D_MAX_OCTETS } from '@/lib/storage/contraintes-modele-3d'
+import { TAILLE_TEMPORARY_ASSET_MAX_OCTETS } from '@/lib/storage/contraintes-temporary-assets'
+
+/**
+ * Lot 2 Source Lifecycle (D-23) — humanise toute erreur issue directement
+ * du SDK client Vercel Blob (`upload()`), qui ne remonte jamais le détail
+ * serveur (voir lib/storage/vercel-blob.ts::verifierBlobConfigure : un 400
+ * quelconque devient systématiquement « Failed to retrieve the client
+ * token » côté SDK, quel que soit le corps JSON réellement renvoyé). Le
+ * détail technique reste en console développeur, jamais affiché tel quel.
+ */
+function messageUploadHumanise(e: unknown): string {
+  console.error('[upload]', e)
+  return "Impossible de préparer l'envoi du fichier. Réessayez."
+}
+
+/** Concurrence limitée pour le multi-upload (mission Lot 2 §12) — ne pas saturer navigateur/réseau. */
+const CONCURRENCE_MULTI_UPLOAD = 3
 
 // Reprend la disposition du prototype de référence (docs/rif_chat_prototype.jsx,
 // annexe PRD §27) : vue Revit obligatoire, photo et axonométrie facultatives.
@@ -36,16 +54,21 @@ export default function DepotSources({
   sources,
   directives,
   modele3D,
+  assetsTemporaires = [],
 }: {
   dossierId: string
   sources: SourceDossier[]
   directives: DirectiveLocalisee[]
   /** RIF V2, geometry-first (DECISIONS.md ADR-021) — absent tant qu'aucun modèle 3D n'a été déposé. */
   modele3D?: SourceModele3D
+  /** Lot 2 Source Lifecycle (D-23) — photos terrain, jamais une autorité. */
+  assetsTemporaires?: TemporaryAssetDetail[]
 }) {
   const router = useRouter()
   const [enCours, setEnCours] = useState<RoleSource | null>(null)
   const [enCoursModele3D, setEnCoursModele3D] = useState(false)
+  const [enCoursAssets, setEnCoursAssets] = useState(false)
+  const [suppressionEnCours, setSuppressionEnCours] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
   const [confirmationEnCours, setConfirmationEnCours] = useState<string | null>(null)
   const [brouillonsDirectives, setBrouillonsDirectives] = useState<Record<string, { action: string; target: string }>>({})
@@ -110,11 +133,16 @@ export default function DepotSources({
       const extension = fichier.name.split('.').pop() ?? 'bin'
       // eslint-disable-next-line react-hooks/purity -- deposer() n'exécute qu'en réponse à un événement (onChange), jamais pendant le rendu.
       const pathname = `${dossierId}/sources/${role}-${Date.now()}.${extension}`
-      const blob = await upload(pathname, fichier, {
-        access: 'private',
-        contentType: fichier.type,
-        handleUploadUrl: `/api/dossiers/${dossierId}/sources/token`,
-      })
+      let blob
+      try {
+        blob = await upload(pathname, fichier, {
+          access: 'private',
+          contentType: fichier.type,
+          handleUploadUrl: `/api/dossiers/${dossierId}/sources/token`,
+        })
+      } catch (e) {
+        throw new Error(messageUploadHumanise(e))
+      }
 
       const reponse = await fetch(`/api/dossiers/${dossierId}/sources`, {
         method: 'POST',
@@ -146,10 +174,15 @@ export default function DepotSources({
 
       const extension = fichier.name.split('.').pop()?.toLowerCase() ?? 'bin'
       const pathname = `${dossierId}/modele-3d/${Date.now()}.${extension}`
-      const blob = await upload(pathname, fichier, {
-        access: 'private',
-        handleUploadUrl: `/api/dossiers/${dossierId}/modele-3d/token`,
-      })
+      let blob
+      try {
+        blob = await upload(pathname, fichier, {
+          access: 'private',
+          handleUploadUrl: `/api/dossiers/${dossierId}/modele-3d/token`,
+        })
+      } catch (e) {
+        throw new Error(messageUploadHumanise(e))
+      }
 
       const reponse = await fetch(`/api/dossiers/${dossierId}/modele-3d`, {
         method: 'POST',
@@ -162,6 +195,71 @@ export default function DepotSources({
       setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
     } finally {
       setEnCoursModele3D(false)
+    }
+  }
+
+  /**
+   * Lot 2 Source Lifecycle (D-23) — multi-upload à concurrence limitée
+   * (mission §12) : un échec individuel n'annule jamais les autres fichiers
+   * (Promise.allSettled), chaque photo suit son propre cycle jeton → upload
+   * → enregistrement métadonnées.
+   */
+  async function deposerUnAssetTemporaire(fichier: File): Promise<void> {
+    if (fichier.size === 0 || fichier.size > TAILLE_TEMPORARY_ASSET_MAX_OCTETS) {
+      throw new Error(`« ${fichier.name} » : fichier vide ou dépassant la taille maximale acceptée (20 Mo).`)
+    }
+    const extension = fichier.name.split('.').pop() ?? 'bin'
+    const pathname = `${dossierId}/temporary-assets/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
+    let blob
+    try {
+      blob = await upload(pathname, fichier, {
+        access: 'private',
+        contentType: fichier.type,
+        handleUploadUrl: `/api/dossiers/${dossierId}/temporary-assets/token`,
+      })
+    } catch (e) {
+      throw new Error(`« ${fichier.name} » : ${messageUploadHumanise(e)}`)
+    }
+    const reponse = await fetch(`/api/dossiers/${dossierId}/temporary-assets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pathname: blob.pathname, originalName: fichier.name, mimeType: fichier.type, sizeBytes: fichier.size }),
+    })
+    await lireReponseApi(reponse)
+  }
+
+  async function deposerAssetsTemporaires(fichiers: FileList) {
+    setEnCoursAssets(true)
+    setErreur(null)
+    const liste = Array.from(fichiers)
+    const echecs: string[] = []
+    // Lot par lot (CONCURRENCE_MULTI_UPLOAD à la fois) plutôt que tout en
+    // parallèle — ne pas saturer navigateur/réseau (mission §12).
+    for (let i = 0; i < liste.length; i += CONCURRENCE_MULTI_UPLOAD) {
+      const lot = liste.slice(i, i + CONCURRENCE_MULTI_UPLOAD)
+      const resultats = await Promise.allSettled(lot.map(deposerUnAssetTemporaire))
+      for (const resultat of resultats) {
+        if (resultat.status === 'rejected') {
+          echecs.push(resultat.reason instanceof Error ? resultat.reason.message : 'Erreur inconnue.')
+        }
+      }
+    }
+    if (echecs.length > 0) setErreur(echecs.join(' '))
+    router.refresh()
+    setEnCoursAssets(false)
+  }
+
+  async function supprimerAssetTemporaire(assetId: string) {
+    setSuppressionEnCours(assetId)
+    setErreur(null)
+    try {
+      const reponse = await fetch(`/api/dossiers/${dossierId}/temporary-assets/${assetId}`, { method: 'DELETE' })
+      await lireReponseApi(reponse)
+      router.refresh()
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
+    } finally {
+      setSuppressionEnCours(null)
     }
   }
 
@@ -182,6 +280,19 @@ export default function DepotSources({
                 ? 'Extraction non disponible (aucun fournisseur configuré).'
                 : `Statut : ${modele3D.extractionStatus}`}
             </p>
+            {/* Lot 2 Source Lifecycle (D-23) : remplacement versionné, jamais un doublon silencieux — l'ancienne version reste dans l'historique. */}
+            <label className="mt-2 block">
+              <span className="text-encre-douce">Remplacer :</span>{' '}
+              <input
+                type="file"
+                disabled={enCoursModele3D}
+                onChange={(e) => {
+                  const fichier = e.target.files?.[0]
+                  if (fichier) deposerModele3D(fichier)
+                }}
+                className="text-xs"
+              />
+            </label>
           </div>
         ) : (
           <>
@@ -207,7 +318,23 @@ export default function DepotSources({
               {label} {obligatoire && <span className="text-red-600">*</span>}
             </label>
             {deposee ? (
-              <p className="rounded border border-encre-douce/30 px-3 py-2 text-xs text-encre-douce">Déposée</p>
+              <div className="rounded border border-encre-douce/30 px-3 py-2 text-xs text-encre-douce">
+                <p>Déposée</p>
+                {/* Lot 2 Source Lifecycle (D-23) : remplacement versionné (jamais un doublon silencieux) — l'ancienne version reste consultable via GET .../sources/[fileId]/versions. */}
+                <label className="mt-1 block">
+                  <span>Remplacer :</span>{' '}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={enCours === role}
+                    onChange={(e) => {
+                      const fichier = e.target.files?.[0]
+                      if (fichier) deposer(role, fichier)
+                    }}
+                    className="text-xs"
+                  />
+                </label>
+              </div>
             ) : (
               <input
                 type="file"
@@ -294,6 +421,43 @@ export default function DepotSources({
           })}
         </div>
       )}
+      {/* Lot 2 Source Lifecycle (D-23), PRD Geometry-First §15 : photos
+          terrain en volume, jamais une autorité géométrique/environnement,
+          jamais une entrée project_state.sources — domaine séparé. */}
+      <div className="flex flex-col gap-2 border-t border-encre-douce/30 pt-3">
+        <label className="text-sm text-encre">Photos terrain (temporaire)</label>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          disabled={enCoursAssets}
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) deposerAssetsTemporaires(e.target.files)
+            e.target.value = ''
+          }}
+          className="text-xs"
+        />
+        <p className="text-xs text-encre-douce">
+          Aide à la compréhension du projet — pas une source faisant autorité. {enCoursAssets && 'Envoi en cours…'}
+        </p>
+        {assetsTemporaires.length > 0 && (
+          <ul className="flex flex-col gap-1">
+            {assetsTemporaires.map((asset) => (
+              <li key={asset.id} className="flex items-center justify-between rounded border border-encre-douce/30 px-2 py-1 text-xs">
+                <span className="truncate">{asset.originalName}</span>
+                <button
+                  type="button"
+                  disabled={suppressionEnCours === asset.id}
+                  onClick={() => supprimerAssetTemporaire(asset.id)}
+                  className="ml-2 shrink-0 text-red-600 disabled:opacity-50"
+                >
+                  Supprimer
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {erreur && <p className="text-xs text-red-600">{erreur}</p>}
     </aside>
   )

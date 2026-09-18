@@ -1,7 +1,14 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { NextResponse } from 'next/server'
 import { construireContrainteUploadSource, validerPathnameSource } from '@/lib/storage/contraintes-source'
-import { authentifierRequete, obtenirDepot, verifierProprietaire } from '../../../_lib/reponse'
+import { verifierBlobConfigure } from '@/lib/storage/vercel-blob'
+import {
+  authentifierRequete,
+  obtenirDepot,
+  repondreDossierIntrouvable,
+  repondreErreur,
+  verifierProprietaire,
+} from '../../../_lib/reponse'
 
 /**
  * POST /api/dossiers/[dossierId]/sources/token — émet un jeton client Vercel
@@ -23,14 +30,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
 
   const depot = obtenirDepot()
   const dossier = await depot.obtenirDossier(dossierId)
-  if (!dossier) {
-    return NextResponse.json(
-      { success: false, error: { code: 'dossier_introuvable', message: 'Dossier introuvable.' } },
-      { status: 404 },
-    )
-  }
+  if (!dossier) return repondreDossierIntrouvable()
   const refusProprietaire = verifierProprietaire(dossier.ownerId, user.id)
   if (refusProprietaire) return refusProprietaire
+
+  // Lot 2 (D-23) — diagnostic du bug « Failed to retrieve the client token » :
+  // sans ce contrôle explicite, un BLOB_READ_WRITE_TOKEN absent/vide fait
+  // échouer handleUpload avec une erreur SDK opaque, jamais visible côté
+  // navigateur (voir vercel-blob.ts::verifierBlobConfigure). Ici, le
+  // problème est journalisé clairement côté serveur avant tout appel SDK.
+  try {
+    verifierBlobConfigure()
+  } catch (erreur) {
+    console.error('[sources/token]', erreur instanceof Error ? erreur.message : erreur)
+    return repondreErreur('configuration_manquante', 'Stockage indisponible côté serveur — réessayez plus tard.', 500)
+  }
 
   const corps = (await request.json()) as HandleUploadBody
 
@@ -49,15 +63,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
 
     return NextResponse.json(reponse)
   } catch (erreur) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: 'jeton_upload_refuse',
-          message: erreur instanceof Error ? erreur.message : 'Émission du jeton de dépôt impossible.',
-        },
-      },
-      { status: 400 },
-    )
+    // Lot 2 (D-23), mission §22 : le détail technique (pathname invalide,
+    // contrainte SDK...) reste en log serveur — le message renvoyé au
+    // client reste actionnable sans jamais exposer une erreur SDK brute.
+    console.error('[sources/token]', erreur instanceof Error ? erreur.message : erreur)
+    return repondreErreur('jeton_upload_refuse', "Impossible de préparer l'envoi du fichier. Réessayez.", 400)
   }
 }
