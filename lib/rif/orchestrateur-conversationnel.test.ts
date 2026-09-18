@@ -249,7 +249,7 @@ describe('executerTourConversationnel — corrigerRendu réel', () => {
         {
           type: 'tool_use',
           name: 'corrigerRendu',
-          input: { elementAModifier: 'Teinte de la façade', resultatAttendu: 'Gris clair' },
+          input: { elementAModifier: 'Teinte de la façade', resultatAttendu: 'Gris clair', categorie: 'MATERIAL' },
         },
       ],
     }))
@@ -262,6 +262,30 @@ describe('executerTourConversationnel — corrigerRendu réel', () => {
 
     expect(resultat.type).toBe('operation')
     expect(falSucces.mock.calls.at(-1)?.[0].prompt).toMatch(/ÉLÉMENT À MODIFIER\nTeinte de la façade/)
+    expect(falSucces.mock.calls.at(-1)?.[0].prompt).toMatch(/CATÉGORIE DE CORRECTION \(ADR-021\)\nMATERIAL/)
+  })
+
+  it("refuse une correction sans categorie valide (ADR-021) — jamais traitée comme une modification architecturale silencieuse", async () => {
+    const { depot, evenements } = depotMemoire({ ...dossierBase, etat: 'A_CORRIGER' })
+    const appelerModele = vi.fn<AppelModele>(async () => ({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'corrigerRendu',
+          input: { elementAModifier: 'Toiture', resultatAttendu: 'Un niveau de plus', categorie: 'ARCHITECTURAL_CHANGE' },
+        },
+      ],
+    }))
+
+    const resultat = await executerTourConversationnel(depot, appelerModele, falSucces, {
+      dossier: { ...dossierBase, etat: 'A_CORRIGER' },
+      nouveauMessage: 'Ajoute un niveau.',
+      actorId: 'user-1',
+    })
+
+    expect(resultat.type).toBe('incident')
+    expect(evenements[0].type).toBe('operation_refusee')
+    expect(falSucces).not.toHaveBeenCalled()
   })
 })
 
@@ -467,7 +491,7 @@ describe('executerTourConversationnel — boucle tool_use → tool_result (Chant
     const appelerModele = vi.fn<AppelModele>()
     appelerModele
       .mockResolvedValueOnce({
-        content: [{ type: 'tool_use', id: 'tool-2', name: 'corrigerRendu', input: { elementAModifier: 'Façade', resultatAttendu: 'Plus claire' } }],
+        content: [{ type: 'tool_use', id: 'tool-2', name: 'corrigerRendu', input: { elementAModifier: 'Façade', resultatAttendu: 'Plus claire', categorie: 'MATERIAL' } }],
       })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'La correction a échoué, on réessaie ?' }] })
 

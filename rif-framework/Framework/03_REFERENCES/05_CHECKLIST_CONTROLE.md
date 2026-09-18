@@ -2,7 +2,7 @@
 
 ID : LIB-002  
 Type : LIB  
-Version : V1.5  
+Version : V1.6  
 Statut : Review  
 Niveau : L4  
 Dossier : Framework/03_REFERENCES
@@ -25,6 +25,8 @@ Chaque critère reçoit un état :
 - Réserve ;
 - Non conforme ;
 - Non applicable.
+
+**Note geometry-first (ADR-021) :** pour les critères dont la « Source de contrôle » est « Source géométrique », quand une source `model_3d` a été réellement extraite (pack de contraintes géométriques disponible), ce pack devient la référence de comparaison prioritaire — plus précise qu'une vue 2D dérivée. En son absence, ces critères restent contrôlés depuis la source géométrique 2D désignée comme aujourd'hui (aucune dégradation, mode legacy explicite). Le contrôle multimodal (Claude) reste la méthode d'évaluation, jamais la seule autorité future sur la conformité géométrique quand des données structurées existent pour trancher.
 
 ## 3. Grille commune
 
@@ -135,5 +137,7 @@ Pour un écart mineur, le rapport peut conclure `Acceptable avec réserve` pour 
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
 
 ## Historique
+
+V1.6 — Ajout d'une note geometry-first (§1, ADR-021) : quand un pack de contraintes géométriques existe (source `model_3d` réellement extraite), il devient la référence de comparaison prioritaire pour les critères géométriques ; sans lui, contrôle inchangé depuis la source 2D désignée. Rappelle que le contrôle multimodal ne doit pas rester la seule autorité géométrique quand des données structurées existent.
 
 V1.5 — Ajout du critère « Silhouette » (§3, distingué des Volumes, PRD V2.1 §13.1). §4.3 : remplace les priorités de contrôle « Présentation générative » par « Retexturation contextualisée », fondées sur le respect de l'état déclaré (`locked`/`editable`/`harmonizable`, ARCH-002) plutôt que sur des « limites de liberté » non qualifiées. §5 : défauts éliminatoires généralisés aux deux modes utilisant un environnement réel. Recalibrage produit V2.1, voir ADR-019.

@@ -14,6 +14,7 @@
  */
 
 import type { ProjectState, ModeProduction } from './project-state'
+import type { CategorieCorrection, GeometryConstraintPack } from './geometrie-3d'
 import {
   contraintesStructurelles,
   elementsHarmonisables,
@@ -188,6 +189,30 @@ function sectionContraintesLibertes(projectState: ProjectState): string {
   ].join('\n\n')
 }
 
+/**
+ * RIF V2, workflow geometry-first (ADR-021, docs/PRD_RIF_V2_GEOMETRY_FIRST.md
+ * §7) : quand un pack de contraintes géométriques existe, il devient la
+ * référence prioritaire sur la géométrie (volumes, toiture, ouvertures,
+ * implantation) — la vue Revit ne reste alors autorité que sur le cadrage
+ * intentionnel (caméra, perspective). En son absence, ne jamais prétendre
+ * un verrouillage géométrique renforcé : le mode V2.1 standard (vue Revit +
+ * axonométrie font autorité sur la géométrie) reste explicitement en
+ * vigueur — pas de fausse promesse de précision.
+ */
+function sectionPackContraintesGeometriques(projectState: ProjectState): string {
+  const pack = projectState.geometryPack
+  if (!pack) {
+    return "PACK DE CONTRAINTES GÉOMÉTRIQUES\nAucun — aucune source modèle 3D extraite pour ce dossier. La géométrie reste régie par la vue Revit et l'axonométrie, selon les règles standard du mode de production (mode non geometry-first pour cette génération)."
+  }
+  const champsRemplis = (Object.keys(pack) as Array<keyof GeometryConstraintPack>).filter(
+    (cle) => cle !== 'schemaVersion' && cle !== 'sourceFileId' && pack[cle] !== undefined,
+  )
+  const detail = champsRemplis.length
+    ? `Champs extraits disponibles : ${champsRemplis.join(', ')}.`
+    : 'Aucun champ extrait pour le moment (pack créé mais vide) — traiter comme non disponible.'
+  return `PACK DE CONTRAINTES GÉOMÉTRIQUES\nSource modèle 3D ${pack.sourceFileId} (schéma v${pack.schemaVersion}) fait autorité sur la géométrie (volumes, toiture, ouvertures, implantation) — la vue Revit ne fait plus autorité que sur le cadrage intentionnel (caméra, perspective). ${detail} Ne jamais compléter un champ absent par une supposition.`
+}
+
 const CONDITION_BLOCAGE =
   "Si une instruction ne peut être exécutée sans modifier une zone verrouillée,\ninventer une information ou déformer une source faisant autorité, ne pas produire\nune interprétation arbitraire."
 
@@ -211,6 +236,7 @@ export function construirePromptGeneration(projectState: ProjectState): string {
     clauseParMode(mode),
     `RÉFÉRENCES MATÉRIAU LIMITÉES\n${sectionReferencesMateriau(projectState)}\nChaque référence ci-dessus ne transmet que l'apparence de l'élément désigné.\nElle ne modifie ni la géométrie, ni le cadrage, ni la caméra, ni l'environnement.`,
     `COMPATIBILITÉ DES CAMÉRAS\nÉtat : ${projectState.camera_compatibility}`,
+    sectionPackContraintesGeometriques(projectState),
     projectState.geometrie ? `GÉOMÉTRIE DU PROJET\n${projectState.geometrie.value}` : '',
     projectState.environnement_a_conserver?.length
       ? `ENVIRONNEMENT\nÀ conserver : ${projectState.environnement_a_conserver.join(', ')}`
@@ -236,6 +262,15 @@ export interface ParametresCorrection {
   /** Intention exprimée en conversation — jamais transmise telle quelle, toujours recontextualisée ici. */
   elementAModifier: string
   resultatAttendu: string
+  /**
+   * ADR-021 : catégorie de correction, validée en amont par
+   * `estCategorieCorrectionValide` (orchestrateur-conversationnel.ts) avant
+   * d'atteindre ce module — une correction n'existe ici que sous l'une des
+   * six catégories qui préservent la géométrie par construction. Un
+   * changement architectural n'est jamais une catégorie valide : il est
+   * refusé en amont, jamais transformé en prompt de correction.
+   */
+  categorie: CategorieCorrection
 }
 
 /**
@@ -251,8 +286,10 @@ export function construirePromptCorrection(
   const mode = projectState.mode
   const contexteCorrection = [
     `MODE DE PRODUCTION\n${sectionModeProduction(mode)}`,
+    `CATÉGORIE DE CORRECTION (ADR-021)\n${parametres.categorie} — cette catégorie ne peut jamais modifier un volume, une toiture, une ouverture ou l'implantation ; toute géométrie verrouillée ci-dessous reste inchangée quelle que soit la demande.`,
     `ÉLÉMENT À MODIFIER\n${parametres.elementAModifier}`,
     `ZONES VERROUILLÉES\n${sectionZonesVerrouillees(projectState)}`,
+    sectionPackContraintesGeometriques(projectState),
     mode === 'retexturation_contextualisee' ? `ÉLÉMENTS VERROUILLÉS\n${sectionElementsVerrouilles(projectState)}` : '',
     mode === 'retexturation_contextualisee' ? `ÉLÉMENTS MODIFIABLES\n${sectionElementsModifiables(projectState)}` : '',
     mode === 'retexturation_contextualisee' ? `ÉLÉMENTS HARMONISABLES\n${sectionElementsHarmonisables(projectState)}` : '',

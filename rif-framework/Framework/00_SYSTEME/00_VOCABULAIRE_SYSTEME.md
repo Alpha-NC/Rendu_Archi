@@ -2,7 +2,7 @@
 
 ID : ARCH-002  
 Type : ARCH  
-Version : V1.5  
+Version : V1.6  
 Statut : Review  
 Niveau : L1  
 Dossier : Framework/00_SYSTEME
@@ -41,6 +41,14 @@ Ces trois états gouvernent l'environnement ; ils ne s'appliquent pas aux élém
 
 **Référence matériau** — Image dont l'autorité est limitée à l'apparence de l'élément désigné : nature, teinte, texture, finition, relief et calepinage visible.
 
+**Source modèle 3D (`model_3d`)** — Maquette numérique 3D du projet (format non figé — ADR-021). Fait foi en priorité sur la géométrie (volumes, niveaux, toiture, ouvertures, implantation, terrasses, piscine, annexes, dimensions, relations spatiales) quand une extraction réelle en a été tirée — jamais par la seule présence du fichier.
+
+**Extraction géométrique** — Traitement d'une source modèle 3D par un fournisseur dédié, produisant un pack de contraintes géométriques. Sans fournisseur configuré, l'extraction reste explicitement non disponible ; aucun résultat n'est simulé à sa place.
+
+**Pack de contraintes géométriques** — Ensemble structuré et versionné des données extraites d'une source modèle 3D (limites, niveaux, volumes, toitures, ouvertures, caméra, silhouette, masques, zones verrouillées/éditables). Se remplit progressivement ; un champ absent n'est jamais complété par une valeur inventée.
+
+**Alignement caméra/photo** — Mise en correspondance d'une source modèle 3D avec une photographie réelle. Une calibration incertaine appelle une validation humaine plutôt qu'un résultat présenté comme fiable sans base réelle.
+
 **Source annotée** — Source comportant des marques servant à localiser une consigne. Les marques ne font pas partie du résultat attendu.
 
 **Directive localisée** — Instruction structurée associant une zone, une action (`conserver`, `supprimer`, `remplacer`, `corriger`, `verrouiller`) et une description.
@@ -78,6 +86,8 @@ Ces trois états gouvernent l'environnement ; ils ne s'appliquent pas aux élém
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
 
 ## Historique
+
+V1.6 — Ajout des termes du workflow geometry-first : source modèle 3D, extraction géométrique, pack de contraintes géométriques, alignement caméra/photo. Voir ADR-021.
 
 V1.5 — Ajout des trois états d'élément d'environnement (`locked`/`editable`/`harmonizable`), issus du recalibrage produit V2.1 (Mode B — Retexturation contextualisée). Remplace l'usage antérieur, non défini ici, de `locked`/`editable`/`unknown` dans REF-002 §7.
 

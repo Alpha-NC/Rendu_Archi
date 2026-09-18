@@ -2,7 +2,7 @@
 
 ID : DOC-003  
 Type : DOC  
-Version : V1.6  
+Version : V1.7  
 Statut : Review  
 Niveau : L5  
 Dossier : Framework/99_DOCUMENTATION
@@ -10,6 +10,23 @@ Dossier : Framework/99_DOCUMENTATION
 ---
 
 # Journal des versions
+
+## V1.7 — Review — 18 septembre 2026
+
+Introduction du workflow geometry-first (ADR-021) : « RIF fournit l'architecture, l'IA la photoréalise. »
+
+### Modifications
+
+- nouveau rôle de source `model_3d` (maquette numérique 3D du projet, format non figé — RVT candidat principal, IFC/OBJ/FBX recevables) — ARCH-002, REF-001 §2 ;
+- hiérarchie d'autorité des sources précisée : `model_3d` → géométrie (en priorité, si réellement extraite) ; vue projet → cadrage intentionnel ; photo réelle → environnement ; axonométrie → contrôle spatial secondaire (REF-001 §2) ;
+- nouveaux termes de vocabulaire : extraction géométrique, pack de contraintes géométriques, alignement caméra/photo (ARCH-002) — un fournisseur d'extraction absent doit rester honnêtement non disponible, jamais un résultat simulé ;
+- LIB-006 : note geometry-first signalant, sans les résoudre, la tension terminologique entre les trois usages du workflow geometry-first et les trois modes de production existants — aucun mode ajouté, renommé ou réintroduit (question ouverte pour le rendez-vous Évariste) ;
+- LIB-002 : quand un pack de contraintes géométriques existe, il devient la référence de comparaison prioritaire pour les critères géométriques ; sans lui, contrôle inchangé depuis la source 2D désignée ;
+- aucune règle métier existante retirée ; aucun format 3D ni fournisseur d'extraction choisi officiellement à ce stade.
+
+### Décisions
+
+ADR-021.
 
 ## V1.6 — Review — 12 septembre 2026
 

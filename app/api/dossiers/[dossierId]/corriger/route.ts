@@ -1,4 +1,5 @@
 import { genererEtAttendre } from '@/lib/fal/client'
+import { estCategorieCorrectionValide } from '@/lib/rif/geometrie-3d'
 import { executerGenerationOuCorrection } from '@/lib/rif/orchestrateur'
 import { construirePromptCorrection } from '@/lib/rif/prompt-technique'
 import {
@@ -42,18 +43,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     return repondreCorpsInvalide('Corps de requête JSON attendu.')
   }
 
-  const { elementAModifier, resultatAttendu } = (corps as Record<string, unknown>) ?? {}
+  const { elementAModifier, resultatAttendu, categorie } = (corps as Record<string, unknown>) ?? {}
   if (typeof elementAModifier !== 'string' || elementAModifier.trim().length === 0) {
     return repondreCorpsInvalide('Le champ elementAModifier (texte non vide) est requis.')
   }
   if (typeof resultatAttendu !== 'string' || resultatAttendu.trim().length === 0) {
     return repondreCorpsInvalide('Le champ resultatAttendu (texte non vide) est requis.')
   }
+  // ADR-021 : une correction n'existe que sous l'une des six catégories qui
+  // préservent la géométrie par construction — jamais un changement
+  // architectural (volume, toiture, ouverture, implantation), qui exige
+  // reprendreDepuisSources (D-09).
+  if (typeof categorie !== 'string' || !estCategorieCorrectionValide(categorie)) {
+    return repondreCorpsInvalide(
+      "Le champ categorie est requis et doit être l'une des six catégories qui préservent la géométrie (MATERIAL, LIGHTING, VEGETATION, LOCAL_ENVIRONMENT, ARTIFACT_REMOVAL, MINOR_PRESENTATION) — un changement architectural n'est jamais une correction, voir reprendreDepuisSources.",
+    )
+  }
 
   const resultat = await executerGenerationOuCorrection(depot, genererEtAttendre, {
     dossierId,
     type: 'correction',
-    promptText: construirePromptCorrection(dossier.projectState, { elementAModifier, resultatAttendu }),
+    promptText: construirePromptCorrection(dossier.projectState, { elementAModifier, resultatAttendu, categorie }),
     sourceFileIds: dossier.projectState.sources.map((s) => s.id),
     actorId: user.id,
     contexte: { usageAdministratif: dossier.usageAdministratif },

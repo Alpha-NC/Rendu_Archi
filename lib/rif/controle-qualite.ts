@@ -25,6 +25,7 @@
 
 import type { ElementEnvironnement } from './project-state'
 import { etatEffectifEnvironnement } from './contraintes-libertes'
+import type { GeometryConstraintPack } from './geometrie-3d'
 
 /** Version de la checklist appliquée (PRD §13.4 : `checklist_version`). */
 export const LIB_002_VERSION = 'LIB-002 V1.6'
@@ -197,6 +198,43 @@ export function calculerVerdictPropose(rapport: RapportControle): VerdictPropose
   }
 
   return { verdict: 'validation', motif: 'Aucun écart relevé sur les critères applicables.' }
+}
+
+/**
+ * Critères géométriques concernés par la priorité geometry-first (ADR-021,
+ * LIB-002 §1 note geometry-first) : quand un pack de contraintes existe, il
+ * devient la « Source de contrôle » prioritaire pour ces critères — plus
+ * précis qu'une comparaison contre une vue 2D. N'affecte jamais les critères
+ * hors géométrie (environnement, matériaux, lumière...).
+ */
+const CRITERES_GEOMETRIQUES = new Set<CritereControle>([
+  'silhouette',
+  'volumes',
+  'toiture',
+  'ouvertures',
+  'implantation',
+])
+
+/**
+ * Détermine la « Source de contrôle » (LIB-002 §3) à utiliser pour un
+ * critère donné. Ne devine jamais qu'un pack est exploitable : un pack sans
+ * `sourceFileId` valide n'existe pas ici (le type l'exige déjà), mais un
+ * pack vide (aucun champ extrait au-delà de `schemaVersion`/`sourceFileId`)
+ * n'apporte aucune donnée réelle — dans ce cas, retombe sur la source 2D
+ * désignée comme en V2.1 standard, jamais une fausse priorité géométrique.
+ */
+export function sourceControlePourCritere(
+  critere: CritereControle,
+  geometryPack: GeometryConstraintPack | undefined,
+): string {
+  const packExploitable =
+    geometryPack &&
+    Object.keys(geometryPack).some((cle) => cle !== 'schemaVersion' && cle !== 'sourceFileId')
+
+  if (CRITERES_GEOMETRIQUES.has(critere) && packExploitable) {
+    return `Pack de contraintes géométriques (source modèle 3D ${geometryPack!.sourceFileId})`
+  }
+  return critere === 'cadrage' || critere === 'perspective' ? 'Vue Revit (cadrage intentionnel)' : 'Source désignée'
 }
 
 /* =========================================================================

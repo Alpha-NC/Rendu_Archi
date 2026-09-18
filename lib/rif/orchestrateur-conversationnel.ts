@@ -14,6 +14,7 @@ import { executerGenerationOuCorrection, executerReprise, type ResultatOperation
 import type { DepotDossiers, DossierActuel } from './depot'
 import { ETATS_DOSSIER, type EtatDossier } from './etat-machine'
 import type { genererEtAttendre } from '../fal/client'
+import { estCategorieCorrectionValide } from './geometrie-3d'
 
 /**
  * Orchestrateur conversationnel — relie en un seul tour :
@@ -311,7 +312,7 @@ export async function executerTourConversationnel(
   }
 
   if (analyse.operation === 'corrigerRendu') {
-    const entree = analyse.entree as { elementAModifier?: unknown; resultatAttendu?: unknown } | undefined
+    const entree = analyse.entree as { elementAModifier?: unknown; resultatAttendu?: unknown; categorie?: unknown } | undefined
     if (typeof entree?.elementAModifier !== 'string' || typeof entree?.resultatAttendu !== 'string') {
       await depot.journaliserEvenement(
         dossier.id,
@@ -321,9 +322,33 @@ export async function executerTourConversationnel(
       )
       return finaliser({ type: 'incident', message: 'La demande de correction est incomplète — précise ce qui doit changer et le résultat attendu.' }, toolUseId)
     }
+    // ADR-021 : une correction n'existe que sous l'une des six catégories qui
+    // préservent la géométrie par construction. Toute autre valeur (y
+    // compris une catégorie inventée du type « changement architectural »)
+    // est refusée ici — jamais traitée comme une correction locale (PRD
+    // §14.3, D-09 : une modification architecturale exige une reprise
+    // depuis les sources ou une nouvelle source géométrique, jamais une
+    // correction).
+    if (typeof entree.categorie !== 'string' || !estCategorieCorrectionValide(entree.categorie)) {
+      await depot.journaliserEvenement(
+        dossier.id,
+        'operation_refusee',
+        { operation: 'corrigerRendu', raison: 'Catégorie de correction absente ou invalide.', categorie: entree.categorie },
+        contexte.actorId,
+      )
+      return finaliser(
+        {
+          type: 'incident',
+          message:
+            "Cette demande ressemble à une modification architecturale (volume, toiture, ouverture, implantation) plutôt qu'à une correction locale — utilise reprendreDepuisSources ou fournis une nouvelle source géométrique.",
+        },
+        toolUseId,
+      )
+    }
     const promptText = construirePromptCorrection(dossier.projectState, {
       elementAModifier: entree.elementAModifier,
       resultatAttendu: entree.resultatAttendu,
+      categorie: entree.categorie,
     })
     const resultat = await executerGenerationOuCorrection(depot, appelerFal, {
       dossierId: dossier.id,
