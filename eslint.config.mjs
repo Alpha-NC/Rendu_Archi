@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local skills and frozen design references are not application source.
+    ".claude/**",
+    "docs/rif_chat_prototype.jsx",
   ]),
 ]);
 

@@ -194,7 +194,7 @@ export default function DepotSources({
               }}
               className="text-xs"
             />
-            <p className="text-xs text-encre-douce">RVT recommandé — formats définitifs en cours de validation.</p>
+            <p className="text-xs text-encre-douce">Format ouvert — RVT candidat principal, IFC possible.</p>
           </>
         )}
       </div>

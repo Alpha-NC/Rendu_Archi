@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth/server'
 import { sql } from '@/lib/neon/client'
 import { creerDepotNeon } from '@/lib/rif/depot-neon'
-import BoutonNouveauDossier from './BoutonNouveauDossier'
+import AppShell from '@/app/ui/AppShell'
+import ProjectDashboard from './ProjectDashboard'
 
 // Neon Auth lit la session à chaque requête : rendu dynamique obligatoire.
 export const dynamic = 'force-dynamic'
@@ -20,39 +21,5 @@ export default async function PageDossiers() {
   const depot = creerDepotNeon(sql)
   const dossiers = await depot.listerDossiers(session.user.id)
 
-  return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-12">
-      <p className="font-mono text-xs uppercase tracking-widest text-encre-douce">Alpha No_Code</p>
-      <div className="mt-2 flex items-center justify-between">
-        <h1 className="font-sans text-2xl font-semibold tracking-tight text-encre">Dossiers</h1>
-        <BoutonNouveauDossier />
-      </div>
-
-      {dossiers.length === 0 ? (
-        <p className="mt-8 text-sm text-encre-douce">
-          Aucun dossier pour l&apos;instant. Crée le premier pour démarrer une conversation.
-        </p>
-      ) : (
-        <ul className="mt-8 flex flex-col gap-2">
-          {dossiers.map((d) => (
-            <li key={d.id}>
-              <a
-                href={`/dossiers/${d.id}`}
-                className="flex items-center justify-between rounded border border-encre-douce/30 px-4 py-3 text-sm hover:border-encre-douce/60"
-              >
-                <span className="font-mono">{d.dossierRef}</span>
-                <span className="flex items-center gap-3 text-encre-douce">
-                  <span>
-                    {d.nombreGenerations} génération{d.nombreGenerations > 1 ? 's' : ''}
-                    {d.generationCanoniqueId ? ' · canonique définie' : ''}
-                  </span>
-                  <span>{d.etat}</span>
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
-  )
+  return <AppShell email={session.user.email}><ProjectDashboard dossiers={dossiers} /></AppShell>
 }

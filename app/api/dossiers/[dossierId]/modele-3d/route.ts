@@ -65,8 +65,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     sizeBytes: typeof sizeBytes === 'number' && sizeBytes >= 0 ? sizeBytes : 0,
   })
 
-  const source3D = creerSourceModele3D(resultat.id, format)
+  const source3D = creerSourceModele3D(resultat.id, format, 'application/octet-stream', {
+    originalName,
+    sizeBytes: typeof sizeBytes === 'number' && sizeBytes >= 0 ? sizeBytes : undefined,
+  })
   await depot.mettreAJourProjectState(dossierId, { ...dossier.projectState, modele3D: source3D })
+  if (dossier.etat === 'BROUILLON') await depot.transitionnerDossier(dossierId, 'SOURCES_RECUES')
   await depot.journaliserEvenement(dossierId, 'modele_3d_depose', { fileId: resultat.id, format }, user.id)
 
   return NextResponse.json({ success: true, fileId: resultat.id, source: source3D })

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { lireReponseApi } from '@/lib/rif/reponse-client'
 
 const VERDICTS = [
   { valeur: 'validation', label: 'Valider' },
@@ -33,9 +34,10 @@ export default function VerdictQualite({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ verdictHuman }),
     })
-    const corps = await reponse.json()
-    if (!reponse.ok || !corps.success) {
-      setErreur(corps.error?.message ?? 'Verdict impossible.')
+    try {
+      await lireReponseApi(reponse)
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Verdict impossible.')
       setEnCours(null)
       return
     }

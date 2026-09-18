@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import VerdictQualite from './VerdictQualite'
+import { lireReponseApi } from '@/lib/rif/reponse-client'
+import { Icon } from '@/app/ui/Icons'
 
 interface MessageAffiche {
   auteur: 'utilisateur' | 'assistant' | 'systeme'
@@ -12,7 +13,7 @@ interface MessageAffiche {
   imageUrl?: string
 }
 
-export default function ConversationRif({ dossierId }: { dossierId: string }) {
+export default function ConversationRif({ dossierId, onActivity }: { dossierId: string; onActivity?: () => void }) {
   const router = useRouter()
   const [messages, setMessages] = useState<MessageAffiche[]>([
     { auteur: 'systeme', texte: 'Décris le projet ou dépose tes sources pour commencer.' },
@@ -23,10 +24,9 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
 
   // Réaffiche la conversation persistée (PRD §13.5) à l'ouverture de la page.
   useEffect(() => {
-    fetch(`/api/dossiers/${dossierId}/message`)
-      .then((r) => r.json())
-      .then((corps: { success: boolean; historique?: Array<{ role: 'user' | 'assistant'; content: string }> }) => {
-        if (!corps.success || !corps.historique?.length) return
+    fetch(`/api/dossiers/${dossierId}/message`).then((r) => lireReponseApi<{success:true;historique?:Array<{role:'user'|'assistant';content:string}>}>(r))
+      .then((corps) => {
+        if (!corps.historique?.length) return
         setMessages(
           corps.historique.map((m) => ({
             auteur: m.role === 'user' ? 'utilisateur' : 'assistant',
@@ -48,7 +48,7 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
       champsModifies?: string[]
       versEtat?: string
     }
-    if (t.type === 'message') return { texte: t.texte ?? '' }
+    if (t.type === 'message') return { texte: t.message ?? t.texte ?? '' }
     if (t.type === 'incident') return { texte: `⚠️ ${t.message}` }
     if (t.type === 'operation') {
       if (t.resultat?.success) {
@@ -86,15 +86,7 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: texte }),
       })
-      const corps = await reponse.json()
-
-      if (!reponse.ok || !corps.success) {
-        setMessages((prev) => [
-          ...prev,
-          { auteur: 'systeme', texte: `⚠️ ${corps.error?.message ?? 'Erreur de communication.'}` },
-        ])
-        return
-      }
+      const corps = await lireReponseApi<{success:true;tour:unknown}>(reponse)
 
       const resume = resumerTour(corps.tour)
       setMessages((prev) => [...prev, { auteur: 'assistant', ...resume }])
@@ -102,9 +94,9 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
       // confirmation) : sans ça, une avancée ou une opération resterait
       // invisible jusqu'à un rafraîchissement manuel.
       const typeTour = (corps.tour as { type?: string } | undefined)?.type
-      if (typeTour === 'parcours_avance' || typeTour === 'operation') router.refresh()
-    } catch {
-      setMessages((prev) => [...prev, { auteur: 'systeme', texte: '⚠️ Connexion impossible.' }])
+      if (typeTour === 'parcours_avance' || typeTour === 'operation') { router.refresh(); onActivity?.() }
+    } catch (e) {
+      setMessages((prev) => [...prev, { auteur: 'systeme', texte: e instanceof Error ? e.message : 'Connexion impossible.' }])
     } finally {
       setEnCours(false)
       requestAnimationFrame(() => {
@@ -114,35 +106,27 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
   }
 
   return (
-    <section className="flex min-h-[480px] flex-col rounded border border-encre-douce/30">
-      <div ref={zoneMessages} className="flex-1 space-y-3 overflow-y-auto p-4">
+    <section className="chat-panel">
+      <header className="chat-head"><div><span>Assistant de projet</span><h2>Conversation</h2></div><Icon name="message"/></header>
+      <div ref={zoneMessages} className="messages" aria-live="polite">
         {messages.map((m, i) => (
           <div
             key={i}
-            className={
-              m.auteur === 'utilisateur'
-                ? 'ml-auto max-w-[75%] rounded-lg rounded-br-sm bg-encre px-3 py-2 text-sm text-white'
-                : m.auteur === 'systeme'
-                  ? 'max-w-[85%] rounded-lg bg-encre-douce/10 px-3 py-2 text-xs text-encre-douce'
-                  : 'max-w-[75%] rounded-lg rounded-bl-sm border border-encre-douce/20 px-3 py-2 text-sm text-encre'
-            }
+            className={`message message--${m.auteur==='utilisateur'?'user':m.auteur}`}
           >
+            {m.auteur==='assistant'&&<span className="message-author">RIF</span>}
             {m.texte}
-            {m.generationId && (
-              <VerdictQualite dossierId={dossierId} generationId={m.generationId} imageUrl={m.imageUrl} />
-            )}
           </div>
         ))}
-        {enCours && <p className="text-xs italic text-encre-douce">Le RIF réfléchit…</p>}
+        {enCours && <p className="chat-loading">RIF analyse votre demande…</p>}
       </div>
-
-      <form
+      <div className="chat-composer"><form
         onSubmit={(e) => {
           e.preventDefault()
           envoyer()
         }}
-        className="flex gap-2 border-t border-encre-douce/30 p-3"
       >
+        <button type="button" className="composer-add" aria-label="Ajouter une source"><Icon name="plus"/></button>
         <textarea
           value={saisie}
           onChange={(e) => setSaisie(e.target.value)}
@@ -153,17 +137,18 @@ export default function ConversationRif({ dossierId }: { dossierId: string }) {
             }
           }}
           rows={1}
-          placeholder="Décris le projet, réponds aux questions…"
-          className="flex-1 resize-none rounded border border-encre-douce/30 px-3 py-2 text-sm"
+          placeholder="Décrivez votre modification…"
+          aria-label="Message à RIF"
         />
         <button
           type="submit"
           disabled={enCours}
-          className="rounded bg-encre px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="composer-send"
+          aria-label="Envoyer"
         >
-          Envoyer
+          <Icon name="send"/>
         </button>
-      </form>
+      </form><div className="composer-hint"><span>Entrée pour envoyer · Maj + Entrée pour une ligne</span><span>Conversation persistée</span></div></div>
     </section>
   )
 }
