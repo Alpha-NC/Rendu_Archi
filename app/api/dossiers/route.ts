@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { FRAMEWORK_VERSION, IMPLEMENTATION_VERSION } from '@/lib/rif/versions'
-import { authentifierRequete, obtenirDepot } from './_lib/reponse'
+import { authentifierRequete, obtenirDepot, repondreErreur } from './_lib/reponse'
 
 /** GET /api/dossiers — liste les dossiers de l'utilisateur courant. */
 export async function GET() {
@@ -26,12 +26,6 @@ export async function POST() {
     })
     return NextResponse.json({ success: true, id, dossierRef }, { status: 201 })
   } catch (erreur) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: 'creation_impossible', message: erreur instanceof Error ? erreur.message : 'Erreur inconnue.' },
-      },
-      { status: 500 },
-    )
+    return repondreErreur('creation_impossible', erreur instanceof Error ? erreur.message : 'Erreur inconnue.', 500)
   }
 }

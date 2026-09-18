@@ -64,6 +64,22 @@ describe('construirePromptGeneration (ENG-002)', () => {
     expect(prompt).toMatch(/respecter l'apparence visible des sources/)
   })
 
+  it("signale honnêtement l'absence de pack de contraintes géométriques (ADR-021) — mode standard V2.1", () => {
+    const prompt = construirePromptGeneration(creerProjectStateVide('P-1'))
+    expect(prompt).toMatch(/PACK DE CONTRAINTES GÉOMÉTRIQUES\nAucun/)
+    expect(prompt).toMatch(/vue Revit et l'axonométrie/)
+  })
+
+  it("donne la priorité au pack de contraintes géométriques quand il existe (ADR-021)", () => {
+    const etat = {
+      ...creerProjectStateVide('P-1'),
+      geometryPack: { schemaVersion: 1, sourceFileId: 'file-3d-1', volumes: [{ id: 'v1' }], roofs: [{ id: 'r1' }] },
+    }
+    const prompt = construirePromptGeneration(etat)
+    expect(prompt).toMatch(/Source modèle 3D file-3d-1 \(schéma v1\) fait autorité sur la géométrie/)
+    expect(prompt).toMatch(/Champs extraits disponibles : volumes, roofs\./)
+  })
+
   it('reprend fidèlement un matériau validé, avec sa provenance', () => {
     const prompt = construirePromptGeneration(etatPhotomontageAdministratif())
     expect(prompt).toMatch(/facade_extension : enduit mineral clair \(statut validated, source src-3\)/)
@@ -87,6 +103,7 @@ describe('construirePromptCorrection (ENG-003)', () => {
     const prompt = construirePromptCorrection(etatPhotomontageAdministratif(), {
       elementAModifier: 'Teinte de la façade extension',
       resultatAttendu: 'Enduit gris clair au lieu de blanc cassé.',
+      categorie: 'MATERIAL',
     })
     expect(prompt).toMatch(/ÉLÉMENT À MODIFIER\nTeinte de la façade extension/)
     expect(prompt).toMatch(/RÉSULTAT ATTENDU\nEnduit gris clair au lieu de blanc cassé\./)
@@ -99,6 +116,7 @@ describe('construirePromptCorrection (ENG-003)', () => {
     const promptCorrection = construirePromptCorrection(etat, {
       elementAModifier: 'x',
       resultatAttendu: 'y',
+      categorie: 'MATERIAL',
     })
     const extraireZones = (p: string) => p.match(/ZONES VERROUILLÉES\n([^\n]+)/)?.[1]
     expect(extraireZones(promptCorrection)).toBe(extraireZones(promptGeneration))
@@ -106,8 +124,18 @@ describe('construirePromptCorrection (ENG-003)', () => {
 
   it('applique la clause du mode courant, identique à la génération initiale', () => {
     const etat = etatPhotomontageAdministratif()
-    const promptCorrection = construirePromptCorrection(etat, { elementAModifier: 'x', resultatAttendu: 'y' })
+    const promptCorrection = construirePromptCorrection(etat, { elementAModifier: 'x', resultatAttendu: 'y', categorie: 'MATERIAL' })
     expect(promptCorrection).toMatch(/Ne pas reconstruire la scène entière/)
+  })
+
+  it('inscrit la catégorie de correction (ADR-021) et rappelle que la géométrie verrouillée reste inchangée', () => {
+    const prompt = construirePromptCorrection(etatPhotomontageAdministratif(), {
+      elementAModifier: 'Pelouse',
+      resultatAttendu: 'Plus verte',
+      categorie: 'VEGETATION',
+    })
+    expect(prompt).toMatch(/CATÉGORIE DE CORRECTION \(ADR-021\)\nVEGETATION/)
+    expect(prompt).toMatch(/ne peut jamais modifier un volume, une toiture, une ouverture ou l'implantation/)
   })
 })
 
@@ -172,6 +200,7 @@ describe('Retexturation contextualisée dans le prompt (ENG-002 V1.6 §3.3)', ()
     const prompt = construirePromptCorrection(etatContextualisee(), {
       elementAModifier: 'Clôture sud',
       resultatAttendu: 'Bois clair, hauteur inchangée.',
+      categorie: 'LOCAL_ENVIRONMENT',
     })
     expect(prompt).toMatch(/GARDE-FOU STRUCTUREL/)
     expect(prompt).toMatch(/RÉFÉRENCE DE CONTEXTE/)
@@ -213,6 +242,7 @@ describe('Contraintes & Libertés dans le prompt (PRD §9.5)', () => {
     const prompt = construirePromptCorrection(etatAvecLibertes, {
       elementAModifier: 'Teinte de la façade',
       resultatAttendu: 'Gris clair',
+      categorie: 'MATERIAL',
     })
     expect(prompt).toMatch(/CONTRAINTES STRUCTURELLES/)
     expect(prompt).toMatch(/piscine \/ geometry_policy : locked/)

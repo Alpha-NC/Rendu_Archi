@@ -4,6 +4,7 @@ import {
   calculerVerdictPropose,
   defautsEnvironnementVersLignes,
   evaluerEnvironnement,
+  sourceControlePourCritere,
   type ConstatEnvironnement,
   type LigneRapport,
   type RapportControle,
@@ -140,6 +141,28 @@ describe('autoriserExportAdministratif — garde-fou (PRD §15.3, prémortem #3)
     expect(autoriserExportAdministratif(verdictPropose.verdict, true).autorise).toBe(true)
     // ...mais ceci reste un verdict PROPOSÉ : l'appelant réel doit passer le
     // champ verdict_human de quality_audits, jamais verdict_proposed.
+  })
+})
+
+describe('sourceControlePourCritere — priorité geometry-first (ADR-021)', () => {
+  it('retombe sur la source désignée pour un critère géométrique sans pack', () => {
+    expect(sourceControlePourCritere('volumes', undefined)).toBe('Source désignée')
+  })
+
+  it("retombe sur la source désignée si le pack existe mais n'a aucun champ extrait", () => {
+    expect(sourceControlePourCritere('toiture', { schemaVersion: 1, sourceFileId: 'f-1' })).toBe('Source désignée')
+  })
+
+  it('priorise le pack de contraintes géométriques pour un critère géométrique quand il est exploitable', () => {
+    const pack = { schemaVersion: 1, sourceFileId: 'f-1', volumes: [{ id: 'v1' }] }
+    expect(sourceControlePourCritere('volumes', pack)).toBe('Pack de contraintes géométriques (source modèle 3D f-1)')
+    expect(sourceControlePourCritere('ouvertures', pack)).toBe('Pack de contraintes géométriques (source modèle 3D f-1)')
+  })
+
+  it("ne change jamais la source de contrôle d'un critère non géométrique, pack ou pas", () => {
+    const pack = { schemaVersion: 1, sourceFileId: 'f-1', volumes: [{ id: 'v1' }] }
+    expect(sourceControlePourCritere('materiaux', pack)).toBe('Source désignée')
+    expect(sourceControlePourCritere('cadrage', pack)).toBe('Vue Revit (cadrage intentionnel)')
   })
 })
 

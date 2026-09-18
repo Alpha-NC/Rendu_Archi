@@ -3,16 +3,74 @@ import { resolverUrlSignee, televerserFichier } from '../storage/vercel-blob'
 import type {
   DepotDossiers,
   DossierActuel,
+  DossierResume,
+  GenerationDetail,
   MessageConversation,
   ParametresAuditQualite,
   ParametresFichierResultat,
   ParametresFichierSource,
   ParametresNouveauDossier,
   ParametresNouvelleGeneration,
+  ParametresRapportQualite,
   PatchGeneration,
+  QualityAuditDetail,
 } from './depot'
 import { creerProjectStateVide } from './project-state'
 import type { EtatDossier } from './etat-machine'
+
+function mapGeneration(d: Record<string, unknown>): GenerationDetail {
+  return {
+    id: d.id as string,
+    dossierId: d.dossier_id as string,
+    type: d.type as GenerationDetail['type'],
+    status: d.status as GenerationDetail['status'],
+    batchId: d.batch_id as string,
+    variantIndex: d.variant_index as number,
+    isCanonical: d.is_canonical as boolean,
+    projectStateRevision: d.project_state_revision as number,
+    promptText: d.prompt_text as string,
+    sourceFileIds: d.source_file_ids as string[],
+    resultFileId: (d.result_file_id as string | null) ?? null,
+    providerRequestId: (d.provider_request_id as string | null) ?? null,
+    costActual: d.cost_actual != null ? Number(d.cost_actual) : null,
+    startedAt: (d.started_at as Date).toISOString(),
+    completedAt: d.completed_at ? (d.completed_at as Date).toISOString() : null,
+  }
+}
+
+function mapDossierResume(d: Record<string, unknown>): DossierResume {
+  return {
+    id: d.id as string,
+    dossierRef: d.dossier_ref as string,
+    etat: d.workflow_state as EtatDossier,
+    createdAt: (d.created_at as Date).toISOString(),
+    updatedAt: (d.updated_at as Date).toISOString(),
+    nombreGenerations: Number(d.nombre_generations),
+    derniereGeneration: d.derniere_generation_id
+      ? {
+          id: d.derniere_generation_id as string,
+          status: d.derniere_generation_status as GenerationDetail['status'],
+          startedAt: (d.derniere_generation_started_at as Date).toISOString(),
+        }
+      : null,
+    generationCanoniqueId: (d.generation_canonique_id as string | null) ?? null,
+  }
+}
+
+function mapQualityAudit(d: Record<string, unknown>): QualityAuditDetail {
+  return {
+    id: d.id as string,
+    generationId: d.generation_id as string,
+    checklistVersion: d.checklist_version as string,
+    report: d.report as QualityAuditDetail['report'],
+    verdictProposed: (d.verdict_proposed as QualityAuditDetail['verdictProposed']) ?? null,
+    verdictHuman: (d.verdict_human as QualityAuditDetail['verdictHuman']) ?? null,
+    reserves: (d.reserves as string | null) ?? null,
+    validatedBy: (d.validated_by as string | null) ?? null,
+    validatedAt: d.validated_at ? (d.validated_at as Date).toISOString() : null,
+    createdAt: (d.created_at as Date).toISOString(),
+  }
+}
 
 /**
  * Implémentation Neon PostgreSQL de DepotDossiers (schéma :
@@ -63,16 +121,32 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
     },
 
     async listerDossiers(ownerId) {
+      // Chantier J (dashboard) : décompte, dernière génération et
+      // canonique CALCULÉS à la lecture (LATERAL JOIN, pas de colonnes
+      // dupliquées) — index existant sur generations(dossier_id, started_at).
       const lignes = await sql`
-        select id, dossier_ref, workflow_state from dossiers
-        where owner_id = ${ownerId}
-        order by created_at desc
+        select
+          d.id, d.dossier_ref, d.workflow_state, d.created_at, d.updated_at,
+          coalesce(compte.n, 0) as nombre_generations,
+          derniere.id as derniere_generation_id,
+          derniere.status as derniere_generation_status,
+          derniere.started_at as derniere_generation_started_at,
+          canonique.id as generation_canonique_id
+        from dossiers d
+        left join lateral (
+          select g.id, g.status, g.started_at from generations g
+          where g.dossier_id = d.id order by g.started_at desc limit 1
+        ) derniere on true
+        left join lateral (
+          select count(*) as n from generations g where g.dossier_id = d.id
+        ) compte on true
+        left join lateral (
+          select g.id from generations g where g.dossier_id = d.id and g.is_canonical = true limit 1
+        ) canonique on true
+        where d.owner_id = ${ownerId}
+        order by d.created_at desc
       `
-      return lignes.map((d) => ({
-        id: d.id as string,
-        dossierRef: d.dossier_ref as string,
-        etat: d.workflow_state as EtatDossier,
-      }))
+      return lignes.map(mapDossierResume)
     },
 
     async obtenirDossier(dossierId): Promise<DossierActuel | null> {
@@ -189,6 +263,72 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
 
     async transitionnerDossier(dossierId, versEtat) {
       await sql`update dossiers set workflow_state = ${versEtat}, updated_at = now() where id = ${dossierId}`
+    },
+
+    async listerGenerations(dossierId) {
+      const lignes = await sql`
+        select id, dossier_id, type, status, batch_id, variant_index, is_canonical,
+               project_state_revision, prompt_text, source_file_ids, result_file_id,
+               provider_request_id, cost_actual, started_at, completed_at
+        from generations where dossier_id = ${dossierId} order by started_at desc
+      `
+      return lignes.map(mapGeneration)
+    },
+
+    async obtenirGeneration(generationId) {
+      const lignes = await sql`
+        select id, dossier_id, type, status, batch_id, variant_index, is_canonical,
+               project_state_revision, prompt_text, source_file_ids, result_file_id,
+               provider_request_id, cost_actual, started_at, completed_at
+        from generations where id = ${generationId}
+      `
+      const data = lignes[0]
+      return data ? mapGeneration(data) : null
+    },
+
+    async definirGenerationCanonique(dossierId, generationId, resultFileId) {
+      // Trois instructions, une seule transaction : jamais deux canoniques
+      // (ou zéro pendant un instant observable), et project_state.canonical_result_id
+      // (champ préexistant de ProjectState, jamais branché avant ce lot)
+      // reste synchronisé avec generations.is_canonical.
+      const canoniqueJson = resultFileId ? JSON.stringify(resultFileId) : 'null'
+      await sql.transaction([
+        sql`update generations set is_canonical = false where dossier_id = ${dossierId} and is_canonical = true`,
+        sql`update generations set is_canonical = true where id = ${generationId}`,
+        sql`update dossiers set project_state = jsonb_set(project_state, '{canonical_result_id}', ${canoniqueJson}::jsonb), updated_at = now() where id = ${dossierId}`,
+      ])
+    },
+
+    async obtenirAuditQualite(generationId) {
+      const lignes = await sql`
+        select id, generation_id, checklist_version, report, verdict_proposed, verdict_human, reserves, validated_by, validated_at, created_at
+        from quality_audits where generation_id = ${generationId}
+        order by created_at desc limit 1
+      `
+      const data = lignes[0]
+      return data ? mapQualityAudit(data) : null
+    },
+
+    async creerRapportQualite(params: ParametresRapportQualite) {
+      const lignes = await sql`
+        insert into quality_audits (generation_id, checklist_version, report, verdict_proposed)
+        values (${params.generationId}, ${params.checklistVersion}, ${JSON.stringify(params.report)}::jsonb, ${params.verdictProposed})
+        returning id
+      `
+      const id = lignes[0]?.id as string | undefined
+      if (!id) throw new Error('Enregistrement du rapport qualité impossible.')
+      return { id }
+    },
+
+    async enregistrerVerdictHumain(auditId, params) {
+      await sql`
+        update quality_audits set
+          verdict_human = ${params.verdictHuman},
+          reserves = ${params.reserves ?? null},
+          validated_by = ${params.validatedBy},
+          validated_at = now()
+        where id = ${auditId}
+      `
     },
 
     async journaliserEvenement(dossierId, type, payload, actorId) {

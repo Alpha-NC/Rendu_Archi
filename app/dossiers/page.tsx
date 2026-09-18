@@ -41,7 +41,13 @@ export default async function PageDossiers() {
                 className="flex items-center justify-between rounded border border-encre-douce/30 px-4 py-3 text-sm hover:border-encre-douce/60"
               >
                 <span className="font-mono">{d.dossierRef}</span>
-                <span className="text-encre-douce">{d.etat}</span>
+                <span className="flex items-center gap-3 text-encre-douce">
+                  <span>
+                    {d.nombreGenerations} génération{d.nombreGenerations > 1 ? 's' : ''}
+                    {d.generationCanoniqueId ? ' · canonique définie' : ''}
+                  </span>
+                  <span>{d.etat}</span>
+                </span>
               </a>
             </li>
           ))}

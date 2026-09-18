@@ -151,6 +151,41 @@ export default function FicheProjet({ projectState }: { projectState: ProjectSta
             </ul>
           )}
         </Ligne>
+
+        {/* Geometry-first (ADR-021) : statut honnête — jamais de fausse progression. */}
+        <Ligne label="Modèle 3D">
+          {projectState.modele3D ? (
+            <span>
+              format {projectState.modele3D.format} — {projectState.modele3D.extractionStatus}
+              {projectState.modele3D.extractionStatus === 'UPLOADED' && ' (extraction non disponible, aucun fournisseur configuré)'}
+            </span>
+          ) : (
+            <span className="text-encre-douce">aucun — géométrie régie par la vue Revit et l&apos;axonométrie</span>
+          )}
+        </Ligne>
+        <Ligne label="Pack contraintes">
+          {projectState.geometryPack ? (
+            <span>
+              schéma v{projectState.geometryPack.schemaVersion} —{' '}
+              {(Object.keys(projectState.geometryPack) as Array<keyof typeof projectState.geometryPack>).filter(
+                (k) => k !== 'schemaVersion' && k !== 'sourceFileId' && projectState.geometryPack![k] !== undefined,
+              ).length}{' '}
+              champ(s) extrait(s)
+            </span>
+          ) : (
+            <span className="text-encre-douce">aucun — mode standard V2.1</span>
+          )}
+        </Ligne>
+        <Ligne label="Alignement">
+          {projectState.alignment ? (
+            <span>
+              {projectState.alignment.status}
+              {projectState.alignment.status === 'REVIEW_REQUIRED' && ' — validation humaine requise'}
+            </span>
+          ) : (
+            <span className="text-encre-douce">non applicable</span>
+          )}
+        </Ligne>
       </dl>
     </section>
   )

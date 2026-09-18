@@ -15,7 +15,18 @@ function depotMemoire(dossierInitial: DossierActuel) {
       throw new Error('Non utilisé dans ces tests.')
     },
     async listerDossiers() {
-      return [{ id: dossier.id, dossierRef: 'RIF-TEST', etat: dossier.etat }]
+      return [
+        {
+          id: dossier.id,
+          dossierRef: 'RIF-TEST',
+          etat: dossier.etat,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          nombreGenerations: 0,
+          derniereGeneration: null,
+          generationCanoniqueId: null,
+        },
+      ]
     },
     async obtenirDossier(id) {
       return id === dossier.id ? { ...dossier, projectState: { ...dossier.projectState } } : null
@@ -55,6 +66,20 @@ function depotMemoire(dossierInitial: DossierActuel) {
       return []
     },
     async ajouterMessageConversation() {},
+    async listerGenerations() {
+      return []
+    },
+    async obtenirGeneration() {
+      return null
+    },
+    async definirGenerationCanonique() {},
+    async obtenirAuditQualite() {
+      return null
+    },
+    async creerRapportQualite() {
+      return { id: 'audit-1' }
+    },
+    async enregistrerVerdictHumain() {},
   }
 
   return { depot, evenements, generations, obtenirEtatCourant: () => dossier.etat }

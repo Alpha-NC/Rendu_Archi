@@ -2,7 +2,7 @@
 
 ID : REF-001  
 Type : REF  
-Version : V1.5  
+Version : V1.6  
 Statut : Review  
 Niveau : L2  
 Dossier : Framework/01_REFERENTIEL
@@ -19,11 +19,12 @@ La fidélité au projet prévaut toujours sur l'esthétique. Une image moins spe
 
 L'autorité est attribuée par domaine et par élément, jamais au fichier entier sans qualification.
 
-- La source géométrique désignée, généralement Revit, fait foi pour les volumes, proportions, niveaux, toitures, ouvertures, terrasses, piscines, annexes et implantations projetées.
+- La source géométrique désignée fait foi pour les volumes, proportions, niveaux, toitures, ouvertures, terrasses, piscines, annexes, implantations projetées et relations spatiales. Quand un modèle numérique 3D du projet est disponible (rôle `model_3d` — ADR-021, format non figé, RVT candidat principal), c'est lui qui porte cette autorité en priorité : plus précis qu'une vue 2D dérivée, il ne fait cependant foi que sur ce qu'une extraction réelle en a effectivement tiré, jamais par présomption dès son seul dépôt.
+- La vue projet (vue Revit ou équivalent) fait foi pour le cadrage intentionnel : caméra, perspective, angle de vue visé. Quand une source `model_3d` fait par ailleurs foi sur la géométrie, la vue projet ne porte plus l'autorité géométrique — seulement le cadrage.
 - La photographie du site fait foi pour l'identité générale du contexte : terrain visible, relief, végétation existante, clôtures, murs, voisins, accès et horizon. Selon le mode de production, elle peut être le canevas de cadrage (Photomontage contrôlé) ou une référence de contexte pendant que la source géométrique reste le canevas (Retexturation contextualisée) — voir LIB-006. Dans les deux cas, elle ne fait jamais foi au pixel près : chaque élément d'environnement qu'elle documente reçoit un état `locked`, `editable` ou `harmonizable` (ARCH-002), qui précise le degré de fidélité attendu.
 - Le canevas de cadrage dépend du mode de production.
 - Une donnée explicitement validée sur l'état projet prévaut sur une apparence contradictoire de l'état existant lorsque l'élément est modifié par le projet.
-- Une axonométrie est une source secondaire de contrôle des volumes ; elle ne remplace ni la caméra ni le canevas.
+- Une axonométrie est une source secondaire de contrôle spatial ; elle ne remplace ni la caméra ni le canevas, et ne devient jamais l'autorité géométrique principale même en l'absence de source `model_3d`.
 
 ## 3. Références matériau
 
@@ -74,6 +75,8 @@ La sélection du résultat canonique et la validation administrative appartienne
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
 
 ## Historique
+
+V1.6 — §2 : formalise la hiérarchie d'autorité geometry-first — un modèle numérique 3D (`model_3d`), quand disponible et réellement extrait, porte l'autorité géométrique en priorité sur toute vue 2D dérivée ; la vue projet est alors recadrée sur le seul cadrage intentionnel. Aucun format 3D fermé imposé. Voir ADR-021.
 
 V1.5 — §2 et §6 : cessent de présumer que la photographie du site est nécessairement un canevas figé — elle peut être canevas (Photomontage contrôlé) ou référence de contexte pendant que la source géométrique reste le canevas (Retexturation contextualisée, mode principal du recalibrage V2.1). Introduction des trois états d'environnement `locked`/`editable`/`harmonizable` (ARCH-002). Voir ADR-019.
 

@@ -1,5 +1,6 @@
 import type { ParcoursCollecte, QuestionAdditionnelle, TraitementQuestion } from './collecte-conditionnelle'
 import type { ModeProduction, StyleRendu } from './project-state'
+import { CATEGORIES_CORRECTION } from './geometrie-3d'
 
 /**
  * Construction du prompt système de l'assistant conversationnel RIF-App.
@@ -34,7 +35,7 @@ const PRINCIPES_NON_NEGOCIABLES = [
 const RAPPEL_APPEL_OUTIL = [
   "RÈGLE ABSOLUE SUR LES OUTILS : tu ne décris JAMAIS en texte un appel d'outil (pas de bloc de code imitant genererRendu(...), pas de JSON en texte). Si tu veux déclencher une opération, tu émets un vrai appel d'outil. Si l'outil semble indisponible, tu le dis explicitement à l'utilisateur — tu ne fabriques jamais un faux résultat ni ne bascules silencieusement vers autre chose.",
   "genererRendu ne prend aucun paramètre de contenu : le prompt technique est construit par le backend à partir de la fiche projet confirmée. N'essaie jamais de fournir toi-même un prompt d'image.",
-  'corrigerRendu attend elementAModifier (ce qui doit changer) et resultatAttendu (le résultat visé) — jamais une description de ce qu\'il faut préserver, c\'est la règle par défaut.',
+  `corrigerRendu attend elementAModifier (ce qui doit changer), resultatAttendu (le résultat visé) et categorie, une des valeurs suivantes : ${CATEGORIES_CORRECTION.join(', ')}. Une correction ne peut JAMAIS modifier un volume, une toiture, une ouverture ou l'implantation — ce sont des changements architecturaux, pas des corrections locales. Si l'utilisateur demande un tel changement, utilise reprendreDepuisSources ou explique qu'une nouvelle source géométrique est nécessaire, n'appelle jamais corrigerRendu pour ça.`,
   "reprendreDepuisSources attend un motif — utilise-la uniquement si la géométrie ou la caméra a dérivé, si l'environnement verrouillé a été altéré, ou si plusieurs corrections ont accumulé des régressions. Ne la confonds jamais avec une correction locale.",
   "avancerParcours propose de faire avancer le dossier (sources analysées, contexte à confirmer, ou suspendu si un blocage majeur apparaît). Tu PROPOSES seulement : le backend vérifie les préconditions et refuse si elles ne sont pas réunies. Tu ne peux jamais faire passer un dossier en PRÊT_À_GÉNÉRER — cela demande une action explicite d'Évariste.",
   "mettreAJourFicheProjet enregistre une information dans la fiche projet — appelle-la à chaque donnée structurée obtenue, pas seulement à la toute fin. N'utilise 'validated' que si l'utilisateur a confirmé explicitement ; sinon 'provisional'.",
@@ -101,8 +102,14 @@ export const OUTILS_CONVERSATIONNELS = [
       properties: {
         elementAModifier: { type: 'string', description: 'Ce qui doit changer, précisément.' },
         resultatAttendu: { type: 'string', description: 'Le résultat visé pour cet élément.' },
+        categorie: {
+          type: 'string',
+          enum: CATEGORIES_CORRECTION as unknown as string[],
+          description:
+            "Catégorie de la correction (ADR-021) — jamais un changement architectural (volume, toiture, ouverture, implantation) : ce cas exige reprendreDepuisSources, pas corrigerRendu.",
+        },
       },
-      required: ['elementAModifier', 'resultatAttendu'],
+      required: ['elementAModifier', 'resultatAttendu', 'categorie'],
     },
   },
   {

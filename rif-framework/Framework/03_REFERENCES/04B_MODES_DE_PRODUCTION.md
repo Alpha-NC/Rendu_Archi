@@ -2,7 +2,7 @@
 
 ID : LIB-006
 Type : LIB
-Version : V1.6
+Version : V1.7
 Statut : Review
 Niveau : L4
 Dossier : Framework/03_REFERENCES
@@ -26,6 +26,8 @@ Nomenclature officielle des modes (PRD V2.1 §8, source de vérité) :
 | Photomontage contrôlé | `photomontage_controle` |
 
 Pour la nomenclature des styles, voir LIB-005.
+
+**Note geometry-first (ADR-021) :** le workflow geometry-first distingue conceptuellement trois usages (retexturation fidèle à la vue projet, insertion dans un site réel, présentation à liberté visuelle assumée) qui se rapprochent de ces trois modes sans leur être identiques — en particulier, l'usage « liberté visuelle assumée » évoque le mode « Présentation générative » retiré par ADR-019. Aucun mode n'est ajouté, renommé ou réintroduit par cette note : la correspondance exacte reste une question produit ouverte, à trancher avec Évariste. Une source `model_3d`, quand elle existe et a été extraite, renforce l'autorité géométrique de ces trois modes sans en changer le périmètre (REF-001 §2).
 
 ## 2. Retexturation Revit
 
@@ -216,6 +218,8 @@ Lorsque plusieurs modes semblent possibles, l'usage le plus exigeant en fidélit
 - LIB-004 — 07_GUIDE_DECISION.md
 
 ## Historique
+
+V1.7 — Ajout d'une note geometry-first (§1, ADR-021) signalant la tension terminologique entre les trois usages du workflow geometry-first et les trois modes existants, sans ajouter, renommer ni réintroduire aucun mode — question ouverte pour le rendez-vous Évariste. Précise qu'une source `model_3d` extraite renforce l'autorité géométrique des modes existants sans changer leur périmètre.
 
 V1.6 — Harmonisation de la nomenclature des styles sur le PRD V2.1 §9 (ADR-020) dans les sections « Styles compatibles » : « Photomontage administratif » → **Administratif sobre**, « Présentation client » → **Présentation naturelle**. Ajout des tables de nomenclature officielle des modes (§1) et rappel explicite de la distinction mode/style, notamment entre Photomontage contrôlé (mode) et Administratif sobre (style) — jamais interchangeables.
 

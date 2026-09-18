@@ -11,6 +11,8 @@
  * quelle révision a servi de base à une génération donnée.
  */
 
+import type { AlignementCameraPhoto, GeometryConstraintPack, SourceModele3D } from './geometrie-3d'
+
 export type StatutValeur = 'provisional' | 'validated' | 'rejected' | 'unknown'
 
 /** Domaine d'autorité applicable à une donnée du ProjectState (PRD §10). */
@@ -46,6 +48,11 @@ export interface ValeurTracee<T> {
  * site_photo, axonometry, annotated_source, material_reference,
  * existing_building_photo, render et annotated_render. » Liste complète —
  * ne pas réduire à un sous-ensemble arbitraire.
+ *
+ * `model_3d` ajouté pour RIF V2 (workflow geometry-first, DECISIONS.md
+ * ADR-021) : la source géométrique 3D fait autorité sur l'architecture —
+ * voir lib/rif/geometrie-3d.ts. Format non figé (RVT candidat principal,
+ * IFC/OBJ/FBX possibles) — ce rôle ne présume aucun format précis.
  */
 export type RoleSource =
   | 'revit_view'
@@ -56,6 +63,7 @@ export type RoleSource =
   | 'existing_building_photo'
   | 'render'
   | 'annotated_render'
+  | 'model_3d'
 
 export interface SourceDossier {
   id: string
@@ -238,6 +246,15 @@ export interface ProjectState {
   reserves?: string[]
   variant_count: number
   canonical_result_id: string | null
+  /**
+   * RIF V2, workflow geometry-first (DECISIONS.md ADR-021) — voir
+   * lib/rif/geometrie-3d.ts pour le domaine complet. Absents tant que le
+   * dossier n'a pas encore de source géométrique 3D ou que l'extraction
+   * n'a pas encore tourné — jamais une valeur inventée par défaut.
+   */
+  modele3D?: SourceModele3D
+  geometryPack?: GeometryConstraintPack
+  alignment?: AlignementCameraPhoto
 }
 
 /** ProjectState vide, point de départ d'un dossier en BROUILLON. */

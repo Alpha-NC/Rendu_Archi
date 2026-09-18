@@ -5,6 +5,8 @@ import {
   authentifierRequete,
   obtenirDepot,
   repondreCorpsInvalide,
+  repondreDossierIntrouvable,
+  repondreErreur,
   verifierProprietaire,
 } from '../../_lib/reponse'
 import { NextResponse } from 'next/server'
@@ -20,12 +22,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dos
 
   const depot = obtenirDepot()
   const dossier = await depot.obtenirDossier(dossierId)
-  if (!dossier) {
-    return NextResponse.json(
-      { success: false, error: { code: 'dossier_introuvable', message: 'Dossier introuvable.' } },
-      { status: 404 },
-    )
-  }
+  if (!dossier) return repondreDossierIntrouvable()
   const refusProprietaire = verifierProprietaire(dossier.ownerId, user.id)
   if (refusProprietaire) return refusProprietaire
 
@@ -48,12 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
 
   const depot = obtenirDepot()
   const dossier = await depot.obtenirDossier(dossierId)
-  if (!dossier) {
-    return NextResponse.json(
-      { success: false, error: { code: 'dossier_introuvable', message: 'Dossier introuvable.' } },
-      { status: 404 },
-    )
-  }
+  if (!dossier) return repondreDossierIntrouvable()
   const refusProprietaire = verifierProprietaire(dossier.ownerId, user.id)
   if (refusProprietaire) return refusProprietaire
 
@@ -73,15 +65,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
   try {
     appelerModele = creerAppelModele()
   } catch (erreur) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: 'configuration_manquante',
-          message: erreur instanceof Error ? erreur.message : 'Configuration du modèle indisponible.',
-        },
-      },
-      { status: 500 },
+    return repondreErreur(
+      'configuration_manquante',
+      erreur instanceof Error ? erreur.message : 'Configuration du modèle indisponible.',
+      500,
     )
   }
 

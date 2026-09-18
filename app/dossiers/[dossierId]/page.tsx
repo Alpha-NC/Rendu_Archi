@@ -37,6 +37,7 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
             dossierId={dossier.id}
             sources={dossier.projectState.sources}
             directives={dossier.projectState.localized_directives}
+            modele3D={dossier.projectState.modele3D}
           />
           {/* PRD §9.4 : la fiche doit être visible — sans elle, la
               confirmation demandée juste au-dessus se ferait à l'aveugle. */}
