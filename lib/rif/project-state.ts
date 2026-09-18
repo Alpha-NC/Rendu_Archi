@@ -255,6 +255,14 @@ export interface ProjectState {
   modele3D?: SourceModele3D
   geometryPack?: GeometryConstraintPack
   alignment?: AlignementCameraPhoto
+  /**
+   * RIF V2, Lot 1 RenderTarget (DECISIONS.md D-22) — pointeur simple vers la
+   * cible de rendu courante de la conversation/du frontend, jamais une copie
+   * des données du RenderTarget lui-même (source de vérité :
+   * `render_targets`, lib/rif/depot.ts). Absent = comportement legacy
+   * (aucune cible associée aux nouvelles générations).
+   */
+  active_render_target_id?: string
 }
 
 /** ProjectState vide, point de départ d'un dossier en BROUILLON. */

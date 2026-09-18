@@ -1,6 +1,7 @@
 import type { ProjectState, RoleSource } from './project-state'
 import type { EtatDossier } from './etat-machine'
 import type { LigneRapport, VerdictControle } from './controle-qualite'
+import type { ParametresNouveauRenderTarget, RenderTarget } from './render-targets'
 
 /**
  * Interface d'accès aux données du dossier — sépare la logique métier
@@ -23,6 +24,15 @@ export interface ParametresNouvelleGeneration {
   projectStateRevision: number
   promptText: string
   sourceFileIds: string[]
+  /**
+   * Lot 1 RenderTarget (D-22) — `null`/absent pour une génération legacy
+   * (comportement inchangé : canonique dossier-large). Résolu côté
+   * `orchestrateur.ts`, jamais transmis tel quel par un appelant HTTP sans
+   * validation d'appartenance au dossier.
+   */
+  renderTargetId?: string | null
+  /** Génération dont celle-ci est la correction/reprise, si applicable. */
+  parentGenerationId?: string | null
 }
 
 export interface PatchGeneration {
@@ -93,6 +103,10 @@ export interface GenerationDetail {
   costActual: number | null
   startedAt: string
   completedAt: string | null
+  /** Lot 1 RenderTarget (D-22) — `null` pour une génération legacy. */
+  renderTargetId: string | null
+  /** Génération dont celle-ci prolonge (correction/reprise), ou `null`. */
+  parentGenerationId: string | null
 }
 
 export interface ParametresRapportQualite {
@@ -260,4 +274,19 @@ export interface DepotDossiers {
   obtenirHistoriqueConversation(dossierId: string): Promise<MessageConversation[]>
 
   ajouterMessageConversation(dossierId: string, message: MessageConversation): Promise<void>
+
+  /**
+   * Lot 1 RenderTarget (D-22) — crée une cible de rendu pour ce dossier.
+   * N'active jamais automatiquement la cible créée (voir
+   * `ProjectState.active_render_target_id`, mis à jour séparément par
+   * l'appelant si nécessaire) : création et activation restent deux actions
+   * distinctes, plus simples à raisonner et à tester séparément.
+   */
+  creerRenderTarget(params: ParametresNouveauRenderTarget): Promise<RenderTarget>
+
+  /** Cibles de rendu d'un dossier, les plus récentes d'abord. */
+  listerRenderTargets(dossierId: string): Promise<RenderTarget[]>
+
+  /** Une cible de rendu précise, ou `null`. Ne vérifie pas l'appartenance au dossier — à la charge de l'appelant (même contrat que `obtenirGeneration`). */
+  obtenirRenderTarget(renderTargetId: string): Promise<RenderTarget | null>
 }

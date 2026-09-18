@@ -1,14 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { creerProjectStateVide } from './project-state'
-import type { DepotDossiers, DossierActuel, PatchGeneration } from './depot'
+import type { DepotDossiers, DossierActuel, GenerationDetail, ParametresNouvelleGeneration, PatchGeneration } from './depot'
 import { executerGenerationOuCorrection, executerReprise } from './orchestrateur'
+import type { RenderTarget } from './render-targets'
 
 /** Dépôt en mémoire — aucune base réelle requise pour tester la logique métier. */
 function depotMemoire(dossierInitial: DossierActuel) {
   const evenements: Array<{ type: string; payload: unknown; actorId?: string }> = []
   const generations = new Map<string, { statut?: string; patch?: PatchGeneration }>()
+  const generationsDetail: GenerationDetail[] = []
+  const renderTargets = new Map<string, RenderTarget>()
   let dossier = { ...dossierInitial }
   let compteurGeneration = 0
+  let compteurCible = 0
 
   const depot: DepotDossiers = {
     async creerDossier() {
@@ -43,10 +47,29 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async resolverUrlsSignees(fileIds) {
       return fileIds.map((id) => `https://storage.test/${id}?signed=1`)
     },
-    async creerGeneration() {
+    async creerGeneration(params: ParametresNouvelleGeneration) {
       compteurGeneration += 1
       const id = `gen-${compteurGeneration}`
       generations.set(id, {})
+      generationsDetail.unshift({
+        id,
+        dossierId: params.dossierId,
+        type: params.type,
+        status: 'queued',
+        batchId: id,
+        variantIndex: 0,
+        isCanonical: false,
+        projectStateRevision: params.projectStateRevision,
+        promptText: params.promptText,
+        sourceFileIds: params.sourceFileIds,
+        resultFileId: null,
+        providerRequestId: null,
+        costActual: null,
+        startedAt: new Date().toISOString(),
+        completedAt: null,
+        renderTargetId: params.renderTargetId ?? null,
+        parentGenerationId: params.parentGenerationId ?? null,
+      })
       return { id }
     },
     async mettreAJourGeneration(id, patch) {
@@ -66,11 +89,11 @@ function depotMemoire(dossierInitial: DossierActuel) {
       return []
     },
     async ajouterMessageConversation() {},
-    async listerGenerations() {
-      return []
+    async listerGenerations(dossierId) {
+      return generationsDetail.filter((g) => g.dossierId === dossierId)
     },
-    async obtenirGeneration() {
-      return null
+    async obtenirGeneration(generationId) {
+      return generationsDetail.find((g) => g.id === generationId) ?? null
     },
     async definirGenerationCanonique() {},
     async obtenirAuditQualite() {
@@ -80,9 +103,31 @@ function depotMemoire(dossierInitial: DossierActuel) {
       return { id: 'audit-1' }
     },
     async enregistrerVerdictHumain() {},
+    async creerRenderTarget(params) {
+      compteurCible += 1
+      const id = `cible-${compteurCible}`
+      const maintenant = new Date().toISOString()
+      const cible: RenderTarget = {
+        id,
+        dossierId: params.dossierId,
+        name: params.name,
+        outputType: params.outputType,
+        canonicalGenerationId: null,
+        createdAt: maintenant,
+        updatedAt: maintenant,
+      }
+      renderTargets.set(id, cible)
+      return cible
+    },
+    async listerRenderTargets(dossierId) {
+      return [...renderTargets.values()].filter((c) => c.dossierId === dossierId)
+    },
+    async obtenirRenderTarget(renderTargetId) {
+      return renderTargets.get(renderTargetId) ?? null
+    },
   }
 
-  return { depot, evenements, generations, obtenirEtatCourant: () => dossier.etat }
+  return { depot, evenements, generations, generationsDetail, renderTargets, obtenirEtatCourant: () => dossier.etat }
 }
 
 const dossierPretAGenerer: DossierActuel = {
@@ -226,6 +271,165 @@ describe('executerGenerationOuCorrection', () => {
       actorId: 'user-1',
     })
     expect(resultatRefuse.success).toBe(false)
+  })
+})
+
+function mockerFetchImageSucces() {
+  globalThis.fetch = vi.fn(async () => ({
+    ok: true,
+    headers: new Headers({ 'content-type': 'image/png' }),
+    arrayBuffer: async () => new ArrayBuffer(8),
+  })) as unknown as typeof fetch
+}
+
+describe('executerGenerationOuCorrection — RenderTarget (Lot 1, D-22)', () => {
+  it("génération initiale sans cible ni active_render_target_id : reste legacy (render_target_id null)", async () => {
+    mockerFetchImageSucces()
+    const { depot, generationsDetail } = depotMemoire(dossierPretAGenerer)
+
+    const resultat = await executerGenerationOuCorrection(depot, falSucces, {
+      dossierId: 'd-1',
+      type: 'initial',
+      promptText: 'p',
+      sourceFileIds: [],
+      actorId: 'user-1',
+    })
+
+    expect(resultat.success).toBe(true)
+    expect(generationsDetail[0].renderTargetId).toBeNull()
+    expect(generationsDetail[0].parentGenerationId).toBeNull()
+  })
+
+  it('génération initiale avec renderTargetId explicite valide : la génération porte cette cible', async () => {
+    mockerFetchImageSucces()
+    const { depot, generationsDetail } = depotMemoire(dossierPretAGenerer)
+    const cible = await depot.creerRenderTarget({ dossierId: 'd-1', name: 'Perspective entrée', outputType: 'PHOTOREALISTIC_PERSPECTIVE' })
+
+    const resultat = await executerGenerationOuCorrection(depot, falSucces, {
+      dossierId: 'd-1',
+      type: 'initial',
+      promptText: 'p',
+      sourceFileIds: [],
+      actorId: 'user-1',
+      renderTargetId: cible.id,
+    })
+
+    expect(resultat.success).toBe(true)
+    expect(generationsDetail[0].renderTargetId).toBe(cible.id)
+  })
+
+  it("génération initiale sans renderTargetId explicite : utilise active_render_target_id du ProjectState", async () => {
+    mockerFetchImageSucces()
+    const { depot, generationsDetail } = depotMemoire(dossierPretAGenerer)
+    const cible = await depot.creerRenderTarget({ dossierId: 'd-1', name: 'Axonométrie générale', outputType: 'PHOTOREALISTIC_AXONOMETRY' })
+    await depot.mettreAJourProjectState('d-1', { ...dossierPretAGenerer.projectState, active_render_target_id: cible.id })
+
+    const resultat = await executerGenerationOuCorrection(depot, falSucces, {
+      dossierId: 'd-1',
+      type: 'initial',
+      promptText: 'p',
+      sourceFileIds: [],
+      actorId: 'user-1',
+    })
+
+    expect(resultat.success).toBe(true)
+    expect(generationsDetail[0].renderTargetId).toBe(cible.id)
+  })
+
+  it("refuse une cible inexistante ou d'un autre dossier — aucune génération orpheline créée", async () => {
+    const { depot, generationsDetail, evenements } = depotMemoire(dossierPretAGenerer)
+    // Cible réelle mais rattachée à un autre dossier.
+    const cibleAutreDossier = await depot.creerRenderTarget({ dossierId: 'd-2', name: 'Autre projet', outputType: 'PHOTOREALISTIC_PERSPECTIVE' })
+
+    const resultat = await executerGenerationOuCorrection(depot, falSucces, {
+      dossierId: 'd-1',
+      type: 'initial',
+      promptText: 'p',
+      sourceFileIds: [],
+      actorId: 'user-1',
+      renderTargetId: cibleAutreDossier.id,
+    })
+
+    expect(resultat.success).toBe(false)
+    expect(resultat.error?.code).toBe('cible_invalide')
+    expect(generationsDetail).toHaveLength(0)
+    expect(evenements.map((e) => e.type)).toEqual(['operation_refusee'])
+  })
+
+  it('une correction hérite toujours de la cible de la génération la plus récente (jamais une valeur séparée)', async () => {
+    mockerFetchImageSucces()
+    const { depot: depotACorriger, generationsDetail } = depotMemoire({ ...dossierPretAGenerer, etat: 'A_CORRIGER' })
+    const cible = await depotACorriger.creerRenderTarget({ dossierId: 'd-1', name: 'Perspective jardin', outputType: 'PHOTOREALISTIC_PERSPECTIVE' })
+    // Génération parente déjà existante, rattachée à la cible.
+    generationsDetail.push({
+      id: 'gen-parent',
+      dossierId: 'd-1',
+      type: 'initial',
+      status: 'succeeded',
+      batchId: 'gen-parent',
+      variantIndex: 0,
+      isCanonical: false,
+      projectStateRevision: 1,
+      promptText: 'p',
+      sourceFileIds: [],
+      resultFileId: 'file-1',
+      providerRequestId: null,
+      costActual: null,
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      renderTargetId: cible.id,
+      parentGenerationId: null,
+    })
+
+    const resultat = await executerGenerationOuCorrection(depotACorriger, falSucces, {
+      dossierId: 'd-1',
+      type: 'correction',
+      promptText: 'corrige la teinte',
+      sourceFileIds: [],
+      actorId: 'user-1',
+    })
+
+    expect(resultat.success).toBe(true)
+    const correction = generationsDetail.find((g) => g.type === 'correction')
+    expect(correction?.renderTargetId).toBe(cible.id)
+    expect(correction?.parentGenerationId).toBe('gen-parent')
+  })
+
+  it('une correction sur un dossier sans cible (legacy) reste sans cible', async () => {
+    mockerFetchImageSucces()
+    const { depot: depotACorriger, generationsDetail } = depotMemoire({ ...dossierPretAGenerer, etat: 'A_CORRIGER' })
+    generationsDetail.push({
+      id: 'gen-parent-legacy',
+      dossierId: 'd-1',
+      type: 'initial',
+      status: 'succeeded',
+      batchId: 'gen-parent-legacy',
+      variantIndex: 0,
+      isCanonical: false,
+      projectStateRevision: 1,
+      promptText: 'p',
+      sourceFileIds: [],
+      resultFileId: 'file-1',
+      providerRequestId: null,
+      costActual: null,
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      renderTargetId: null,
+      parentGenerationId: null,
+    })
+
+    const resultat = await executerGenerationOuCorrection(depotACorriger, falSucces, {
+      dossierId: 'd-1',
+      type: 'correction',
+      promptText: 'corrige la teinte',
+      sourceFileIds: [],
+      actorId: 'user-1',
+    })
+
+    expect(resultat.success).toBe(true)
+    const correction = generationsDetail.find((g) => g.type === 'correction')
+    expect(correction?.renderTargetId).toBeNull()
+    expect(correction?.parentGenerationId).toBe('gen-parent-legacy')
   })
 })
 

@@ -28,9 +28,17 @@ import { etatEffectifEnvironnement } from './contraintes-libertes'
 import type { GeometryConstraintPack } from './geometrie-3d'
 
 /** Version de la checklist appliquée (PRD §13.4 : `checklist_version`). */
-export const LIB_002_VERSION = 'LIB-002 V1.6'
+export const LIB_002_VERSION = 'LIB-002 V1.9'
 
-/** Grille commune LIB-002 V1.6 §3 — 16 critères, aucun ajout non documenté. */
+/**
+ * Grille commune LIB-002 V1.9 §3 — 18 critères. `elements_inventes` et
+ * `photorealisme` ajoutés au Lot 1 RenderTarget (correction d'une
+ * contradiction découverte en construisant les `QualityProfile` par
+ * `OutputType` — `elements_inventes` était déjà un défaut éliminatoire §5,
+ * jamais un critère noté ; `isolation` ne l'a jamais couvert, contrairement
+ * à ce qu'une note antérieure affirmait à tort). Aucun autre ajout non
+ * documenté.
+ */
 export const CRITERES_CONTROLE = [
   'cadrage',
   'perspective',
@@ -48,6 +56,8 @@ export const CRITERES_CONTROLE = [
   'annotations',
   'references_materiau',
   'isolation',
+  'elements_inventes',
+  'photorealisme',
 ] as const
 
 export type CritereControle = (typeof CRITERES_CONTROLE)[number]
@@ -70,10 +80,20 @@ const CRITERES_STRUCTURELS = new Set<CritereControle>([
   'terrain',
   'environnement',
   'isolation',
+  // Un élément inventé (mur, ouverture, volume absent des sources) est par
+  // nature une dérive géométrique structurelle, jamais une simple retouche
+  // locale — LIB-002 §5 le classe déjà parmi les défauts éliminatoires.
+  'elements_inventes',
 ])
 
-/** LIB-002 §2 — les quatre états possibles pour un critère. */
-export type EtatCritere = 'conforme' | 'reserve' | 'non_conforme' | 'non_applicable'
+/**
+ * LIB-002 §2 V1.9 — cinq états possibles pour un critère. `non_evalue`
+ * ajouté au Lot 1 RenderTarget : un critère non mesurable avec les moyens
+ * actuels (image insuffisante, méthode non branchée) ne doit jamais devenir
+ * `conforme` par défaut — c'est précisément le risque que cet état honnête
+ * évite (prémortem #3, voir l'en-tête de ce fichier).
+ */
+export type EtatCritere = 'conforme' | 'reserve' | 'non_conforme' | 'non_applicable' | 'non_evalue'
 
 /** LIB-002 §7 — format de rapport, une ligne par critère évalué. */
 export interface LigneRapport {
@@ -213,6 +233,7 @@ const CRITERES_GEOMETRIQUES = new Set<CritereControle>([
   'toiture',
   'ouvertures',
   'implantation',
+  'elements_inventes',
 ])
 
 /**

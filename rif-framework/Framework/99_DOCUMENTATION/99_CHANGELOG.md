@@ -2,7 +2,7 @@
 
 ID : DOC-003  
 Type : DOC  
-Version : V1.8  
+Version : V1.9  
 Statut : Review  
 Niveau : L5  
 Dossier : Framework/99_DOCUMENTATION
@@ -10,6 +10,21 @@ Dossier : Framework/99_DOCUMENTATION
 ---
 
 # Journal des versions
+
+## V1.9 — Review — 18 septembre 2026 (Lot 1 RenderTarget)
+
+Correction découverte en implémentant le modèle RenderTarget/OutputType/QualityProfile (ADR-022) — 05_CHECKLIST_CONTROLE.md uniquement.
+
+### Modifications
+
+- correction : la note V1.8 sur les types de sortie citait à tort `isolation` pour « absence d'éléments inventés » ; `isolation` ne désigne que la contamination inter-dossiers ;
+- ajout du critère **Éléments inventés** à la grille commune §3 (promu du défaut éliminatoire §5) ;
+- ajout du critère **Photoréalisme** à la grille commune §3 ;
+- ajout de l'état **Non évalué** (§2, 5ᵉ état — une absence de mesure ne devient jamais Conforme).
+
+### Décisions
+
+Aucune nouvelle ADR — correction documentaire d'ADR-022.
 
 ## V1.8 — Review — 18 septembre 2026 (soir, post-RDV Évariste)
 

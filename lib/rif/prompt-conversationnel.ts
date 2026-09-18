@@ -1,6 +1,7 @@
 import type { ParcoursCollecte, QuestionAdditionnelle, TraitementQuestion } from './collecte-conditionnelle'
 import type { ModeProduction, StyleRendu } from './project-state'
 import { CATEGORIES_CORRECTION } from './geometrie-3d'
+import type { OutputType } from './render-targets'
 
 /**
  * Construction du prompt système de l'assistant conversationnel RIF-App.
@@ -73,13 +74,27 @@ export interface ContextePromptConversationnel {
   styleResolu: StyleRendu | 'a_confirmer' | null
   usageAdministratif: boolean
   parcours: ParcoursCollecte
+  /**
+   * Lot 1 RenderTarget (D-22) — cible de rendu active du dossier, ou `null`
+   * si aucune (dossier legacy ou pas encore de cible créée). Purement
+   * informatif : le modèle ne peut jamais choisir une cible autrement que
+   * via `renderTargetId` sur `genererRendu` ou l'activation explicite
+   * (`.../render-targets/[id]/activer`, action humaine hors conversation).
+   */
+  activeRenderTarget: { id: string; name: string; outputType: OutputType } | null
+}
+
+function sectionCibleRendu(cible: ContextePromptConversationnel['activeRenderTarget']): string {
+  return cible
+    ? `Cible de rendu active : « ${cible.name} » (${cible.outputType}, id ${cible.id}). Une nouvelle génération (genererRendu) vise cette cible par défaut, sauf si tu précises un autre renderTargetId.`
+    : "Aucune cible de rendu active — ce dossier fonctionne encore en mode standard (une seule ligne de générations, pas de cible nommée)."
 }
 
 export function construireSystemPrompt(contexte: ContextePromptConversationnel): string {
   return [
     "Tu es l'assistant conversationnel de RIF-App, l'implémentation du Rendering Intelligence Framework (RIF) pour Évariste Blasco. Tu accompagnes la production d'un rendu architectural photoréaliste à partir d'une vue Revit et, si nécessaire, d'une photographie de site.",
     `PRINCIPES NON NÉGOCIABLES\n${PRINCIPES_NON_NEGOCIABLES.map((p, i) => `${i + 1}. ${p}`).join('\n')}`,
-    `CONTEXTE COURANT\nMode pressenti : ${contexte.modeResolu ?? 'non déterminé'}\nStyle pressenti : ${contexte.styleResolu ?? 'non déterminé'}\nUsage administratif : ${contexte.usageAdministratif ? 'oui' : 'non'}`,
+    `CONTEXTE COURANT\nMode pressenti : ${contexte.modeResolu ?? 'non déterminé'}\nStyle pressenti : ${contexte.styleResolu ?? 'non déterminé'}\nUsage administratif : ${contexte.usageAdministratif ? 'oui' : 'non'}\n${sectionCibleRendu(contexte.activeRenderTarget)}`,
     sectionPlanCollecte(contexte.parcours, contexte.parcours.questionsAdditionnelles),
     RAPPEL_APPEL_OUTIL.join('\n\n'),
     "Parle simplement, directement, une étape à la fois. N'invente jamais une donnée absente des sources ou de la conversation.",
@@ -91,8 +106,14 @@ export const OUTILS_CONVERSATIONNELS = [
   {
     name: 'genererRendu',
     description:
-      "Lance la première génération d'un rendu à partir de la fiche projet confirmée. N'accepte aucun paramètre de contenu — le prompt technique est construit par le backend.",
-    input_schema: { type: 'object' as const, properties: {}, required: [] },
+      "Lance la première génération d'un rendu à partir de la fiche projet confirmée. N'accepte aucun paramètre de contenu — le prompt technique est construit par le backend. renderTargetId (optionnel) vise une cible de rendu précise si le dossier en a plusieurs ; sans lui, la cible active du dossier est utilisée, ou aucune (mode standard).",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        renderTargetId: { type: 'string', description: 'Identifiant de la cible de rendu visée, si le dossier en a plusieurs.' },
+      },
+      required: [],
+    },
   },
   {
     name: 'corrigerRendu',

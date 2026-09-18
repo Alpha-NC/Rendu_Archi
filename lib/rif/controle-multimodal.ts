@@ -18,13 +18,14 @@ import type { ProjectState } from './project-state'
  * de raccourci vers l'export administratif (PRD §15.1/§15.3, garde-fou
  * inchangé dans autoriserExportAdministratif).
  *
- * Arbitrage documenté (mission backend-completion §8/§9) : la grille
- * `EtatCritere` actuelle n'a que 4 états (`conforme`/`reserve`/
- * `non_conforme`/`non_applicable`), pas de 5ᵉ état « non évalué » distinct.
- * Un critère que le modèle ne peut pas juger (image insuffisante, angle
- * absent...) est classé `non_applicable`, jamais `conforme` par défaut, et
- * le motif exact reste dans `ecartObserve` pour la revue humaine. À
- * raffiner avec un état dédié si ce cas devient fréquent en usage réel.
+ * Lot 1 RenderTarget (D-22) : `EtatCritere` porte désormais un 5ᵉ état,
+ * `non_evalue` — un critère que le modèle ne peut pas juger (image
+ * insuffisante, angle absent, méthode non branchée) est classé
+ * `non_evalue`, distinct de `non_applicable` (hors sujet pour ce rendu) et
+ * jamais `conforme` par défaut ; le motif exact reste dans `ecartObserve`
+ * pour la revue humaine. `criteresApplicables` (optionnel) restreint la
+ * grille au `QualityProfile` de la cible de rendu quand elle en a une —
+ * absent, la grille complète LIB-002 s'applique (mode legacy).
  *
  * NOT_VERIFIED_LIVE : non testée contre l'API Anthropic réelle
  * (ANTHROPIC_API_KEY absente de cet environnement au moment d'écrire ce
@@ -42,6 +43,14 @@ export interface ContexteControleMultimodal {
   sources: ImageEntree[]
   projectState: ProjectState
   usageAdministratif: boolean
+  /**
+   * Lot 1 RenderTarget (D-22) : sous-ensemble de critères à évaluer,
+   * dérivé du `QualityProfile` de la cible de rendu (jamais transmis par le
+   * frontend — voir render-targets.ts::criteresApplicables). Absent pour une
+   * génération sans RenderTarget (legacy) : la grille complète s'applique,
+   * comportement inchangé.
+   */
+  criteresApplicables?: CritereControle[]
 }
 
 export type ClassifieurQualite = (contexte: ContexteControleMultimodal) => Promise<LigneRapport[]>
@@ -71,13 +80,14 @@ export function interpreterReponseControle(entree: unknown): LigneRapport[] {
   })
 }
 
-const ETATS_CRITERE = ['conforme', 'reserve', 'non_conforme', 'non_applicable'] as const
+const ETATS_CRITERE = ['conforme', 'reserve', 'non_conforme', 'non_applicable', 'non_evalue'] as const
 
 export function creerClassifieurQualite(apiKey = process.env.ANTHROPIC_API_KEY): ClassifieurQualite {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY absente des variables d'environnement serveur.")
   const client = new Anthropic({ apiKey })
 
   return async (contexte) => {
+    const criteres = contexte.criteresApplicables ?? CRITERES_CONTROLE
     const reponse = await client.messages.create({
       model: 'claude-sonnet-5',
       max_tokens: 4096,
@@ -86,7 +96,7 @@ export function creerClassifieurQualite(apiKey = process.env.ANTHROPIC_API_KEY):
         {
           name: 'evaluerCriteres',
           description:
-            "Évalue le rendu généré contre la grille officielle LIB-002 en le comparant aux sources et au ProjectState fournis. N'invente jamais un critère hors de la liste fournie ni un état 'conforme' par défaut pour un critère qui ne peut pas être jugé — classe-le non_applicable avec le motif dans ecartObserve.",
+            "Évalue le rendu généré contre la grille officielle LIB-002 en le comparant aux sources et au ProjectState fournis. N'invente jamais un critère hors de la liste fournie ni un état 'conforme' par défaut pour un critère qui ne peut pas être jugé — classe-le non_evalue (mesure impossible) ou non_applicable (hors sujet pour ce rendu) avec le motif dans ecartObserve.",
           input_schema: {
             type: 'object',
             properties: {
@@ -95,7 +105,7 @@ export function creerClassifieurQualite(apiKey = process.env.ANTHROPIC_API_KEY):
                 items: {
                   type: 'object',
                   properties: {
-                    critere: { type: 'string', enum: CRITERES_CONTROLE as unknown as string[] },
+                    critere: { type: 'string', enum: criteres as unknown as string[] },
                     etat: { type: 'string', enum: ETATS_CRITERE as unknown as string[] },
                     ecartObserve: { type: 'string' },
                     actionRecommandee: { type: 'string' },
@@ -127,6 +137,12 @@ export function creerClassifieurQualite(apiKey = process.env.ANTHROPIC_API_KEY):
             {
               type: 'text',
               text: `USAGE ÉVALUÉ : ${contexte.usageAdministratif ? 'administratif — aucune réserve tolérée (LIB-002 §7)' : 'présentation'}.`,
+            },
+            {
+              type: 'text',
+              text: contexte.criteresApplicables
+                ? `CRITÈRES À ÉVALUER (QualityProfile de la cible de rendu, D-22) : ${criteres.join(', ')}. N'évalue que ceux-ci.`
+                : `CRITÈRES À ÉVALUER : la grille complète (${criteres.join(', ')}) — aucune cible de rendu associée à cette génération (mode legacy).`,
             },
           ],
         },

@@ -17,6 +17,15 @@ import type {
 } from './depot'
 import { creerProjectStateVide } from './project-state'
 import type { EtatDossier } from './etat-machine'
+import type { ParametresNouveauRenderTarget, RenderTarget } from './render-targets'
+
+/**
+ * Sentinelle utilisée pour normaliser `render_target_id is null` dans les
+ * comparaisons/index d'unicité (voir neon/migrations/0002_render_targets.sql)
+ * — un dossier n'aura jamais de vraie cible avec cet id (le générateur
+ * `gen_random_uuid()` de Postgres ne le produit jamais).
+ */
+const CIBLE_LEGACY_SENTINELLE = '00000000-0000-0000-0000-000000000000'
 
 function mapGeneration(d: Record<string, unknown>): GenerationDetail {
   return {
@@ -35,6 +44,20 @@ function mapGeneration(d: Record<string, unknown>): GenerationDetail {
     costActual: d.cost_actual != null ? Number(d.cost_actual) : null,
     startedAt: (d.started_at as Date).toISOString(),
     completedAt: d.completed_at ? (d.completed_at as Date).toISOString() : null,
+    renderTargetId: (d.render_target_id as string | null) ?? null,
+    parentGenerationId: (d.parent_generation_id as string | null) ?? null,
+  }
+}
+
+function mapRenderTarget(d: Record<string, unknown>): RenderTarget {
+  return {
+    id: d.id as string,
+    dossierId: d.dossier_id as string,
+    name: d.name as string,
+    outputType: d.output_type as RenderTarget['outputType'],
+    canonicalGenerationId: (d.canonical_generation_id as string | null) ?? null,
+    createdAt: (d.created_at as Date).toISOString(),
+    updatedAt: (d.updated_at as Date).toISOString(),
   }
 }
 
@@ -197,8 +220,8 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
 
     async creerGeneration(params: ParametresNouvelleGeneration) {
       const lignes = await sql`
-        insert into generations (dossier_id, type, status, project_state_revision, prompt_text, source_file_ids)
-        values (${params.dossierId}, ${params.type}, 'queued', ${params.projectStateRevision}, ${params.promptText}, ${JSON.stringify(params.sourceFileIds)}::jsonb)
+        insert into generations (dossier_id, type, status, project_state_revision, prompt_text, source_file_ids, render_target_id, parent_generation_id)
+        values (${params.dossierId}, ${params.type}, 'queued', ${params.projectStateRevision}, ${params.promptText}, ${JSON.stringify(params.sourceFileIds)}::jsonb, ${params.renderTargetId ?? null}, ${params.parentGenerationId ?? null})
         returning id
       `
       const id = lignes[0]?.id as string | undefined
@@ -269,7 +292,8 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
       const lignes = await sql`
         select id, dossier_id, type, status, batch_id, variant_index, is_canonical,
                project_state_revision, prompt_text, source_file_ids, result_file_id,
-               provider_request_id, cost_actual, started_at, completed_at
+               provider_request_id, cost_actual, started_at, completed_at,
+               render_target_id, parent_generation_id
         from generations where dossier_id = ${dossierId} order by started_at desc
       `
       return lignes.map(mapGeneration)
@@ -279,7 +303,8 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
       const lignes = await sql`
         select id, dossier_id, type, status, batch_id, variant_index, is_canonical,
                project_state_revision, prompt_text, source_file_ids, result_file_id,
-               provider_request_id, cost_actual, started_at, completed_at
+               provider_request_id, cost_actual, started_at, completed_at,
+               render_target_id, parent_generation_id
         from generations where id = ${generationId}
       `
       const data = lignes[0]
@@ -287,16 +312,42 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
     },
 
     async definirGenerationCanonique(dossierId, generationId, resultFileId) {
-      // Trois instructions, une seule transaction : jamais deux canoniques
-      // (ou zéro pendant un instant observable), et project_state.canonical_result_id
-      // (champ préexistant de ProjectState, jamais branché avant ce lot)
-      // reste synchronisé avec generations.is_canonical.
+      // Lot 1 RenderTarget (D-22) : la canonique est désormais scopée par
+      // cible de rendu, sauf pour une génération legacy (render_target_id
+      // null), qui garde EXACTEMENT le comportement D-19 d'origine (au plus
+      // une canonique par dossier parmi les générations sans cible — jamais
+      // mélangée avec les canoniques des cibles réelles). L'index
+      // `generations_une_canonique_par_cible` (migration 0002) applique la
+      // même règle au niveau base, ceci n'est que la mise à jour applicative.
+      const cible = await sql`select render_target_id from generations where id = ${generationId}`
+      const renderTargetId = (cible[0]?.render_target_id as string | null) ?? null
+
       const canoniqueJson = resultFileId ? JSON.stringify(resultFileId) : 'null'
-      await sql.transaction([
-        sql`update generations set is_canonical = false where dossier_id = ${dossierId} and is_canonical = true`,
+      const instructions = [
+        // Même expression que l'index partiel de la migration 0002 — pour
+        // que « même groupe » soit défini une seule fois, identiquement.
+        sql`
+          update generations set is_canonical = false
+          where dossier_id = ${dossierId}
+            and is_canonical = true
+            and coalesce(render_target_id, ${CIBLE_LEGACY_SENTINELLE}::uuid) = coalesce(${renderTargetId}::uuid, ${CIBLE_LEGACY_SENTINELLE}::uuid)
+        `,
         sql`update generations set is_canonical = true where id = ${generationId}`,
-        sql`update dossiers set project_state = jsonb_set(project_state, '{canonical_result_id}', ${canoniqueJson}::jsonb), updated_at = now() where id = ${dossierId}`,
-      ])
+      ]
+      if (renderTargetId) {
+        // Cible réelle : la canonique se lit sur render_targets, jamais sur
+        // project_state.canonical_result_id (qui reste le pointeur legacy
+        // dossier-large, un axe distinct — voir RenderTarget.canonicalGenerationId).
+        instructions.push(
+          sql`update render_targets set canonical_generation_id = ${generationId}, updated_at = now() where id = ${renderTargetId}`,
+        )
+      } else {
+        // Génération legacy : comportement D-19 inchangé.
+        instructions.push(
+          sql`update dossiers set project_state = jsonb_set(project_state, '{canonical_result_id}', ${canoniqueJson}::jsonb), updated_at = now() where id = ${dossierId}`,
+        )
+      }
+      await sql.transaction(instructions)
     },
 
     async obtenirAuditQualite(generationId) {
@@ -358,6 +409,34 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
       await sql`
         insert into messages (dossier_id, role, content) values (${dossierId}, ${message.role}, ${message.content})
       `
+    },
+
+    async creerRenderTarget(params: ParametresNouveauRenderTarget) {
+      const lignes = await sql`
+        insert into render_targets (dossier_id, name, output_type)
+        values (${params.dossierId}, ${params.name}, ${params.outputType})
+        returning id, dossier_id, name, output_type, canonical_generation_id, created_at, updated_at
+      `
+      const data = lignes[0]
+      if (!data) throw new Error('Création de la cible de rendu impossible.')
+      return mapRenderTarget(data)
+    },
+
+    async listerRenderTargets(dossierId) {
+      const lignes = await sql`
+        select id, dossier_id, name, output_type, canonical_generation_id, created_at, updated_at
+        from render_targets where dossier_id = ${dossierId} order by created_at desc
+      `
+      return lignes.map(mapRenderTarget)
+    },
+
+    async obtenirRenderTarget(renderTargetId) {
+      const lignes = await sql`
+        select id, dossier_id, name, output_type, canonical_generation_id, created_at, updated_at
+        from render_targets where id = ${renderTargetId}
+      `
+      const data = lignes[0]
+      return data ? mapRenderTarget(data) : null
     },
   }
 }

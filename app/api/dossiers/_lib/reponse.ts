@@ -65,6 +65,19 @@ export function verifierGenerationDuDossier(generationDossierId: string, dossier
   return null
 }
 
+/**
+ * Même défense en profondeur que `verifierGenerationDuDossier`, pour les
+ * cibles de rendu (Lot 1 RenderTarget, D-22) : un `renderTargetId` est un
+ * identifiant global — sans ce contrôle, le propriétaire du dossier A
+ * pourrait référencer une cible du dossier B.
+ */
+export function verifierRenderTargetDuDossier(renderTargetDossierId: string, dossierId: string) {
+  if (renderTargetDossierId !== dossierId) {
+    return repondreErreur('cible_introuvable', 'Cible de rendu introuvable dans ce dossier.', 404)
+  }
+  return null
+}
+
 export function obtenirDepot() {
   return creerDepotNeon(sql)
 }
@@ -78,6 +91,9 @@ const STATUT_PAR_CODE: Record<string, number> = {
   stockage_echec: 502,
   timeout: 504,
   generation_echouee: 422,
+  // Lot 1 RenderTarget (D-22) : renderTargetId fourni mais introuvable ou
+  // n'appartenant pas à ce dossier — erreur de requête, pas un conflit d'état.
+  cible_invalide: 400,
 }
 
 /** Traduit un ResultatOperation en réponse HTTP, sans jamais renvoyer 200 sur un success:false. */

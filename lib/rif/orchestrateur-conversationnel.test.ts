@@ -78,6 +78,15 @@ function depotMemoire(dossierInitial: DossierActuel) {
       return { id: 'audit-1' }
     },
     async enregistrerVerdictHumain() {},
+    async creerRenderTarget() {
+      throw new Error('Non utilisé dans ces tests.')
+    },
+    async listerRenderTargets() {
+      return []
+    },
+    async obtenirRenderTarget() {
+      return null
+    },
   }
 
   return { depot, evenements, messages, obtenirDossierCourant: () => dossier }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { calculerVerdictPropose, LIB_002_VERSION, type RapportControle } from '@/lib/rif/controle-qualite'
 import { creerClassifieurQualite, type ImageEntree } from '@/lib/rif/controle-multimodal'
+import { criteresApplicables } from '@/lib/rif/render-targets'
 import {
   authentifierRequete,
   obtenirDepot,
@@ -87,6 +88,13 @@ export async function POST(
   }
   const [renduImage, ...sourcesImages] = images
 
+  // Lot 1 RenderTarget (D-22) §18 : le QualityProfile est dérivé côté
+  // backend depuis la cible de rendu de la génération — jamais transmis par
+  // le frontend. Sans cible (génération legacy), la grille complète
+  // s'applique, comportement inchangé.
+  const renderTarget = generation.renderTargetId ? await depot.obtenirRenderTarget(generation.renderTargetId) : null
+  const criteres = criteresApplicables(renderTarget?.outputType)
+
   let lignes
   try {
     lignes = await classifieur({
@@ -94,6 +102,7 @@ export async function POST(
       sources: sourcesImages,
       projectState: dossier.projectState,
       usageAdministratif: dossier.usageAdministratif,
+      criteresApplicables: renderTarget ? criteres : undefined,
     })
   } catch (erreur) {
     await depot.journaliserEvenement(
@@ -131,5 +140,19 @@ export async function POST(
     user.id,
   )
 
-  return NextResponse.json({ success: true, auditId, report: lignes, verdictProposed: verdict, motif })
+  return NextResponse.json({
+    success: true,
+    auditId,
+    report: lignes,
+    verdictProposed: verdict,
+    motif,
+    // Lot 1 RenderTarget (D-22) §10 : le rapport expose désormais sa cible,
+    // son OutputType et les critères réellement applicables — calculés à la
+    // demande, jamais dupliqués dans la ligne `quality_audits` elle-même
+    // (dérivables depuis generation_id à tout moment, comme render_target_id
+    // sur `generations`).
+    renderTargetId: generation.renderTargetId,
+    outputType: renderTarget?.outputType ?? null,
+    criteresApplicables: criteres,
+  })
 }

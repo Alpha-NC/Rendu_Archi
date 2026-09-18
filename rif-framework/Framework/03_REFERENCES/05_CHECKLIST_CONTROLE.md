@@ -2,7 +2,7 @@
 
 ID : LIB-002  
 Type : LIB  
-Version : V1.7  
+Version : V1.8  
 Statut : Review  
 Niveau : L4  
 Dossier : Framework/03_REFERENCES
@@ -17,7 +17,7 @@ Ce document définit la méthode officielle d’évaluation d’un rendu archite
 
 Le contrôle est effectué selon l’usage et le mode de production déclarés.
 
-**Note — type de sortie (ADR-022, RDV Évariste 18.09.2026) :** quand la génération contrôlée porte un type de sortie `PHOTOREALISTIC_AXONOMETRY` (docs/PRD_RIF_V2_GEOMETRY_FIRST.md §14) plutôt que `PHOTOREALISTIC_PERSPECTIVE`, les critères prioritaires de la grille commune (§3) changent de sous-ensemble, sans qu'aucun critère nouveau soit ajouté : priorité à `toiture` (faîtages, pans), `volumes`, `terrain`/`environnement` (cohérence spatiale, relations entre bâtiments) et `isolation` (absence d'éléments inventés) ; `cadrage`/`perspective` au sens photographique du terme perdent leur priorité (une axonométrie n'a pas de point de vue caméra réel à comparer). Pour une perspective, la priorité §13.1 du PRD reste inchangée (implantation, cadrage, perspective, volumes, ouvertures, toiture).
+**Note — type de sortie (ADR-022, RDV Évariste 18.09.2026 ; correction Lot 1 RenderTarget) :** quand la génération contrôlée porte un type de sortie `PHOTOREALISTIC_AXONOMETRY` (docs/PRD_RIF_V2_GEOMETRY_FIRST.md §14) plutôt que `PHOTOREALISTIC_PERSPECTIVE`, les critères prioritaires de la grille commune (§3) changent de sous-ensemble : priorité à `toiture` (faîtages, pans), `volumes`, `implantation` (cohérence spatiale, relations entre bâtiments), `environnement` et `éléments inventés` ; `cadrage`/`perspective` au sens photographique du terme perdent leur priorité (une axonométrie n'a pas de point de vue caméra réel à comparer). Pour une perspective, la priorité §13.1 du PRD reste inchangée (implantation, cadrage, perspective, volumes, ouvertures, toiture), complétée par `éléments inventés` et `photoréalisme`. **Correction (Lot 1, 18.09.2026) :** la version V1.7 de cette note citait à tort `isolation` pour « absence d'éléments inventés » — `isolation` désigne exclusivement la contamination inter-dossiers (§3, « aucune source ou consigne issue d'un autre dossier ») et n'a jamais eu ce sens. Le concept « éléments inventés », déjà présent comme défaut éliminatoire (§5) mais absent de la grille commune comme critère notable, devient un critère à part entière (§3) — voir Historique.
 
 ## 2. États
 
@@ -26,7 +26,8 @@ Chaque critère reçoit un état :
 - Conforme ;
 - Réserve ;
 - Non conforme ;
-- Non applicable.
+- Non applicable ;
+- **Non évalué** (Lot 1 RenderTarget, 18.09.2026) — critère non mesurable avec les moyens actuels (image insuffisante, angle absent, méthode d'évaluation non encore branchée). Jamais interprété comme Conforme : l'absence de donnée ne doit jamais devenir une conformité.
 
 **Note geometry-first (ADR-021) :** pour les critères dont la « Source de contrôle » est « Source géométrique », quand une source `model_3d` a été réellement extraite (pack de contraintes géométriques disponible), ce pack devient la référence de comparaison prioritaire — plus précise qu'une vue 2D dérivée. En son absence, ces critères restent contrôlés depuis la source géométrique 2D désignée comme aujourd'hui (aucune dégradation, mode legacy explicite). Le contrôle multimodal (Claude) reste la méthode d'évaluation, jamais la seule autorité future sur la conformité géométrique quand des données structurées existent pour trancher.
 
@@ -50,6 +51,8 @@ Chaque critère reçoit un état :
 | Annotations | Sources annotées | marque absente du rendu, directive correctement appliquée |
 | Références matériau | Référence ciblée | apparence correcte, aucune dérive de géométrie ou composition |
 | Isolation | État et journal | aucune source ou consigne issue d'un autre dossier ou essai |
+| Éléments inventés | État du projet / source géométrique | mur, ouverture, volet, marche, escalier, équipement, annexe ou volume absent des sources validées (Lot 1, promu depuis le défaut éliminatoire §5, jamais un critère distinct auparavant) |
+| Photoréalisme | Rendu | crédibilité matière/lumière/ombres — objectif plein en perspective, qualité visuelle suffisante en axonométrie (pas un objectif premier), jamais évalué au détriment de la fidélité géométrique |
 
 ## 4. Contrôle par mode
 
@@ -139,6 +142,8 @@ Pour un écart mineur, le rapport peut conclure `Acceptable avec réserve` pour 
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
 
 ## Historique
+
+V1.8 — Lot 1 RenderTarget (18.09.2026), implémentation du modèle métier RenderTarget/OutputType/QualityProfile décidé par ADR-022. Contradiction découverte et corrigée : la note V1.7 (§1) citait à tort `isolation` pour « absence d'éléments inventés » — corrigé, `isolation` ne désigne que la contamination inter-dossiers. Ajouts : état **Non évalué** (§2, 5ᵉ état — une absence de mesure ne doit jamais devenir Conforme) ; critères **Éléments inventés** (promu du défaut éliminatoire §5 vers la grille commune §3) et **Photoréalisme** (§3, nouveau) — nécessaires pour exprimer les `QualityProfile` par `OutputType` (perspective/axonométrie) sans dénaturer un critère existant. Aucun format 3D ni fournisseur choisi par cette version.
 
 V1.7 — Ajout d'une note (§1, ADR-022) : le type de sortie (perspective/axonométrie) réoriente les critères prioritaires de la grille commune vers un sous-ensemble différent, sans ajouter de nouveau critère.
 

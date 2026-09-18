@@ -1,6 +1,6 @@
 # RIF-App — Contrats backend V2 (geometry-first)
 
-**Statut :** Draft — créé le 18 septembre 2026, mis à jour le 18 septembre 2026 (soir, post-RDV Évariste, §17-19). Décrit le backend réellement en place, y compris le workflow geometry-first (ADR-021/022, D-20/D-21). Objectif explicite : permettre à Codex de construire/adapter le frontend sans deviner un contrat. **Constat au 18.09 (soir) : le frontend desktop construit depuis (`ProjectCockpit.tsx`, `ProjectDashboard.tsx`) respecte déjà ce contrat sans sur-promettre — voir §17 pour l'état à jour des gaps.**
+**Statut :** Draft — créé le 18 septembre 2026, mis à jour le 18 septembre 2026 (soir, post-RDV Évariste, §17-19) puis le 18 septembre 2026 (Lot 1 RenderTarget, §9bis, §10, §11, §16-18). Décrit le backend réellement en place, y compris le workflow geometry-first (ADR-021/022, D-20/D-21/D-22) et le modèle `Project → RenderTarget → Generations` (D-22). Objectif explicite : permettre à Codex de construire/adapter le frontend sans deviner un contrat. **Constat Lot 1 : `RenderTarget`/`OutputType`/`QualityProfile` sont désormais réellement implémentés côté backend (§9bis) ; aucune UI ne les exploite encore (chantier `feat/rif-ux-ui-desktop`, non touché par ce lot, §17 point 7).**
 
 **Format 3D final : À CONFIRMER.** RVT est le candidat principal, IFC une alternative possible. Aucun fournisseur d'extraction géométrique n'est choisi. Rien dans ce contrat ne doit être lu comme un engagement sur l'un ou l'autre.
 
@@ -187,12 +187,62 @@ Corps `POST .../corriger` : `{ elementAModifier: string, resultatAttendu: string
 
 ---
 
+## 9bis. RenderTarget / OutputType / QualityProfile (D-22, Lot 1 — implémenté)
+
+**`Project → RenderTarget → Generations`.** Une cible de rendu (`RenderTarget`) regroupe les générations qui visent le même résultat (« Perspective entrée », « Perspective jardin », « Axonométrie générale »...). Chaque cible a au plus une génération canonique (§10.4). Contrairement à ce qu'un contrat antérieur de ce document décrivait, **ce n'est plus un concept seulement projeté — il est implémenté** (`lib/rif/render-targets.ts`, `neon/migrations/0002_render_targets.sql`).
+
+### 9bis.1 OutputType
+
+Exactement deux valeurs, aucune autre n'existe :
+
+```
+PHOTOREALISTIC_PERSPECTIVE | PHOTOREALISTIC_AXONOMETRY
+```
+
+### 9bis.2 Routes
+
+- `GET /api/dossiers/[dossierId]/render-targets` → `{ success:true, renderTargets: RenderTarget[] }`.
+- `POST /api/dossiers/[dossierId]/render-targets` — corps `{ name: string, outputType: OutputType }` (les deux requis) → `201 { success:true, renderTarget }`.
+- `GET /api/dossiers/[dossierId]/render-targets/[renderTargetId]` → `{ success:true, renderTarget, generations: GenerationDetail[] }` (générations de cette cible uniquement, les plus récentes d'abord).
+- `POST /api/dossiers/[dossierId]/render-targets/[renderTargetId]/activer` — pointe `ProjectState.active_render_target_id` vers cette cible (`repondreOperation`, `{success:true}`). Action **distincte** de la création : créer une cible ne l'active pas automatiquement.
+- Pas de `DELETE` — les implications sur les générations déjà rattachées à une cible supprimée n'ont pas été auditées, volontairement hors périmètre.
+
+```ts
+RenderTarget {
+  id, dossierId, name: string, outputType: OutputType,
+  canonicalGenerationId: string | null,
+  createdAt, updatedAt,
+}
+```
+
+### 9bis.3 Rattachement d'une génération à une cible
+
+- **Génération initiale** (`POST .../generer` ou outil `genererRendu`) : corps/paramètre optionnel `{ renderTargetId?: string }`. Résolution serveur : `renderTargetId` explicite > `ProjectState.active_render_target_id` > `null` (legacy). Une cible explicite invalide (introuvable ou d'un autre dossier) est refusée : `400 { error: { code: 'cible_invalide' } }`, **aucune génération créée**.
+- **Correction** (`POST .../corriger` ou outil `corrigerRendu`) : **aucun paramètre de cible accepté**. La cible est toujours celle de la génération la plus récente du dossier (résolution automatique, `lib/rif/orchestrateur.ts`) — une correction ne change jamais silencieusement de cible, par construction plutôt que par validation.
+- **Génération legacy** (dossier n'ayant jamais créé de cible) : `render_target_id: null` sur toutes ses générations, comportement strictement inchangé par rapport à avant le Lot 1.
+
+`GenerationDetail` (§10.2) porte désormais `renderTargetId: string | null` et `parentGenerationId: string | null` (la génération dont celle-ci est la correction/reprise — `null` pour une génération initiale).
+
+### 9bis.4 QualityProfile
+
+Sous-ensemble ordonné et prioritaire de la grille LIB-002 (§11), dérivé de l'`OutputType` de la cible — **jamais transmis par le frontend**, toujours calculé côté backend (`lib/rif/render-targets.ts::criteresApplicables`).
+
+| OutputType | Critères prioritaires (ordre) |
+|---|---|
+| `PHOTOREALISTIC_PERSPECTIVE` | implantation, cadrage, perspective, volumes, ouvertures, toiture, environnement, elements_inventes, photorealisme |
+| `PHOTOREALISTIC_AXONOMETRY` | toiture, volumes, implantation, environnement, elements_inventes, silhouette, photorealisme |
+| *(aucune cible — legacy)* | grille LIB-002 complète (18 critères) |
+
+`elements_inventes` et `photorealisme` sont deux critères ajoutés à la grille LIB-002 elle-même (V1.9, correction d'une contradiction découverte en construisant ces profils — voir DECISIONS.md D-22 point 8), pas seulement à ces profils.
+
+---
+
 ## 10. Génération — lifecycle, historique, canonique, comparaison
 
 ### 10.1 Lancer une génération/correction
 
-- `POST /api/dossiers/[dossierId]/generer` — première génération, dossier doit être `PRET_A_GENERER`. Aucun paramètre de corps.
-- `POST /api/dossiers/[dossierId]/corriger` — correction, dossier doit être `A_CORRIGER`. Corps : voir §9.
+- `POST /api/dossiers/[dossierId]/generer` — première génération, dossier doit être `PRET_A_GENERER`. Corps optionnel `{ renderTargetId?: string }` (§9bis.3) — un corps vide reste un appel legacy valide.
+- `POST /api/dossiers/[dossierId]/corriger` — correction, dossier doit être `A_CORRIGER`. Corps : voir §9 (aucun paramètre de cible — résolution automatique, §9bis.3).
 - `POST /api/dossiers/[dossierId]/reprendre` — reprise depuis les sources, dossier doit être `A_REPRENDRE`.
 - Toutes renvoient `ResultatOperation` via `repondreOperation` :
   - Succès : `200 { success:true, generationId, imageUrl, ... }`.
@@ -205,10 +255,13 @@ Corps `POST .../corriger` : `{ elementAModifier: string, resultatAttendu: string
 
 ```ts
 GenerationDetail {
-  id, dossierId, type: 'initial' | 'correction',
+  id, dossierId, type: 'initial' | 'correction' | 'restart_from_sources',
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out',
   promptText, sourceFileIds, resultFileId, isCanonical: boolean,
-  startedAt, completedAt, ...
+  startedAt, completedAt,
+  renderTargetId: string | null,      // Lot 1, D-22 — null = legacy
+  parentGenerationId: string | null,  // génération corrigée/reprise, si applicable
+  ...
 }
 ```
 
@@ -218,15 +271,16 @@ GenerationDetail {
 
 `{ success:true, generation: GenerationDetail & { imageUrl }, audit: QualityAuditDetail | null }`. C'est la route à utiliser pour reconstruire l'état d'une génération après refresh sans dépendre du texte de conversation.
 
-### 10.4 Génération canonique
+### 10.4 Génération canonique — désormais par cible (Lot 1, D-22)
 
-- Backend : `POST .../generations/[generationId]/audit` (§11) appelle `definirGenerationCanonique` quand le verdict humain est `validation` ou `acceptable_avec_reserve` — au plus une canonique par dossier, synchronisée à la fois sur `generations.is_canonical` et `ProjectState.canonical_result_id`.
-- Exposition : `GenerationDetail.isCanonical`, `DossierResume.generationCanoniqueId` (§13).
-- Affiché comme « Référence » dans l'historique des générations et le sélecteur de rendu (`ProjectCockpit.tsx`) et dans la carte projet du dashboard (`ProjectDashboard.tsx`, §13).
+- Backend : `POST .../generations/[generationId]/audit` (§11) appelle `definirGenerationCanonique` (signature inchangée) quand le verdict humain est `validation` ou `acceptable_avec_reserve` — **seul un verdict humain validant déclenche ceci, aucune route de canonicalisation directe n'existe**.
+- **Scope de la canonique** : au plus une par groupe, où un groupe = une cible de rendu réelle, OU le pool des générations legacy (`render_target_id null`) d'un dossier — jamais mélangées. Une génération d'une cible A ne retire jamais la canonique d'une cible B du même dossier. Garanti au niveau base par un index unique partiel (`neon/migrations/0002_render_targets.sql`), pas seulement en application.
+- **Exposition** : une génération avec cible → `render_targets.canonical_generation_id` (lu via `GET .../render-targets/[id]`) ; une génération legacy → `ProjectState.canonical_result_id` (axe distinct, inchangé depuis D-19) et `DossierResume.generationCanoniqueId` (§12 — reste le canonique legacy dossier-large, ne reflète pas les canoniques par cible). `GenerationDetail.isCanonical` reste vrai pour la canonique de son propre groupe, quel qu'il soit.
+- Affiché comme « Référence » dans l'historique des générations et le sélecteur de rendu (`ProjectCockpit.tsx`) et dans la carte projet du dashboard (`ProjectDashboard.tsx`, §12) — ces écrans datent d'avant le Lot 1 et n'affichent donc aujourd'hui que la sémantique legacy ; un écran par cible reste à construire côté frontend pour exploiter `render_targets.canonical_generation_id`.
 
-### 10.5 Comparaison
+### 10.5 Comparaison — restreinte à la même cible (Lot 1, D-22)
 
-`GET /api/dossiers/[dossierId]/generations/comparer?a=ID&b=ID` → `{ success:true, generationA: {...GenerationDetail, imageUrl}, generationB: {...} }`. Les deux ids doivent appartenir au dossier (sinon 404). L'écran de comparaison du frontend desktop compose aujourd'hui sa vue à partir des générations déjà chargées par `.../generations` plutôt que d'appeler cette route séparément — le contrat reste valide et disponible pour un usage direct (ex. lien profond vers une comparaison précise) si un futur écran en a besoin.
+`GET /api/dossiers/[dossierId]/generations/comparer?a=ID&b=ID` → `{ success:true, generationA: {...GenerationDetail, imageUrl}, generationB: {...}, outputType: OutputType | null }`. Les deux ids doivent appartenir au dossier (sinon 404) **et partager la même cible de rendu** (ou être toutes deux legacy, sans cible) — sinon `409 { error: { code: 'cible_differente' } }`. Comparer une cible à une autre, ou une cible à du legacy, n'est pas pris en charge dans ce lot (mode R&D cross-target explicitement non construit). L'écran de comparaison du frontend desktop compose aujourd'hui sa vue à partir des générations déjà chargées par `.../generations` plutôt que d'appeler cette route séparément — le contrat reste valide et disponible pour un usage direct (ex. lien profond) si un futur écran en a besoin.
 
 ---
 
@@ -236,15 +290,29 @@ Deux routes distinctes, à ne jamais confondre :
 
 ### 11.1 Audit multimodal proposé (`POST .../generations/[generationId]/controle-qualite`)
 
-Déclenche un vrai appel Claude Sonnet 5 (`lib/rif/controle-multimodal.ts`) sur le rendu + les sources, calcule un rapport LIB-002 et un `verdictProposed` — **jamais autoritaire**. Réponse : `{ success:true, auditId, report: LigneRapport[], verdictProposed, motif }`. Nécessite `generation.status === 'succeeded'`, sinon `409`. **Non vérifié en conditions réelles** (`NOT_VERIFIED_LIVE`, dépend d'`ANTHROPIC_API_KEY`) — le bouton « Lancer le contrôle qualité » de l'onglet Qualité l'appelle désormais, et affiche honnêtement l'indisponibilité si la configuration serveur manque.
+Déclenche un vrai appel Claude Sonnet 5 (`lib/rif/controle-multimodal.ts`) sur le rendu + les sources, calcule un rapport LIB-002 et un `verdictProposed` — **jamais autoritaire**. Réponse :
 
-Priorité géométrique (ADR-021, LIB-002 §1) : `lib/rif/controle-qualite.ts::sourceControlePourCritere(critere, geometryPack)` retourne la source de contrôle à citer — le pack de contraintes géométriques si exploitable, sinon la source 2D désignée comme en V2.1. Cette fonction est un helper pur, pas encore appelée par `controle-multimodal.ts` (le classifieur construit encore ses propres lignes de rapport sans consulter le pack).
+```ts
+{ success:true, auditId, report: LigneRapport[], verdictProposed, motif,
+  renderTargetId: string | null,        // Lot 1, D-22
+  outputType: OutputType | null,        // null si pas de cible (legacy)
+  criteresApplicables: CritereControle[] // sous-ensemble du QualityProfile, ou grille complète si legacy
+}
+```
+
+Nécessite `generation.status === 'succeeded'`, sinon `409`. **Non vérifié en conditions réelles** (`NOT_VERIFIED_LIVE`, dépend d'`ANTHROPIC_API_KEY`) — le bouton « Lancer le contrôle qualité » de l'onglet Qualité l'appelle désormais, et affiche honnêtement l'indisponibilité si la configuration serveur manque.
+
+**QualityProfile dérivé côté backend (Lot 1, D-22, §9bis.4)** : si la génération a une cible, seuls les critères de son `QualityProfile` sont soumis au modèle (`ContexteControleMultimodal.criteresApplicables`) — jamais transmis par le frontend. Sans cible (legacy), la grille complète LIB-002 s'applique, comportement inchangé.
+
+Priorité géométrique (ADR-021, LIB-002 §1) : `lib/rif/controle-qualite.ts::sourceControlePourCritere(critere, geometryPack)` retourne la source de contrôle à citer — le pack de contraintes géométriques si exploitable (désormais y compris pour `elements_inventes`), sinon la source 2D désignée comme en V2.1. Cette fonction est un helper pur, pas encore appelée par `controle-multimodal.ts` (le classifieur construit encore ses propres lignes de rapport sans consulter le pack — gap inchangé par ce lot).
 
 ### 11.2 Verdict humain (`POST .../generations/[generationId]/audit`)
 
-Seule route qui compte pour l'export administratif (`autoriserExportAdministratif`). Corps `{ verdictHuman: VerdictControle, reserves?: string }`, un des 5 verdicts (`validation`, `acceptable_avec_reserve`, `correction_ciblee`, `nouvelle_generation`, `production_suspendue`) → transitionne le dossier vers `VALIDE`/`A_CORRIGER`/`A_REPRENDRE`/`SUSPENDU`. Si un audit multimodal existe déjà sans verdict humain, cette route le complète (même ligne) plutôt que d'en créer une seconde.
+Seule route qui compte pour l'export administratif (`autoriserExportAdministratif`). Corps `{ verdictHuman: VerdictControle, reserves?: string }`, un des 5 verdicts (`validation`, `acceptable_avec_reserve`, `correction_ciblee`, `nouvelle_generation`, `production_suspendue`) → transitionne le dossier vers `VALIDE`/`A_CORRIGER`/`A_REPRENDRE`/`SUSPENDU`. Si un audit multimodal existe déjà sans verdict humain, cette route le complète (même ligne) plutôt que d'en créer une seconde. Depuis le Lot 1 (D-22), la canonicalisation qu'elle déclenche est scopée par cible (§10.4) — le comportement HTTP de cette route elle-même est inchangé.
 
-`RapportControle`/critères géométriques concernés par la priorité pack (`sourceControlePourCritere`) : `silhouette`, `volumes`, `toiture`, `ouvertures`, `implantation`. Les autres critères (`cadrage`/`perspective` → vue Revit ; le reste → source désignée) sont inchangés.
+`RapportControle`/critères géométriques concernés par la priorité pack (`sourceControlePourCritere`) : `silhouette`, `volumes`, `toiture`, `ouvertures`, `implantation`, `elements_inventes`. Les autres critères (`cadrage`/`perspective` → vue Revit ; le reste → source désignée) sont inchangés.
+
+**Grille LIB-002 V1.9 (Lot 1)** : 18 critères (`elements_inventes`, `photorealisme` ajoutés), 5 états (`conforme`/`reserve`/`non_conforme`/`non_applicable`/**`non_evalue`** — un critère non mesurable ne devient jamais `conforme`).
 
 ---
 
@@ -276,7 +344,7 @@ Affichés aujourd'hui (`ProjectDashboard.tsx`) : `projectInfo.name`/`type`/`loca
 
 ## 14. Ownership — récapitulatif
 
-Toutes les routes sous `/api/dossiers/[dossierId]/**` vérifient `verifierProprietaire`. Les routes avec un `generationId`/`directiveId`/`fileId` supplémentaire vérifient en plus son appartenance au dossier (`verifierGenerationDuDossier` ou équivalent). `POST /api/dossiers` (création) et `GET /api/dossiers` (liste) n'ont pas de `dossierId` à ce stade — seule l'authentification s'applique, filtrée par `ownerId`.
+Toutes les routes sous `/api/dossiers/[dossierId]/**` vérifient `verifierProprietaire`. Les routes avec un `generationId`/`directiveId`/`fileId`/`renderTargetId` supplémentaire vérifient en plus son appartenance au dossier (`verifierGenerationDuDossier`/`verifierRenderTargetDuDossier` ou équivalent) — y compris quand un `renderTargetId` est fourni en corps de requête (`.../generer`, résolu et revalidé dans `orchestrateur.ts`, jamais fait confiance tel quel). `POST /api/dossiers` (création) et `GET /api/dossiers` (liste) n'ont pas de `dossierId` à ce stade — seule l'authentification s'applique, filtrée par `ownerId`.
 
 ---
 
@@ -298,6 +366,9 @@ Toutes les routes sous `/api/dossiers/[dossierId]/**` vérifient `verifierPropri
 | `fal_ai_echec`, `reponse_inexploitable`, `stockage_echec`, `detection_role_echec`, `controle_qualite_echec` | 502 | selon route | Échec d'un service externe |
 | `timeout` | 504 | `.../generer`, `.../corriger` | fal.ai n'a jamais atteint un état terminal |
 | `jeton_upload_refuse` | 400 | `.../sources/token`, `.../modele-3d/token` | Contrainte d'upload violée |
+| `cible_invalide` | 400 | `.../generer` | `renderTargetId` fourni introuvable ou hors de ce dossier (Lot 1, D-22) |
+| `cible_introuvable` | 404 | `.../render-targets/[id]`, `.../activer` | Cible de rendu inexistante ou hors de ce dossier |
+| `cible_differente` | 409 | `.../generations/comparer` | Les deux générations ne partagent pas la même cible de rendu |
 
 ---
 
@@ -314,10 +385,11 @@ Ce que le frontend peut/doit brancher sans appel supplémentaire, une fois le `P
 - **Readiness de génération :** `etat === 'PRET_A_GENERER'` (le bouton `genererRendu`/route `.../generer` n'est actionnable que dans cet état — revérifié côté backend de toute façon).
 - **Absence de provider configuré :** message statique tant qu'aucune route d'extraction n'existe (§4) — pas un état à interroger dynamiquement.
 - **Erreurs :** toujours `error.code`/`error.message`/`requestId` (§0, §15) — jamais parser un message brut.
+- **Cibles de rendu (Lot 1, D-22) :** `GET .../render-targets` pour lister ; une génération sans cible (`renderTargetId: null`) est un dossier legacy, jamais une erreur. Une action « Nouvelle cible » minimale (nom + `OutputType`) et un sélecteur de cible active suffisent pour le premier passage frontend (§9bis) — pas de refonte du cockpit existant.
 
 ---
 
-## 17. Gaps connus — mis à jour le 18.09.2026 (soir, post-RDV Évariste)
+## 17. Gaps connus — mis à jour le 18.09.2026 (Lot 1 RenderTarget)
 
 **Résolu depuis la version précédente de ce document** par le chantier frontend desktop (`ProjectCockpit.tsx`, `ProjectDashboard.tsx` et les composants associés) — ne plus présumer ces gaps ouverts :
 
@@ -327,26 +399,26 @@ Ce que le frontend peut/doit brancher sans appel supplémentaire, une fois le `P
 - ~~Aucun déclenchement frontend de l'audit multimodal~~ → bouton « Lancer le contrôle qualité » dans l'onglet Qualité, affiche honnêtement l'indisponibilité si la configuration serveur manque.
 - ~~`lireReponseApi` non branché partout~~ → confirmé branché sur les 7 composants qui appellent l'API (`BoutonNouveauDossier`, `BoutonConfirmerFiche`, `ConversationRif`, `DepotSources`, `NewProjectWizard`, `ProjectCockpit`, `VerdictQualite`).
 - ~~`derniereGeneration`/agrégats non affichés~~ → le dashboard affiche `nombreGenerations`, la présence d'une génération canonique et la date de dernière activité par carte projet.
+- ~~`OutputType` inexistant dans le schéma~~ (Lot 1, D-22) → implémenté : `render_targets.output_type`, exposé sur `RenderTarget` et dérivé pour `GenerationDetail`/le rapport qualité via `render_target_id`. Voir §9bis.
 
-**Gaps réellement encore ouverts (backend, pas résolubles par du frontend seul) :**
+**Gaps réellement encore ouverts :**
 
 1. **Aucune route d'extraction géométrique** — normal tant qu'aucun fournisseur n'est choisi (§4) ; le prochain cycle de test (§19) précède ce choix.
 2. **Une seule variante par génération** (D-10 non tranchée).
 3. **`sourceControlePourCritere` pas encore consommée par `controle-multimodal.ts`** — le pack de contraintes n'influence pas encore réellement le rapport multimodal, seulement le prompt de génération (§5, §11.1).
 4. **Aucune route de remplacement/suppression d'une source déjà déposée** — seule `PATCH .../sources/[fileId]` (confirmation de rôle) existe. Besoin confirmé par Évariste (`docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §18), non construit.
 5. **`TEMPORARY_PROJECT_ASSETS` (photos terrain en volume) non implémenté** — concept produit seulement (§18).
-6. **`OutputType` (perspective/axonométrie, §18) n'existe dans aucun schéma** — `GenerationDetail` ne porte aujourd'hui aucun champ distinguant les deux ; ne pas l'inventer côté frontend avant que le backend l'expose.
-7. **Aucun système de quota/crédits** — besoin confirmé par Évariste, aucune implémentation ni schéma.
+6. **Aucun système de quota/crédits** — besoin confirmé par Évariste, aucune implémentation ni schéma.
+7. **Aucune UI pour les cibles de rendu** (Lot 1, D-22) — le contrat existe (§9bis) mais `ProjectCockpit.tsx`/`ProjectDashboard.tsx` (chantier `feat/rif-ux-ui-desktop`, non touché par ce lot) n'affichent pas encore de sélecteur de cible, de création de cible, ni de vue « canonique par cible » — ils continuent d'afficher la sémantique legacy dossier-large (§10.4).
+8. **`neon/migrations/0002_render_targets.sql` non appliquée en production** — testée en lecture seule (`db:migrate:status`, détectée en attente), volontairement pas appliquée sans validation explicite.
 
-Ces 7 points sont soit hors du contrôle du frontend (fournisseur d'extraction, D-10, priorisation du rapport multimodal), soit des besoins produit tout juste confirmés et volontairement non implémentés dans ce lot (remplacement de source, assets temporaires, `OutputType`, quotas) — voir DECISIONS.md D-21 pour l'arbitrage explicite de ne pas les construire avant les fichiers réels d'Évariste.
+Ces points sont soit hors du contrôle du frontend (fournisseur d'extraction, D-10, priorisation du rapport multimodal, migration), soit des besoins produit confirmés et volontairement non construits dans leur lot respectif (remplacement de source, assets temporaires, quotas, UI render-targets) — voir DECISIONS.md D-21/D-22 pour les arbitrages explicites.
 
-## 18. Deux types de sortie et stockage temporaire — concepts confirmés, non implémentés
+## 18. Stockage temporaire des photos terrain — concept confirmé, non implémenté
 
-Voir `docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §14-15 pour le détail produit. Aucun schéma, route ou champ n'existe encore pour :
-- `OutputType` (`PHOTOREALISTIC_PERSPECTIVE` / `PHOTOREALISTIC_AXONOMETRY`) — sur `GenerationDetail` ou `ProjectState` ;
-- `TEMPORARY_PROJECT_ASSETS` — aucun rôle de source, route ou table.
+Voir `docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §15 pour le détail produit. Aucun schéma, route ou champ n'existe pour `TEMPORARY_PROJECT_ASSETS` — aucun rôle de source, route ou table. Ce contrat le documente pour que Codex sache qu'il est **acté côté produit mais pas encore contractuel** — ne pas le construire par anticipation sans un contrat backend réel qui l'expose.
 
-Ce contrat les documente pour que Codex sache qu'ils sont **actés côté produit mais pas encore contractuels** — ne pas les construire par anticipation sans un contrat backend réel qui les expose.
+(`OutputType`/`RenderTarget`, documentés ici sous le même intitulé jusqu'au Lot 1, sont désormais implémentés — voir §9bis. Ne plus les citer comme non implémentés.)
 
 ## 19. Prochain cycle de test — rappel
 

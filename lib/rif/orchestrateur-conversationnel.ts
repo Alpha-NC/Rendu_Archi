@@ -156,11 +156,20 @@ export async function executerTourConversationnel(
   const historique = await depot.obtenirHistoriqueConversation(dossier.id)
   const branchement = calculerContexteBranchement(dossier)
 
+  // Lot 1 RenderTarget (D-22) §12 : contexte informatif seulement — le
+  // modèle ne décide jamais d'une cible autrement que par un renderTargetId
+  // explicite sur genererRendu (revalidé côté backend, voir orchestrateur.ts).
+  const activeRenderTargetId = dossier.projectState.active_render_target_id
+  const activeRenderTarget = activeRenderTargetId ? await depot.obtenirRenderTarget(activeRenderTargetId) : null
+
   const system = construireSystemPrompt({
     modeResolu: branchement.modeResolu,
     styleResolu: branchement.styleResolu,
     usageAdministratif: dossier.usageAdministratif,
     parcours: branchement.parcours,
+    activeRenderTarget: activeRenderTarget
+      ? { id: activeRenderTarget.id, name: activeRenderTarget.name, outputType: activeRenderTarget.outputType }
+      : null,
   })
 
   // D-06 a choisi un modèle MULTIMODAL pour « l'analyse assistée des
@@ -300,6 +309,11 @@ export async function executerTourConversationnel(
 
   if (analyse.operation === 'genererRendu') {
     const promptText = construirePromptGeneration(dossier.projectState)
+    // Lot 1 RenderTarget (D-22) : renderTargetId optionnel, jamais fait
+    // confiance tel quel — orchestrateur.ts revalide son appartenance au
+    // dossier avant de l'attacher à la génération.
+    const entreeGeneration = analyse.entree as { renderTargetId?: unknown } | undefined
+    const renderTargetId = typeof entreeGeneration?.renderTargetId === 'string' ? entreeGeneration.renderTargetId : null
     const resultat = await executerGenerationOuCorrection(depot, appelerFal, {
       dossierId: dossier.id,
       type: 'initial',
@@ -307,6 +321,7 @@ export async function executerTourConversationnel(
       sourceFileIds,
       actorId: contexte.actorId,
       contexte: { usageAdministratif: dossier.usageAdministratif },
+      renderTargetId,
     })
     return finaliser({ type: 'operation', operation: 'genererRendu', resultat }, toolUseId)
   }

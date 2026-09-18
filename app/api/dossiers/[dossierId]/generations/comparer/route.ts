@@ -16,7 +16,10 @@ import {
  * « ne pas créer de logique métier inutile côté backend »).
  *
  * Les deux générations doivent appartenir à ce dossier — sinon 404, jamais
- * de comparaison inter-dossiers (Chantier F).
+ * de comparaison inter-dossiers (Chantier F). Depuis le Lot 1 RenderTarget
+ * (D-22), elles doivent aussi partager la même cible de rendu (ou être
+ * toutes deux legacy, sans cible) — sinon 409, jamais de comparaison
+ * cross-target.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ dossierId: string }> }) {
   const { dossierId } = await params
@@ -46,11 +49,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ doss
   const refusB = verifierGenerationDuDossier(generationB.dossierId, dossierId)
   if (refusB) return refusB
 
+  // Lot 1 RenderTarget (D-22) §11 : comparaison restreinte par défaut à la
+  // même cible de rendu — deux générations legacy (sans cible) restent
+  // comparables entre elles (même « pool » qu'avant ce lot), mais comparer
+  // une cible à une autre, ou une cible à du legacy, n'a pas de sens produit
+  // et n'est pas construit dans ce lot (mode R&D cross-target : hors
+  // périmètre, voir docs/RIF_BACKEND_CONTRACTS_V2.md).
+  if (generationA.renderTargetId !== generationB.renderTargetId) {
+    return repondreErreur(
+      'cible_differente',
+      "Ces deux générations ne visent pas la même cible de rendu — la comparaison n'est pas prise en charge entre cibles différentes.",
+      409,
+    )
+  }
+
   const idsAvecResultat = [generationA.resultFileId, generationB.resultFileId].filter((id): id is string => id !== null)
   const urls = idsAvecResultat.length > 0 ? await depot.resolverUrlsSignees(idsAvecResultat) : []
   const urlParFileId = new Map(idsAvecResultat.map((id, i) => [id, urls[i]]))
 
+  const renderTarget = generationA.renderTargetId ? await depot.obtenirRenderTarget(generationA.renderTargetId) : null
+
   const avecUrl = (g: typeof generationA) => ({ ...g, imageUrl: g.resultFileId ? (urlParFileId.get(g.resultFileId) ?? null) : null })
 
-  return NextResponse.json({ success: true, generationA: avecUrl(generationA), generationB: avecUrl(generationB) })
+  return NextResponse.json({
+    success: true,
+    generationA: avecUrl(generationA),
+    generationB: avecUrl(generationB),
+    outputType: renderTarget?.outputType ?? null,
+  })
 }

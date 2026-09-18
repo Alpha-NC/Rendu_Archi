@@ -246,3 +246,47 @@ describe('evaluerEnvironnement — défauts déterministes (ARCH-002, D-19)', ()
     expect(verdict.verdict).toBe('nouvelle_generation')
   })
 })
+
+describe("état non_evalue (Lot 1 RenderTarget, D-22) — l'absence de mesure ne devient jamais Conforme", () => {
+  it("une ligne non_evalue ne déclenche ni correction ni reprise", () => {
+    const verdict = calculerVerdictPropose(
+      rapport([ligneConforme('cadrage'), { critere: 'photorealisme', sourceControle: 'Rendu', etat: 'non_evalue' }]),
+    )
+    expect(verdict.verdict).toBe('validation')
+  })
+
+  it("un élément inventé (nouveau critère, promu du défaut éliminatoire §5) déclenche une reprise, comme les autres critères structurels", () => {
+    const verdict = calculerVerdictPropose(
+      rapport([
+        {
+          critere: 'elements_inventes',
+          sourceControle: 'Source géométrique',
+          etat: 'non_conforme',
+          defautEliminatoire: true,
+        },
+      ]),
+    )
+    expect(verdict.verdict).toBe('nouvelle_generation')
+  })
+
+  it('un défaut de photoréalisme (critère non structurel) déclenche une correction ciblée, jamais une reprise', () => {
+    const verdict = calculerVerdictPropose(
+      rapport([
+        {
+          critere: 'photorealisme',
+          sourceControle: 'Rendu',
+          etat: 'non_conforme',
+          defautEliminatoire: true,
+        },
+      ]),
+    )
+    expect(verdict.verdict).toBe('correction_ciblee')
+  })
+})
+
+describe('sourceControlePourCritere — elements_inventes priorise le pack géométrique (Lot 1)', () => {
+  it('priorise le pack de contraintes pour elements_inventes quand il est exploitable', () => {
+    const pack = { schemaVersion: 1, sourceFileId: 'f-1', volumes: [{ id: 'v1' }] }
+    expect(sourceControlePourCritere('elements_inventes', pack)).toBe('Pack de contraintes géométriques (source modèle 3D f-1)')
+  })
+})

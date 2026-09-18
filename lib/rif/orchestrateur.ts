@@ -30,6 +30,15 @@ export interface ParametresGenerationOuCorrection {
   actorId: string
   /** Contexte de préconditions, transmis tel quel à autoriserOperation. */
   contexte?: Parameters<typeof autoriserOperation>[3]
+  /**
+   * Lot 1 RenderTarget (D-22) — cible de rendu explicite, uniquement
+   * pertinente pour `type: 'initial'`. Ignorée pour une correction : celle-ci
+   * hérite TOUJOURS de la cible de sa génération parente, jamais d'une
+   * valeur transmise séparément (mission Lot 1 §17 — « ne jamais changer
+   * silencieusement de target »). Sans valeur explicite ici, retombe sur
+   * `ProjectState.active_render_target_id` puis, à défaut, `null` (legacy).
+   */
+  renderTargetId?: string | null
 }
 
 const OPERATION_PAR_TYPE: Record<'initial' | 'correction', OperationRif> = {
@@ -68,6 +77,41 @@ export async function executerGenerationOuCorrection(
     }
   }
 
+  // Lot 1 RenderTarget (D-22) — résolution de la cible de rendu, APRÈS
+  // l'autorisation de l'opération (une cible invalide ne doit pas masquer un
+  // refus plus fondamental de transition d'état), AVANT la création de la
+  // ligne generations (PRD §18.1 : la ligne doit déjà porter la bonne cible).
+  let renderTargetId: string | null = null
+  let parentGenerationId: string | null = null
+
+  if (parametres.type === 'correction') {
+    // Une correction hérite TOUJOURS de la cible de la génération la plus
+    // récente du dossier — jamais une valeur fournie séparément (mission
+    // Lot 1 §17). Générations legacy sans cible : parent.renderTargetId est
+    // déjà `null`, comportement inchangé.
+    const [parent] = await depot.listerGenerations(dossier.id)
+    renderTargetId = parent?.renderTargetId ?? null
+    parentGenerationId = parent?.id ?? null
+  } else {
+    const cibleDemandee = parametres.renderTargetId ?? dossier.projectState.active_render_target_id ?? null
+    if (cibleDemandee) {
+      const cible = await depot.obtenirRenderTarget(cibleDemandee)
+      if (!cible || cible.dossierId !== dossier.id) {
+        await depot.journaliserEvenement(
+          dossier.id,
+          'operation_refusee',
+          { operation, raison: 'Cible de rendu introuvable ou hors de ce dossier.', renderTargetId: cibleDemandee },
+          parametres.actorId,
+        )
+        return {
+          success: false,
+          error: { code: 'cible_invalide', message: "La cible de rendu spécifiée est introuvable ou n'appartient pas à ce dossier." },
+        }
+      }
+      renderTargetId = cible.id
+    }
+  }
+
   // PRD §18.1 : la ligne existe avant l'appel fournisseur — pas de rendu
   // orphelin possible si tout échoue après ce point.
   const { id: generationId } = await depot.creerGeneration({
@@ -76,6 +120,8 @@ export async function executerGenerationOuCorrection(
     projectStateRevision: dossier.projectState.revision,
     promptText: parametres.promptText,
     sourceFileIds: parametres.sourceFileIds,
+    renderTargetId,
+    parentGenerationId,
   })
 
   await depot.transitionnerDossier(dossier.id, 'GENERATION_EN_COURS')
