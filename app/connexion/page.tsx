@@ -33,20 +33,26 @@ function FormulaireConnexion() {
     setErreur(null)
     setEnCours(true)
 
-    const { error } = await authClient.signIn.email({
-      email,
-      password: motDePasse,
-    })
+    try {
+      const { error } = await authClient.signIn.email({
+        email,
+        password: motDePasse,
+      })
 
-    setEnCours(false)
+      if (error) {
+        setErreur('Identifiants incorrects.')
+        return
+      }
 
-    if (error) {
+      router.push(cibleRedirectionSure(parametres.get('redirect')))
+      router.refresh()
+    } catch {
+      // Neon Auth lève notamment AuthApiError pour des identifiants invalides.
+      // Sans capture, le formulaire reste bloqué sur « Connexion… ».
       setErreur('Identifiants incorrects.')
-      return
+    } finally {
+      setEnCours(false)
     }
-
-    router.push(cibleRedirectionSure(parametres.get('redirect')))
-    router.refresh()
   }
 
   return (
