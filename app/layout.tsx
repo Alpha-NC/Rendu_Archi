@@ -21,8 +21,8 @@ const fragmentMono = Fragment_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Générateur de rendu',
-  description: 'Production de rendus architecturaux à partir d\'exports Revit.',
+  title: 'RIF — Rendus Immobiliers Fidèles',
+  description: 'Pilotage geometry-first de rendus architecturaux fidèles.',
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

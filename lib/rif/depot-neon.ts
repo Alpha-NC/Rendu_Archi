@@ -122,6 +122,7 @@ function mapRenderTarget(d: Record<string, unknown>): RenderTarget {
 }
 
 function mapDossierResume(d: Record<string, unknown>): DossierResume {
+  const projectState = d.project_state as { projectInfo?: DossierResume['projectInfo'] } | undefined
   return {
     id: d.id as string,
     dossierRef: d.dossier_ref as string,
@@ -137,6 +138,7 @@ function mapDossierResume(d: Record<string, unknown>): DossierResume {
         }
       : null,
     generationCanoniqueId: (d.generation_canonique_id as string | null) ?? null,
+    projectInfo: projectState?.projectInfo,
   }
 }
 
@@ -198,7 +200,9 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
       // project_id posé après coup, une fois l'id réel du dossier connu —
       // creerProjectStateVide a besoin d'un identifiant que l'insertion
       // seule peut fournir.
-      await sql`update dossiers set project_state = ${JSON.stringify(creerProjectStateVide(id))}::jsonb where id = ${id}`
+      const projectState = creerProjectStateVide(id)
+      if (params.projectInfo) projectState.projectInfo = params.projectInfo
+      await sql`update dossiers set project_state = ${JSON.stringify(projectState)}::jsonb where id = ${id}`
 
       return { id, dossierRef }
     },
@@ -209,7 +213,7 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
       // dupliquées) — index existant sur generations(dossier_id, started_at).
       const lignes = await sql`
         select
-          d.id, d.dossier_ref, d.workflow_state, d.created_at, d.updated_at,
+          d.id, d.dossier_ref, d.workflow_state, d.created_at, d.updated_at, d.project_state,
           coalesce(compte.n, 0) as nombre_generations,
           derniere.id as derniere_generation_id,
           derniere.status as derniere_generation_status,

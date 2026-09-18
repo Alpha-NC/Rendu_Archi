@@ -10,61 +10,88 @@ import {
 } from '../../_lib/reponse'
 
 /**
- * POST /api/dossiers/[dossierId]/modele-3d — dépose la source géométrique
- * 3D (RIF V2, geometry-first, DECISIONS.md ADR-021). Contrairement à
- * `.../sources`, aucune classification automatique n'est appelée : ce
- * n'est pas une image (`detection-role.ts` ne s'applique pas), et le rôle
- * n'est pas ambigu — l'utilisateur dépose explicitement dans le slot
- * « Modèle 3D ». Le fichier est déjà dans Vercel Blob quand cette route
- * est appelée (`.../modele-3d/token` a émis le jeton).
+ * POST /api/dossiers/[dossierId]/modele-3d
  *
- * Ne lance PAS l'extraction ici — seulement l'enregistrement du dépôt, au
- * statut `UPLOADED`. L'extraction réelle dépend d'un fournisseur qui n'est
- * pas encore choisi (voir lib/rif/geometrie-3d.ts::creerExtracteurNonConfigure).
+ * Dépose la source géométrique 3D (RIF V2, Geometry-First).
+ *
+ * Contrairement à /sources, aucune classification automatique n'est appelée :
+ * ce n'est pas une image et le rôle n'est pas ambigu.
+ *
+ * Le fichier est déjà présent dans Vercel Blob lorsque cette route est appelée.
+ *
+ * Cette route :
+ * - enregistre ou remplace la source 3D ;
+ * - conserve l'historique via le versioning source ;
+ * - remet le cycle d'extraction à UPLOADED ;
+ * - met à jour ProjectState ;
+ * - journalise l'événement.
+ *
+ * Elle ne lance PAS l'extraction 3D.
  */
-export async function POST(request: Request, { params }: { params: Promise<{ dossierId: string }> }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ dossierId: string }> }
+) {
   const { dossierId } = await params
+
   const { user, reponseRefus } = await authentifierRequete()
   if (reponseRefus) return reponseRefus
 
   const depot = obtenirDepot()
+
   const dossier = await depot.obtenirDossier(dossierId)
   if (!dossier) return repondreDossierIntrouvable()
+
   const refusProprietaire = verifierProprietaire(dossier.ownerId, user.id)
   if (refusProprietaire) return refusProprietaire
 
   let corps: unknown
+
   try {
     corps = await request.json()
   } catch {
     return repondreCorpsInvalide('Corps de requête JSON attendu.')
   }
 
-  const { pathname, originalName, format, sizeBytes } = (corps as Record<string, unknown>) ?? {}
-  if (typeof pathname !== 'string' || typeof originalName !== 'string') {
-    return repondreCorpsInvalide('Les champs pathname et originalName (texte) sont requis.')
+  const { pathname, originalName, format, sizeBytes } =
+    (corps as Record<string, unknown>) ?? {}
+
+  if (
+    typeof pathname !== 'string' ||
+    typeof originalName !== 'string'
+  ) {
+    return repondreCorpsInvalide(
+      'Les champs pathname et originalName (texte) sont requis.'
+    )
   }
+
   if (typeof format !== 'string' || format.trim().length === 0) {
-    return repondreCorpsInvalide('Le champ format (texte non vide — ex. "rvt", "ifc") est requis : le format 3D définitif reste à confirmer, mais un fichier sans format déclaré ne peut pas être exploité plus tard.')
+    return repondreCorpsInvalide(
+      'Le champ format (texte non vide — ex. "rvt", "ifc") est requis : le format 3D définitif reste à confirmer, mais un fichier sans format déclaré ne peut pas être exploité plus tard.'
+    )
   }
+
   try {
     validerPathnameModele3D(pathname, dossierId)
   } catch {
-    return repondreCorpsInvalide('Le fichier déposé ne correspond pas à ce dossier.')
+    return repondreCorpsInvalide(
+      'Le fichier déposé ne correspond pas à ce dossier.'
+    )
   }
 
-  const sizeBytesValide = typeof sizeBytes === 'number' && sizeBytes >= 0 ? sizeBytes : 0
+  const sizeBytesValide =
+    typeof sizeBytes === 'number' && sizeBytes >= 0
+      ? sizeBytes
+      : 0
 
-  // Lot 2 Source Lifecycle (D-23) : un modèle 3D déjà déposé n'est plus
-  // écrasé silencieusement — un nouveau dépôt sur ce dossier devient un
-  // REMPLACEMENT versionné (ancienne ligne `files` marquée `replaced`,
-  // jamais supprimée). `obtenirSourceActivePourRole` fait foi, pas
-  // `ProjectState.modele3D` (qui n'est qu'une projection de cette même
-  // ligne, mise à jour juste après ici).
-  const actif = await depot.obtenirSourceActivePourRole(dossierId, 'model_3d')
+  const actif = await depot.obtenirSourceActivePourRole(
+    dossierId,
+    'model_3d'
+  )
 
   let fileId: string
   let evenement: string
+
   if (actif) {
     const resultat = await depot.remplacerFichierSource({
       dossierId,
@@ -75,6 +102,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
       mimeType: 'application/octet-stream',
       sizeBytes: sizeBytesValide,
     })
+
     fileId = resultat.id
     evenement = 'modele_3d_remplace'
   } else {
@@ -84,21 +112,52 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
       originalName,
       storageKey: pathname,
       mimeType: 'application/octet-stream',
-      // Déclaré par le client (taille déjà connue avant upload, File.size) —
-      // même confiance que originalName, jamais revérifié depuis le blob ici
-      // (fichier potentiellement volumineux, pas de relecture systématique).
       sizeBytes: sizeBytesValide,
     })
+
     fileId = resultat.id
     evenement = 'modele_3d_depose'
   }
 
-  // Nouvelle source = nouveau cycle d'extraction : jamais hériter du statut
-  // d'un fichier remplacé (voir lib/rif/geometrie-3d.ts::creerSourceModele3D,
-  // repart toujours à UPLOADED).
-  const source3D = creerSourceModele3D(fileId, format)
-  await depot.mettreAJourProjectState(dossierId, { ...dossier.projectState, modele3D: source3D })
-  await depot.journaliserEvenement(dossierId, evenement, { format, ancienFileId: actif?.id }, user.id, { sourceId: fileId })
+  const source3D = creerSourceModele3D(
+    fileId,
+    format,
+    'application/octet-stream',
+    {
+      originalName,
+      sizeBytes: sizeBytesValide,
+    }
+  )
 
-  return NextResponse.json({ success: true, fileId, source: source3D, remplace: Boolean(actif) })
+  await depot.mettreAJourProjectState(dossierId, {
+    ...dossier.projectState,
+    modele3D: source3D,
+  })
+
+  if (dossier.etat === 'BROUILLON') {
+    await depot.transitionnerDossier(
+      dossierId,
+      'SOURCES_RECUES'
+    )
+  }
+
+  await depot.journaliserEvenement(
+    dossierId,
+    evenement,
+    {
+      format,
+      ancienFileId: actif?.id,
+    },
+    user.id,
+    {
+      sourceId: fileId,
+    }
+  )
+
+  return NextResponse.json({
+    success: true,
+    fileId,
+    source: source3D,
+    remplace: Boolean(actif),
+  })
 }

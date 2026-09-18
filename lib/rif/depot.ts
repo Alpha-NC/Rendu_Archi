@@ -62,6 +62,7 @@ export interface ParametresNouveauDossier {
   ownerId: string
   frameworkVersion: string
   implementationVersion: string
+  projectInfo?: ProjectState['projectInfo']
 }
 
 /**
@@ -166,6 +167,7 @@ export interface DossierResume {
   nombreGenerations: number
   derniereGeneration: { id: string; status: GenerationDetail['status']; startedAt: string } | null
   generationCanoniqueId: string | null
+  projectInfo?: ProjectState['projectInfo']
 }
 
 export interface DepotDossiers {

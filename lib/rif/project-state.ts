@@ -70,6 +70,10 @@ export interface SourceDossier {
   role_detected: RoleSource
   role_confirmed?: RoleSource
   status: 'valid' | 'invalid' | 'pending'
+  /** Métadonnées réelles du fichier, conservées dans le ProjectState pour l'UI. */
+  originalName?: string
+  sizeBytes?: number
+  mimeType?: string
   /** Élément ciblé si role_confirmed = 'material_reference' (ADR-014 : une
    * référence matériau ne fait autorité que sur l'apparence de l'élément
    * ciblé, jamais sur la géométrie, la caméra ou l'environnement). */
@@ -212,6 +216,13 @@ export interface ElementEnvironnement {
 
 export interface ProjectState {
   project_id: string
+  /** Identification saisie à la création. Champs optionnels pour les dossiers historiques. */
+  projectInfo?: {
+    name: string
+    type?: string
+    location?: string
+    description?: string
+  }
   /** Révision immuable — incrémentée à chaque nouvelle confirmation. */
   revision: number
   usage: Array<'presentation_client' | 'insertion_administrative' | string>

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { lireReponseApi } from '@/lib/rif/reponse-client'
 
 /** PRD §9.4 : action explicite d'Évariste, jamais déclenchée par le LLM. */
 export default function BoutonConfirmerFiche({ dossierId }: { dossierId: string }) {
@@ -13,9 +14,10 @@ export default function BoutonConfirmerFiche({ dossierId }: { dossierId: string 
     setEnCours(true)
     setErreur(null)
     const reponse = await fetch(`/api/dossiers/${dossierId}/confirmer`, { method: 'POST' })
-    const corps = await reponse.json()
-    if (!reponse.ok || !corps.success) {
-      setErreur(corps.error?.message ?? 'Confirmation impossible.')
+    try {
+      await lireReponseApi(reponse)
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Confirmation impossible.')
       setEnCours(false)
       return
     }
@@ -28,7 +30,7 @@ export default function BoutonConfirmerFiche({ dossierId }: { dossierId: string 
         type="button"
         onClick={confirmer}
         disabled={enCours}
-        className="rounded bg-encre px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="button"
       >
         {enCours ? 'Confirmation…' : 'Confirmer la fiche projet'}
       </button>

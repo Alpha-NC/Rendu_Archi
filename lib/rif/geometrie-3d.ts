@@ -54,6 +54,8 @@ export interface SourceModele3D {
   /** Référence à la ligne `files` correspondante — aucun binaire ici. */
   fileId: string
   format: FormatModele3D
+  originalName?: string
+  sizeBytes?: number
   mimeType?: string
   extractionStatus: StatutExtraction
   extractionProvider?: string
@@ -64,8 +66,13 @@ export interface SourceModele3D {
   erreur?: string
 }
 
-export function creerSourceModele3D(fileId: string, format: FormatModele3D, mimeType?: string): SourceModele3D {
-  return { fileId, format, mimeType, extractionStatus: 'UPLOADED', artifactFileIds: [] }
+export function creerSourceModele3D(
+  fileId: string,
+  format: FormatModele3D,
+  mimeType?: string,
+  metadata?: { originalName?: string; sizeBytes?: number },
+): SourceModele3D {
+  return { fileId, format, mimeType, ...metadata, extractionStatus: 'UPLOADED', artifactFileIds: [] }
 }
 
 // =========================================================================

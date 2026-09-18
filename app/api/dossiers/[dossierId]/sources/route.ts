@@ -224,7 +224,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     ...dossier.projectState,
     sources: [
       ...sourcesConservees,
-      { id: resultat.id, role_detected, ...(role_confirmed ? { role_confirmed } : {}), status: 'valid' },
+      {
+        id: resultat.id,
+        role_detected,
+        ...(role_confirmed ? { role_confirmed } : {}),
+        status: 'valid',
+        originalName,
+        sizeBytes: contenu.byteLength,
+        mimeType: contentType,
+      },
     ],
     localized_directives: [...dossier.projectState.localized_directives, ...directivesExtraites],
   })

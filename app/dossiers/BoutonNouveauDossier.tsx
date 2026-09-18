@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { lireReponseApi } from '@/lib/rif/reponse-client'
 
 export default function BoutonNouveauDossier() {
   const router = useRouter()
@@ -13,10 +14,7 @@ export default function BoutonNouveauDossier() {
     setErreur(null)
     try {
       const reponse = await fetch('/api/dossiers', { method: 'POST' })
-      const corps = await reponse.json()
-      if (!reponse.ok || !corps.success) {
-        throw new Error(corps.error?.message ?? 'Création du dossier impossible.')
-      }
+      const corps = await lireReponseApi<{ success: true; id: string }>(reponse)
       router.push(`/dossiers/${corps.id}`)
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
