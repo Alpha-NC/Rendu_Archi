@@ -4,14 +4,19 @@ import { upload } from '@vercel/blob/client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ACTIONS_DIRECTIVE, type DirectiveLocalisee, type RoleSource, type SourceDossier } from '@/lib/rif/project-state'
+import type { SourceModele3D } from '@/lib/rif/geometrie-3d'
 import { lireReponseApi } from '@/lib/rif/reponse-client'
 import { TAILLE_SOURCE_MAX_OCTETS } from '@/lib/storage/contraintes-source'
+import { TAILLE_MODELE_3D_MAX_OCTETS } from '@/lib/storage/contraintes-modele-3d'
 
 // Reprend la disposition du prototype de référence (docs/rif_chat_prototype.jsx,
 // annexe PRD §27) : vue Revit obligatoire, photo et axonométrie facultatives.
+// Libellés alignés sur RIF V2 (geometry-first, DECISIONS.md ADR-021) — le
+// rôle technique (revit_view/site_photo) est inchangé, seul l'intitulé
+// affiché change pour refléter les 4 blocs du nouveau workflow.
 const SLOTS: Array<{ role: RoleSource; label: string; obligatoire: boolean }> = [
-  { role: 'revit_view', label: 'Vue 3D Revit', obligatoire: true },
-  { role: 'site_photo', label: 'Photo du site', obligatoire: false },
+  { role: 'revit_view', label: 'Vue projet', obligatoire: true },
+  { role: 'site_photo', label: 'Photo réelle', obligatoire: false },
   { role: 'axonometry', label: 'Axonométrie', obligatoire: false },
 ]
 
@@ -30,13 +35,17 @@ export default function DepotSources({
   dossierId,
   sources,
   directives,
+  modele3D,
 }: {
   dossierId: string
   sources: SourceDossier[]
   directives: DirectiveLocalisee[]
+  /** RIF V2, geometry-first (DECISIONS.md ADR-021) — absent tant qu'aucun modèle 3D n'a été déposé. */
+  modele3D?: SourceModele3D
 }) {
   const router = useRouter()
   const [enCours, setEnCours] = useState<RoleSource | null>(null)
+  const [enCoursModele3D, setEnCoursModele3D] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
   const [confirmationEnCours, setConfirmationEnCours] = useState<string | null>(null)
   const [brouillonsDirectives, setBrouillonsDirectives] = useState<Record<string, { action: string; target: string }>>({})
@@ -121,9 +130,75 @@ export default function DepotSources({
     }
   }
 
+  /**
+   * RIF V2, geometry-first (DECISIONS.md ADR-021) — pas une image : aucune
+   * classification automatique n'est appelée, le format n'est pas encore
+   * figé (le nom de fichier ne sert qu'à en tirer un libellé, jamais une
+   * validation réelle — voir lib/rif/geometrie-3d.ts).
+   */
+  async function deposerModele3D(fichier: File) {
+    setEnCoursModele3D(true)
+    setErreur(null)
+    try {
+      if (fichier.size === 0 || fichier.size > TAILLE_MODELE_3D_MAX_OCTETS) {
+        throw new Error('Fichier vide ou dépassant la taille maximale acceptée (500 Mo).')
+      }
+
+      const extension = fichier.name.split('.').pop()?.toLowerCase() ?? 'bin'
+      const pathname = `${dossierId}/modele-3d/${Date.now()}.${extension}`
+      const blob = await upload(pathname, fichier, {
+        access: 'private',
+        handleUploadUrl: `/api/dossiers/${dossierId}/modele-3d/token`,
+      })
+
+      const reponse = await fetch(`/api/dossiers/${dossierId}/modele-3d`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pathname: blob.pathname, originalName: fichier.name, format: extension, sizeBytes: fichier.size }),
+      })
+      await lireReponseApi(reponse)
+      router.refresh()
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
+    } finally {
+      setEnCoursModele3D(false)
+    }
+  }
+
   return (
     <aside className="flex flex-col gap-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-encre-douce">Sources</p>
+
+      {/* RIF V2, geometry-first (DECISIONS.md ADR-021) : la source géométrique
+          3D fait autorité sur l'architecture — format non figé, pas de fausse
+          progression d'extraction tant qu'aucun fournisseur n'est configuré. */}
+      <div className="flex flex-col gap-1">
+        <label className="text-sm text-encre">Modèle 3D</label>
+        {modele3D ? (
+          <div className="rounded border border-encre-douce/30 px-3 py-2 text-xs text-encre-douce">
+            <p>Déposé — format déclaré : {modele3D.format || 'non précisé'}</p>
+            <p className="mt-1">
+              {modele3D.extractionStatus === 'UPLOADED'
+                ? 'Extraction non disponible (aucun fournisseur configuré).'
+                : `Statut : ${modele3D.extractionStatus}`}
+            </p>
+          </div>
+        ) : (
+          <>
+            <input
+              type="file"
+              disabled={enCoursModele3D}
+              onChange={(e) => {
+                const fichier = e.target.files?.[0]
+                if (fichier) deposerModele3D(fichier)
+              }}
+              className="text-xs"
+            />
+            <p className="text-xs text-encre-douce">RVT recommandé — formats définitifs en cours de validation.</p>
+          </>
+        )}
+      </div>
+
       {SLOTS.map(({ role, label, obligatoire }) => {
         const deposee = sources.find((s) => (s.role_confirmed ?? s.role_detected) === role)
         return (
