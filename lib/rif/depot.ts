@@ -222,9 +222,11 @@ export interface DepotDossiers {
    * statut à toute autre génération du même dossier — au plus une
    * canonique par dossier (Chantier C, arbitrage D-19 : seul un verdict
    * humain validant peut déclencher ceci, jamais un calcul automatique ;
-   * voir l'appel dans la Route Handler d'audit).
+   * voir l'appel dans la Route Handler d'audit). Met aussi à jour
+   * `project_state.canonical_result_id` (champ préexistant, jusqu'ici
+   * jamais lu ni écrit — les deux représentations restent synchronisées).
    */
-  definirGenerationCanonique(dossierId: string, generationId: string): Promise<void>
+  definirGenerationCanonique(dossierId: string, generationId: string, resultFileId: string | null): Promise<void>
 
   /** Dernier audit qualité d'une génération (rapport + les deux verdicts), ou `null` si aucun. */
   obtenirAuditQualite(generationId: string): Promise<QualityAuditDetail | null>

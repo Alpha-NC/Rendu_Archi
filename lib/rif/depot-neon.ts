@@ -286,12 +286,16 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
       return data ? mapGeneration(data) : null
     },
 
-    async definirGenerationCanonique(dossierId, generationId) {
-      // Deux instructions, une seule transaction : jamais deux canoniques
-      // (ou zéro pendant un instant observable) dans le même dossier.
+    async definirGenerationCanonique(dossierId, generationId, resultFileId) {
+      // Trois instructions, une seule transaction : jamais deux canoniques
+      // (ou zéro pendant un instant observable), et project_state.canonical_result_id
+      // (champ préexistant de ProjectState, jamais branché avant ce lot)
+      // reste synchronisé avec generations.is_canonical.
+      const canoniqueJson = resultFileId ? JSON.stringify(resultFileId) : 'null'
       await sql.transaction([
         sql`update generations set is_canonical = false where dossier_id = ${dossierId} and is_canonical = true`,
         sql`update generations set is_canonical = true where id = ${generationId}`,
+        sql`update dossiers set project_state = jsonb_set(project_state, '{canonical_result_id}', ${canoniqueJson}::jsonb), updated_at = now() where id = ${dossierId}`,
       ])
     },
 

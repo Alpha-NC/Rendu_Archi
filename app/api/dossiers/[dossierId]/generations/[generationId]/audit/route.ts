@@ -123,7 +123,7 @@ export async function POST(
   await depot.journaliserEvenement(dossierId, 'audit_qualite_enregistre', { generationId, verdictHuman }, user.id)
 
   if (VERDICTS_CANONIQUES.includes(verdictHuman as VerdictControle)) {
-    await depot.definirGenerationCanonique(dossierId, generationId)
+    await depot.definirGenerationCanonique(dossierId, generationId, generation.resultFileId)
     await depot.journaliserEvenement(dossierId, 'version_canonique_definie', { generationId }, user.id)
   }
 
