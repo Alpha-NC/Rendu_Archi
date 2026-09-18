@@ -2,7 +2,7 @@
 
 ID : LIB-002  
 Type : LIB  
-Version : V1.6  
+Version : V1.7  
 Statut : Review  
 Niveau : L4  
 Dossier : Framework/03_REFERENCES
@@ -16,6 +16,8 @@ Dossier : Framework/03_REFERENCES
 Ce document définit la méthode officielle d’évaluation d’un rendu architectural.
 
 Le contrôle est effectué selon l’usage et le mode de production déclarés.
+
+**Note — type de sortie (ADR-022, RDV Évariste 18.09.2026) :** quand la génération contrôlée porte un type de sortie `PHOTOREALISTIC_AXONOMETRY` (docs/PRD_RIF_V2_GEOMETRY_FIRST.md §14) plutôt que `PHOTOREALISTIC_PERSPECTIVE`, les critères prioritaires de la grille commune (§3) changent de sous-ensemble, sans qu'aucun critère nouveau soit ajouté : priorité à `toiture` (faîtages, pans), `volumes`, `terrain`/`environnement` (cohérence spatiale, relations entre bâtiments) et `isolation` (absence d'éléments inventés) ; `cadrage`/`perspective` au sens photographique du terme perdent leur priorité (une axonométrie n'a pas de point de vue caméra réel à comparer). Pour une perspective, la priorité §13.1 du PRD reste inchangée (implantation, cadrage, perspective, volumes, ouvertures, toiture).
 
 ## 2. États
 
@@ -137,6 +139,8 @@ Pour un écart mineur, le rapport peut conclure `Acceptable avec réserve` pour 
 - LIB-006 — 04B_MODES_DE_PRODUCTION.md
 
 ## Historique
+
+V1.7 — Ajout d'une note (§1, ADR-022) : le type de sortie (perspective/axonométrie) réoriente les critères prioritaires de la grille commune vers un sous-ensemble différent, sans ajouter de nouveau critère.
 
 V1.6 — Ajout d'une note geometry-first (§1, ADR-021) : quand un pack de contraintes géométriques existe (source `model_3d` réellement extraite), il devient la référence de comparaison prioritaire pour les critères géométriques ; sans lui, contrôle inchangé depuis la source 2D désignée. Rappelle que le contrôle multimodal ne doit pas rester la seule autorité géométrique quand des données structurées existent.
 

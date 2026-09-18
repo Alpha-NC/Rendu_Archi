@@ -1,8 +1,9 @@
 # PRD — RIF V2, workflow geometry-first
 
-**Statut :** Draft — 18 septembre 2026. Complète `RIF APP/PRD_RIF_V2.1_Neon_Vercel.md` (V2.1, 11.09.2026, non modifié, lu comme référence) plutôt que le remplacer : toute section non reprise ici reste celle de la V2.1. Suivi Git — `RIF APP/` reste un dossier non suivi et n'est jamais l'objet de ce document.
-**Décision Framework associée :** ADR-021 (`rif-framework/Framework/99_DOCUMENTATION/99_DECISIONS_ARCHITECTURE.md`) — ce PRD applique côté produit ce que l'ADR tranche côté Framework ; il ne le recopie pas intégralement.
-**Format 3D final : À CONFIRMER.** RVT (Revit) est le candidat principal, mais aucun format n'est figé — IFC, OBJ, FBX ou un autre format restent recevables. Rien dans ce document ni dans le code ne doit présumer `.rvt` exclusivement.
+**Statut :** Draft — mis à jour le 18 septembre 2026 après le rendez-vous Évariste du même jour (direction confirmée, besoins précisés — voir DECISIONS.md D-21). Complète `RIF APP/PRD_RIF_V2.1_Neon_Vercel.md` (V2.1, 11.09.2026, non modifié, lu comme référence) plutôt que le remplacer : toute section non reprise ici reste celle de la V2.1. Suivi Git — `RIF APP/` reste un dossier non suivi et n'est jamais l'objet de ce document.
+**Décision Framework associée :** ADR-021 (`rif-framework/Framework/99_DOCUMENTATION/99_DECISIONS_ARCHITECTURE.md`) — ce PRD applique côté produit ce que l'ADR tranche côté Framework ; il ne le recopie pas intégralement. ADR-022 documente le calibrage post-RDV Évariste (§14-16 ci-dessous).
+**Format 3D final : À CONFIRMER.** Formats disponibles chez Évariste, tous candidats à tester, aucun sélectionné : RVT, FBX, DWG, DXF, DGN, OBJ, STL, IFC. RVT reste le candidat principal (environ 40-60 Mo pour un projet type), OBJ et IFC sont à tester sérieusement. Rien dans ce document ni dans le code ne doit présumer `.rvt` exclusivement ni écarter les autres formats avant le prochain cycle de test (§14).
+**Formulation officielle de fidélité (à utiliser partout, produit comme technique) :** « Maximiser la fidélité architecturale et réduire fortement les dérives géométriques. » **Aucune garantie de 100 %, de fidélité parfaite ou d'absence totale de dérive géométrique à ce stade** — toute formulation antérieure impliquant une telle garantie est erronée et doit être corrigée partout où elle apparaît dans les documents actifs de ce périmètre (voir DECISIONS.md D-21 pour l'audit des documents legacy hors périmètre, non modifiés).
 
 ---
 
@@ -131,6 +132,72 @@ Le workflow geometry-first ne contredit aucun des non-objectifs déjà posés : 
 - Version de Revit requise, le cas échéant.
 - Correspondance exacte entre les trois usages geometry-first et les trois `ModeProduction` existants (§8).
 
+## 14. Deux types de sortie (`OutputType`) — confirmé RDV Évariste 18.09.2026
+
+Le prototype GPT V1 s'est avéré insuffisant en particulier sur : toitures, faîtages, pans de toiture, volumes, ouvertures, escaliers/éléments inventés, piscine/terrasse, implantation, perspective. Le calibrage post-RDV introduit un axe **indépendant** du mode de production (§8) et du style (LIB-005) : le type de sortie visé.
+
+```
+OutputType = PHOTOREALISTIC_PERSPECTIVE | PHOTOREALISTIC_AXONOMETRY
+```
+
+Les deux partagent le même `GeometryConstraintPack` (§5) — ce n'est pas un second pipeline d'extraction, seulement un second **usage** du même pack, avec un cadrage et une grille de contrôle qualité différents. **Ne pas les traiter comme le même cas d'usage.**
+
+| | `PHOTOREALISTIC_PERSPECTIVE` | `PHOTOREALISTIC_AXONOMETRY` |
+|---|---|---|
+| Canevas | Vue projet (cadrage intentionnel, §2) | Axonométrie (devient un canevas principal pour ce type de sortie — pas seulement un contrôle spatial secondaire, §2) |
+| Critères prioritaires (grille LIB-002 existante, §3 du document LIB-002 — aucun critère nouveau inventé) | `implantation`, `cadrage`, `perspective`, `volumes`, `ouvertures`, `toiture`, `environnement` (conservation de l'existant), `isolation` (absence d'éléments inventés) | `toiture` (faîtages, pans), `volumes`, `terrain`/`environnement` (cohérence spatiale, relations entre bâtiments), `isolation` (absence d'éléments inventés), lisibilité générale |
+| Environnement réel | Attendu (photo réelle, insertion site) | Non pertinent la plupart du temps — l'axonométrie n'insère pas dans un site photographié |
+| Photoréalisme | Objectif plein | Objectif secondaire — « qualité visuelle suffisante », pas un photomontage |
+
+Ce document ne fige pas le détail d'implémentation (pas de nouveau champ `ProjectState` ni de nouvelle route décrits ici) — seulement le concept produit et son rattachement à la grille LIB-002 existante, pour que le prochain cycle de test (§16) sache quoi comparer. Voir `rif-framework/Framework/03_REFERENCES/05_CHECKLIST_CONTROLE.md` (note geometry-first) pour le rattachement Framework.
+
+## 15. Stockage temporaire de photos terrain (`TEMPORARY_PROJECT_ASSETS`)
+
+Confirmé RDV Évariste : un projet peut inclure 40 à 50 photos de terrain, 8 à 10 Mo chacune — un volume que le modèle de source actuel (un rôle `site_photo` unique faisant autorité environnementale, §2) ne couvre pas conceptuellement. Ces photos servent à la **compréhension** des façades, volumes et environnement par le modèle multimodal — elles ne sont pas individuellement une source faisant autorité au sens de §2/§3.
+
+Concept introduit, **non implémenté dans ce document** : `TEMPORARY_PROJECT_ASSETS`, un ensemble de fichiers rattachés à un dossier actif, distinct des 4 sources structurantes (modèle 3D, vue projet, photo réelle, axonométrie). Caractéristiques envisagées :
+- rétention 3 à 6 mois envisagée — **aucune suppression automatique n'est implémentée** ; toute politique de rétention réelle exige une décision explicite ultérieure (ne pas coder de purge automatique sans validation).
+- usage : aide à la compréhension multimodale du projet actif, jamais une autorité géométrique ou environnementale de premier plan (celle-ci reste sur `site_photo`/`model_3d` selon §3).
+- ne remplace pas le rôle `existing_building_photo`/`site_photo` déjà défini dans `RoleSource` — vient en complément, à un statut d'autorité plus faible, pour un volume de fichiers que les rôles structurants ne sont pas conçus pour absorber.
+
+## 16. Protocole du prochain cycle de test (formats 3D réels)
+
+Confirmé RDV Évariste — préparation du protocole uniquement, **aucun test lancé, aucun format ni fournisseur choisi par ce document**.
+
+**Jeu de test attendu d'Évariste :** un modèle 3D, une vue projet, une photo réelle, une axonométrie — idéalement plusieurs exports du même modèle dans des formats différents (parmi RVT/FBX/DWG/DXF/DGN/OBJ/STL/IFC), pour permettre une comparaison à géométrie constante.
+
+**Axes de comparaison entre formats :** fidélité géométrique, données conservées, facilité d'export, poids du fichier, facilité d'extraction, stabilité, coût potentiel, latence potentielle.
+
+**PASS 1** — Ingestion du jeu de test.
+**PASS 2** — Comparaison des formats 3D sur les axes ci-dessus.
+**PASS 3** — Sélection d'un candidat **expérimental** (pas une décision définitive de format).
+**PASS 4** — Construction d'un `GeometryConstraintPack` réel à partir de ce candidat.
+**PASS 5** — Test `PHOTOREALISTIC_PERSPECTIVE` (§14).
+**PASS 6** — Test `PHOTOREALISTIC_AXONOMETRY` (§14).
+**PASS 7** — Comparaison avec les anciens résultats du prototype GPT V1 (§0).
+**PASS 8** — Restitution : fidélité, limites, poids, temps, coûts, recommandation — **jamais une conclusion positive présentée sans les limites qui l'accompagnent**.
+
+**Gate de sortie du cycle** (seul critère de succès reconnu) : *« la géométrie est nettement plus stable que le prototype GPT sur la perspective ET l'axonométrie, sans perdre une qualité photoréaliste suffisante. »* Un résultat qui n'améliore qu'un seul des deux types de sortie ne satisfait pas ce critère.
+
+## 17. Phase 1 — périmètre confirmé
+
+**Phase 1 = rendus fiables.** Hors Phase 1 (backlog, non planifié) : calculateur de surfaces, faisabilité réglementaire/PLU, notice paysagère. La **reconstruction 3D automatique depuis des photos** (déduire une géométrie 3D sans maquette fournie) est explicitement classée **BACKLOG / R&D** — elle ne contredit pas le non-objectif déjà posé au §19 V2.1 (« reconstruction 3D automatique complète du site »), elle le confirme et le documente comme intentionnellement écarté de Phase 1, pas oublié.
+
+## 18. Besoins produit confirmés (RDV Évariste) — état réel
+
+| Besoin | État réel à ce jour |
+|---|---|
+| Fiche projet persistante | Fait — `ProjectState` en base, révisions immuables |
+| Sources persistantes | Fait |
+| Rendus, variantes, historique | Fait — `GET .../generations`, une variante par appel (D-10 toujours ouverte sur une limite/pluralité) |
+| Corrections ciblées | Fait, catégories geometry-safe (ADR-021) |
+| Comparaison | Backend fait (`GET .../generations/comparer`), UI non branchée (gap connu, `RIF_BACKEND_CONTRACTS_V2.md` §17) |
+| Validation finale | Fait — verdict humain, garde-fou d'export |
+| Bibliothèque matériaux progressive | UI d'accueil existe (état vide honnête), pas de backend de bibliothèque progressive |
+| Remplacement des sources | **Non implémenté** — seule `PATCH .../sources/[fileId]` (confirmation de rôle) existe, aucune route de suppression/remplacement d'une source déjà déposée |
+| Quota de crédits souple | **Non implémenté**, aucun système de facturation/quota dans ce dépôt |
+
 ## Historique
 
+- 18.09.2026 (soir, post-RDV Évariste) — Ajout §14-18 : deux `OutputType` (perspective/axonométrie, critères LIB-002 existants répartis, aucun critère inventé), `TEMPORARY_PROJECT_ASSETS` (concept, non implémenté), liste de formats élargie (RVT/FBX/DWG/DXF/DGN/OBJ/STL/IFC), protocole du prochain cycle de test (PASS 1-8 + gate de sortie), périmètre Phase 1 confirmé (reconstruction 3D depuis photos = BACKLOG/R&D), état réel des besoins produit confirmés. Formulation de fidélité officiellement calibrée. Voir ADR-022 et D-21.
 - 18.09.2026 — Création. Complète la V2.1 (`RIF APP/PRD_RIF_V2.1_Neon_Vercel.md`, non modifiée) pour le workflow geometry-first. Voir ADR-021 (Framework) et D-20 (`Implementations/RIF-App/DECISIONS.md`) pour les décisions associées.

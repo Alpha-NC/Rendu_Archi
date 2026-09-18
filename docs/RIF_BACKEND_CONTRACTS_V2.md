@@ -1,6 +1,6 @@
 # RIF-App — Contrats backend V2 (geometry-first)
 
-**Statut :** Draft — 18 septembre 2026. Décrit le backend réellement en place sur `feat/rif-backend-completion`, y compris le workflow geometry-first (ADR-021, D-20). Objectif explicite : permettre à Codex de construire/adapter le frontend sans deviner un contrat.
+**Statut :** Draft — créé le 18 septembre 2026, mis à jour le 18 septembre 2026 (soir, post-RDV Évariste, §17-19). Décrit le backend réellement en place, y compris le workflow geometry-first (ADR-021/022, D-20/D-21). Objectif explicite : permettre à Codex de construire/adapter le frontend sans deviner un contrat. **Constat au 18.09 (soir) : le frontend desktop construit depuis (`ProjectCockpit.tsx`, `ProjectDashboard.tsx`) respecte déjà ce contrat sans sur-promettre — voir §17 pour l'état à jour des gaps.**
 
 **Format 3D final : À CONFIRMER.** RVT est le candidat principal, IFC une alternative possible. Aucun fournisseur d'extraction géométrique n'est choisi. Rien dans ce contrat ne doit être lu comme un engagement sur l'un ou l'autre.
 
@@ -16,7 +16,7 @@ Complète (ne remplace pas) `docs/PRD_RIF_V2_GEOMETRY_FIRST.md` (produit) et `ri
 - **Format d'erreur uniforme :** `{ success: false, error: { code: string, message: string }, requestId: string }`. `requestId` est un UUID généré à chaque réponse d'erreur — à afficher/logger côté front pour le support, jamais à parser.
 - **Codes HTTP :** `400` corps/paramètres invalides, `401` non authentifié, `403` accès refusé, `404` dossier/génération introuvable, `409` transition ou précondition refusée, `422` génération échouée proprement, `500` erreur serveur/config manquante, `502` échec d'un service externe (fal.ai, stockage, modèle), `504` timeout.
 - **Succès :** toujours `{ success: true, ... }`, jamais de `200` avec `success:false` à l'intérieur (sauf `repondreOperation` sur un résultat métier explicite — voir §11).
-- **Lecture des réponses côté front :** utiliser `lib/rif/reponse-client.ts::lireReponseApi` partout où c'est déjà câblé (`DepotSources.tsx`) — **pas encore branché** sur `BoutonNouveauDossier.tsx`, `BoutonConfirmerFiche.tsx`, `ConversationRif.tsx`, `VerdictQualite.tsx` (dette connue, voir §20). Un front qui appelle `reponse.json()` nu sur ces derniers peut encore afficher une erreur de parsing brute sur un 413/corps vide.
+- **Lecture des réponses côté front :** utiliser `lib/rif/reponse-client.ts::lireReponseApi` partout — confirmé branché sur les 7 composants qui appellent l'API (§17). Un front qui appellerait `reponse.json()` nu risquerait d'afficher une erreur de parsing brute sur un 413/corps vide — plus le cas aujourd'hui, à préserver sur tout nouveau composant.
 
 ---
 
@@ -38,6 +38,10 @@ BROUILLON → SOURCES_RECUES → SOURCES_ANALYSEES → CONTEXTE_A_CONFIRMER → 
 Le dossier expose `etat: EtatDossier` (GET dossier, page serveur) — c'est le seul état affiché aujourd'hui en tête de page (`app/dossiers/[dossierId]/page.tsx`).
 
 ---
+
+## 1bis. Création de dossier
+
+`POST /api/dossiers` — corps optionnel `{ name: string, type?: string, location?: string, description?: string }` (texte brut, pas de JSON = dossier sans `projectInfo`, pour compatibilité avec les dossiers créés avant l'ajout de ce champ). `name` doit être non vide si un corps est fourni. Réponse `201 { success:true, id, dossierRef }`. `GET /api/dossiers` liste les dossiers du propriétaire courant (`DossierResume[]`, §12).
 
 ## 2. Sources (4 types)
 
@@ -208,7 +212,7 @@ GenerationDetail {
 }
 ```
 
-**Gap connu (§20) :** aucun composant frontend n'appelle cette route aujourd'hui — `ConversationRif`/`VerdictQualite` ne connaissent une génération que via l'état React du tour qui vient de l'exécuter. Après un rechargement de page avec une génération en attente de verdict, l'image et le contrôle qualité disparaissent (seul le texte de conversation revient). Codex doit brancher cette route au montage de la page dossier pour restaurer l'état.
+`ProjectCockpit.tsx` appelle cette route au montage (§17) et resélectionne la génération canonique ou la plus récente réussie — l'état survit à un rechargement de page.
 
 ### 10.3 Détail / lifecycle d'une génération (`GET .../generations/[generationId]`)
 
@@ -218,11 +222,11 @@ GenerationDetail {
 
 - Backend : `POST .../generations/[generationId]/audit` (§11) appelle `definirGenerationCanonique` quand le verdict humain est `validation` ou `acceptable_avec_reserve` — au plus une canonique par dossier, synchronisée à la fois sur `generations.is_canonical` et `ProjectState.canonical_result_id`.
 - Exposition : `GenerationDetail.isCanonical`, `DossierResume.generationCanoniqueId` (§13).
-- **Gap connu :** aucun badge/filtre frontend ne l'affiche aujourd'hui sur la page dossier (seul `app/dossiers/page.tsx`, la liste, l'affiche désormais — voir §13).
+- Affiché comme « Référence » dans l'historique des générations et le sélecteur de rendu (`ProjectCockpit.tsx`) et dans la carte projet du dashboard (`ProjectDashboard.tsx`, §13).
 
 ### 10.5 Comparaison
 
-`GET /api/dossiers/[dossierId]/generations/comparer?a=ID&b=ID` → `{ success:true, generationA: {...GenerationDetail, imageUrl}, generationB: {...} }`. Les deux ids doivent appartenir au dossier (sinon 404). **Aucune UI ne consomme cette route aujourd'hui** (gap connu, §20) — le contrat est prêt, l'écran de comparaison reste à construire.
+`GET /api/dossiers/[dossierId]/generations/comparer?a=ID&b=ID` → `{ success:true, generationA: {...GenerationDetail, imageUrl}, generationB: {...} }`. Les deux ids doivent appartenir au dossier (sinon 404). L'écran de comparaison du frontend desktop compose aujourd'hui sa vue à partir des générations déjà chargées par `.../generations` plutôt que d'appeler cette route séparément — le contrat reste valide et disponible pour un usage direct (ex. lien profond vers une comparaison précise) si un futur écran en a besoin.
 
 ---
 
@@ -232,7 +236,7 @@ Deux routes distinctes, à ne jamais confondre :
 
 ### 11.1 Audit multimodal proposé (`POST .../generations/[generationId]/controle-qualite`)
 
-Déclenche un vrai appel Claude Sonnet 5 (`lib/rif/controle-multimodal.ts`) sur le rendu + les sources, calcule un rapport LIB-002 et un `verdictProposed` — **jamais autoritaire**. Réponse : `{ success:true, auditId, report: LigneRapport[], verdictProposed, motif }`. Nécessite `generation.status === 'succeeded'`, sinon `409`. **Non vérifié en conditions réelles** (`NOT_VERIFIED_LIVE`, dépend d'`ANTHROPIC_API_KEY`) et **aucune UI ne l'appelle** (gap connu, §20).
+Déclenche un vrai appel Claude Sonnet 5 (`lib/rif/controle-multimodal.ts`) sur le rendu + les sources, calcule un rapport LIB-002 et un `verdictProposed` — **jamais autoritaire**. Réponse : `{ success:true, auditId, report: LigneRapport[], verdictProposed, motif }`. Nécessite `generation.status === 'succeeded'`, sinon `409`. **Non vérifié en conditions réelles** (`NOT_VERIFIED_LIVE`, dépend d'`ANTHROPIC_API_KEY`) — le bouton « Lancer le contrôle qualité » de l'onglet Qualité l'appelle désormais, et affiche honnêtement l'indisponibilité si la configuration serveur manque.
 
 Priorité géométrique (ADR-021, LIB-002 §1) : `lib/rif/controle-qualite.ts::sourceControlePourCritere(critere, geometryPack)` retourne la source de contrôle à citer — le pack de contraintes géométriques si exploitable, sinon la source 2D désignée comme en V2.1. Cette fonction est un helper pur, pas encore appelée par `controle-multimodal.ts` (le classifieur construit encore ses propres lignes de rapport sans consulter le pack).
 
@@ -246,7 +250,7 @@ Seule route qui compte pour l'export administratif (`autoriserExportAdministrati
 
 ## 12. Dashboard (liste des dossiers)
 
-`app/dossiers/page.tsx` (page serveur, pas une route API dédiée) appelle `depot.listerDossiers(ownerId)` → `DossierResume[]` :
+`app/dossiers/page.tsx` (page serveur, pas une route API dédiée) appelle `depot.listerDossiers(ownerId)` → `DossierResume[]`, rendu par `ProjectDashboard.tsx` (client) :
 
 ```ts
 DossierResume {
@@ -254,10 +258,11 @@ DossierResume {
   nombreGenerations: number,
   derniereGeneration: { id, status, startedAt } | null,
   generationCanoniqueId: string | null,
+  projectInfo?: { name: string, type?: string, location?: string, description?: string },
 }
 ```
 
-Affichés aujourd'hui : `dossierRef`, `etat`, `nombreGenerations`, présence d'une génération canonique. **Pas encore affichés :** `derniereGeneration` (statut/date de la dernière génération) — gap mineur, données déjà disponibles côté serveur.
+Affichés aujourd'hui (`ProjectDashboard.tsx`) : `projectInfo.name`/`type`/`location` (repli sur `dossierRef` si absent — dossiers créés avant l'ajout de `projectInfo`), `etat`, `nombreGenerations`, présence d'une génération canonique (« Référence »), date de dernière activité (`updatedAt`, pas `derniereGeneration` littéralement mais un signal équivalent). `derniereGeneration.status` n'est pas affiché littéralement — écart mineur, non bloquant.
 
 ---
 
@@ -312,18 +317,37 @@ Ce que le frontend peut/doit brancher sans appel supplémentaire, une fois le `P
 
 ---
 
-## 17. Gaps connus (backend loop précédent + geometry-first) — non silencieux
+## 17. Gaps connus — mis à jour le 18.09.2026 (soir, post-RDV Évariste)
 
-Ce contrat documente explicitement ce qui n'est PAS encore construit, pour que Codex ne suppose pas qu'un flux existe :
+**Résolu depuis la version précédente de ce document** par le chantier frontend desktop (`ProjectCockpit.tsx`, `ProjectDashboard.tsx` et les composants associés) — ne plus présumer ces gaps ouverts :
 
-1. **Aucune UI ne recharge `.../generations` après refresh** — état perdu au F5 pendant une revue de rendu (§10.2).
-2. **Aucun badge « génération canonique » sur la page dossier** (seule la liste des dossiers l'indique désormais, §12).
-3. **Aucune UI de comparaison** entre deux générations (route prête, §10.5).
-4. **Aucun déclenchement frontend de l'audit multimodal** (`.../controle-qualite`) — le flux actuel ne fait que le verdict humain direct (§11.1).
-5. **`lireReponseApi` non branché** sur `BoutonNouveauDossier.tsx`, `BoutonConfirmerFiche.tsx`, `ConversationRif.tsx`, `VerdictQualite.tsx` (§0).
-6. **Aucune route d'extraction géométrique** — normal tant qu'aucun fournisseur n'est choisi (§4), mais Codex ne doit pas construire d'écran qui suppose son existence.
-7. **`derniereGeneration` non affichée** dans la liste des dossiers (§12).
-8. **Une seule variante par génération** (D-10 non tranchée).
-9. **`sourceControlePourCritere` pas encore consommée par `controle-multimodal.ts`** — le pack de contraintes n'influence pas encore réellement le rapport multimodal, seulement le prompt de génération (§5, §11.1).
+- ~~Aucune UI ne recharge `.../generations` après refresh~~ → `ProjectCockpit.tsx` recharge l'historique au montage (`load()`) et resélectionne la génération canonique ou la plus récente réussie.
+- ~~Aucun badge « génération canonique »~~ → affiché comme « Référence » dans l'historique, le sélecteur de rendu et la carte projet du dashboard.
+- ~~Aucune UI de comparaison~~ → onglet « Comparaison » avec slider, à partir des générations déjà chargées (pas d'appel supplémentaire à `.../comparer`, qui reste néanmoins un contrat valide si un écran en a besoin séparément un jour).
+- ~~Aucun déclenchement frontend de l'audit multimodal~~ → bouton « Lancer le contrôle qualité » dans l'onglet Qualité, affiche honnêtement l'indisponibilité si la configuration serveur manque.
+- ~~`lireReponseApi` non branché partout~~ → confirmé branché sur les 7 composants qui appellent l'API (`BoutonNouveauDossier`, `BoutonConfirmerFiche`, `ConversationRif`, `DepotSources`, `NewProjectWizard`, `ProjectCockpit`, `VerdictQualite`).
+- ~~`derniereGeneration`/agrégats non affichés~~ → le dashboard affiche `nombreGenerations`, la présence d'une génération canonique et la date de dernière activité par carte projet.
 
-Aucun de ces points n'est bloquant pour un premier passage frontend geometry-first (dépôt de source 3D, affichage honnête des statuts) — ils concernent des écrans/flux non couverts par le périmètre « frontend minimal » de cette mission.
+**Gaps réellement encore ouverts (backend, pas résolubles par du frontend seul) :**
+
+1. **Aucune route d'extraction géométrique** — normal tant qu'aucun fournisseur n'est choisi (§4) ; le prochain cycle de test (§19) précède ce choix.
+2. **Une seule variante par génération** (D-10 non tranchée).
+3. **`sourceControlePourCritere` pas encore consommée par `controle-multimodal.ts`** — le pack de contraintes n'influence pas encore réellement le rapport multimodal, seulement le prompt de génération (§5, §11.1).
+4. **Aucune route de remplacement/suppression d'une source déjà déposée** — seule `PATCH .../sources/[fileId]` (confirmation de rôle) existe. Besoin confirmé par Évariste (`docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §18), non construit.
+5. **`TEMPORARY_PROJECT_ASSETS` (photos terrain en volume) non implémenté** — concept produit seulement (§18).
+6. **`OutputType` (perspective/axonométrie, §18) n'existe dans aucun schéma** — `GenerationDetail` ne porte aujourd'hui aucun champ distinguant les deux ; ne pas l'inventer côté frontend avant que le backend l'expose.
+7. **Aucun système de quota/crédits** — besoin confirmé par Évariste, aucune implémentation ni schéma.
+
+Ces 7 points sont soit hors du contrôle du frontend (fournisseur d'extraction, D-10, priorisation du rapport multimodal), soit des besoins produit tout juste confirmés et volontairement non implémentés dans ce lot (remplacement de source, assets temporaires, `OutputType`, quotas) — voir DECISIONS.md D-21 pour l'arbitrage explicite de ne pas les construire avant les fichiers réels d'Évariste.
+
+## 18. Deux types de sortie et stockage temporaire — concepts confirmés, non implémentés
+
+Voir `docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §14-15 pour le détail produit. Aucun schéma, route ou champ n'existe encore pour :
+- `OutputType` (`PHOTOREALISTIC_PERSPECTIVE` / `PHOTOREALISTIC_AXONOMETRY`) — sur `GenerationDetail` ou `ProjectState` ;
+- `TEMPORARY_PROJECT_ASSETS` — aucun rôle de source, route ou table.
+
+Ce contrat les documente pour que Codex sache qu'ils sont **actés côté produit mais pas encore contractuels** — ne pas les construire par anticipation sans un contrat backend réel qui les expose.
+
+## 19. Prochain cycle de test — rappel
+
+Le prochain cycle (comparaison de formats 3D réels, `docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §16) précède tout choix de fournisseur d'extraction. Ce contrat n'anticipe aucune route d'extraction tant que ce cycle n'a pas produit de recommandation.

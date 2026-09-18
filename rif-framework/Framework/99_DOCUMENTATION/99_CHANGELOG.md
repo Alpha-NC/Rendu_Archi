@@ -2,7 +2,7 @@
 
 ID : DOC-003  
 Type : DOC  
-Version : V1.7  
+Version : V1.8  
 Statut : Review  
 Niveau : L5  
 Dossier : Framework/99_DOCUMENTATION
@@ -10,6 +10,24 @@ Dossier : Framework/99_DOCUMENTATION
 ---
 
 # Journal des versions
+
+## V1.8 — Review — 18 septembre 2026 (soir, post-RDV Évariste)
+
+Calibrage post-RDV Évariste (ADR-022) : la direction geometry-first (ADR-021) est confirmée, plusieurs besoins produit précisés.
+
+### Modifications
+
+- introduction de l'axe `OutputType` (`PHOTOREALISTIC_PERSPECTIVE` / `PHOTOREALISTIC_AXONOMETRY`), indépendant du mode et du style — 04B_MODES_DE_PRODUCTION.md §1 ;
+- 05_CHECKLIST_CONTROLE.md §1 : les critères prioritaires de la grille LIB-002 diffèrent selon le type de sortie contrôlé, aucun critère nouveau ajouté ;
+- liste de formats 3D candidats élargie à ceux réellement disponibles chez Évariste (RVT, FBX, DWG, DXF, DGN, OBJ, STL, IFC) — aucun sélectionné ;
+- formulation de fidélité officiellement calibrée : « Maximiser la fidélité architecturale et réduire fortement les dérives géométriques » — aucune garantie de 100 % ou de fidélité parfaite ;
+- concept `TEMPORARY_PROJECT_ASSETS` introduit au niveau produit (`docs/PRD_RIF_V2_GEOMETRY_FIRST.md` §15) pour le volume de photos terrain — non implémenté ;
+- Phase 1 confirmée comme « rendus fiables » ; reconstruction 3D depuis photos classée BACKLOG/R&D (confirmation, pas un nouveau non-objectif) ;
+- protocole du prochain cycle de test documenté (comparaison de formats 3D réels, PASS 1-8, gate de sortie).
+
+### Décisions
+
+ADR-022.
 
 ## V1.7 — Review — 18 septembre 2026
 
