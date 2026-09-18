@@ -6,6 +6,7 @@ import DepotSources from './DepotSources'
 import ConversationRif from './ConversationRif'
 import BoutonConfirmerFiche from './BoutonConfirmerFiche'
 import FicheProjet from './FicheProjet'
+import Timeline from './Timeline'
 
 // Neon Auth lit la session à chaque requête : rendu dynamique obligatoire.
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,9 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
 
   // Lot 2 Source Lifecycle (D-23) — domaine séparé de project_state.sources.
   const assetsTemporaires = await depot.listerAssetsTemporaires(dossier.id)
+  // Lot 3 Project History (D-24) — timeline minimale, page unique (pas de
+  // pagination dans cette passe, mission §21 : pas de refonte cockpit).
+  const { events: evenementsRecents } = await depot.listerEvenements(dossier.id, { limite: 30 })
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">
@@ -46,6 +50,7 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
           {/* PRD §9.4 : la fiche doit être visible — sans elle, la
               confirmation demandée juste au-dessus se ferait à l'aveugle. */}
           <FicheProjet projectState={dossier.projectState} />
+          <Timeline evenements={evenementsRecents} />
         </div>
         <ConversationRif dossierId={dossier.id} />
       </div>

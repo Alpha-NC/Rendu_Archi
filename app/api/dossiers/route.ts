@@ -24,6 +24,10 @@ export async function POST() {
       frameworkVersion: FRAMEWORK_VERSION,
       implementationVersion: IMPLEMENTATION_VERSION,
     })
+    // Lot 3 Project History (D-24) : premier événement de la timeline —
+    // sans lui, l'audit trail d'un dossier ne commence qu'à son premier
+    // dépôt de source, jamais à sa création réelle.
+    await depot.journaliserEvenement(id, 'projet_cree', { dossierRef }, user.id)
     return NextResponse.json({ success: true, id, dossierRef }, { status: 201 })
   } catch (erreur) {
     return repondreErreur('creation_impossible', erreur instanceof Error ? erreur.message : 'Erreur inconnue.', 500)

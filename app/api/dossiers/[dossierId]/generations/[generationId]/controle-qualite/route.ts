@@ -108,8 +108,9 @@ export async function POST(
     await depot.journaliserEvenement(
       dossierId,
       'controle_qualite_multimodal_echec',
-      { generationId, message: erreur instanceof Error ? erreur.message : 'erreur inconnue' },
+      { message: erreur instanceof Error ? erreur.message : 'erreur inconnue' },
       user.id,
+      { generationId, renderTargetId: generation.renderTargetId ?? undefined },
     )
     return repondreErreur(
       'controle_qualite_echec',
@@ -136,8 +137,9 @@ export async function POST(
   await depot.journaliserEvenement(
     dossierId,
     'controle_qualite_multimodal',
-    { generationId, auditId, verdictProposed: verdict },
+    { auditId, verdictProposed: verdict },
     user.id,
+    { generationId, renderTargetId: generation.renderTargetId ?? undefined },
   )
 
   return NextResponse.json({

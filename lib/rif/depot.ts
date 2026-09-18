@@ -8,6 +8,7 @@ import type {
   ParametresRemplacementSource,
   TemporaryAssetDetail,
 } from './sources'
+import type { PageEvenements, ParametresListeEvenements, ReferencesEvenement } from './events'
 
 /**
  * Interface d'accès aux données du dossier — sépare la logique métier
@@ -268,13 +269,27 @@ export interface DepotDossiers {
     params: { verdictHuman: VerdictControle; reserves?: string; validatedBy: string },
   ): Promise<void>
 
-  /** Journal append-only (PRD §13.5, §18). */
+  /**
+   * Journal append-only (PRD §13.5, §18). `refs` (Lot 3, D-24) — références
+   * structurées optionnelles (jamais dupliquées dans `payload`), pour un
+   * filtrage réel côté lecture (`listerEvenements`). Absent = événement
+   * sans référence particulière, comportement inchangé depuis toujours.
+   */
   journaliserEvenement(
     dossierId: string,
     type: string,
     payload: Record<string, unknown>,
     actorId?: string,
+    refs?: ReferencesEvenement,
   ): Promise<void>
+
+  /**
+   * Historique projet paginé (Lot 3, D-24) — la table `events` reste
+   * append-only, ceci n'en est qu'une lecture filtrée/paginée. Tri du plus
+   * récent au plus ancien (mission §7 — cohérent avec `events_dossier_idx`
+   * déjà existant). `nextCursor: null` signifie qu'il n'y a plus de page.
+   */
+  listerEvenements(dossierId: string, options?: ParametresListeEvenements): Promise<PageEvenements>
 
   /** Historique de conversation, du plus ancien au plus récent (PRD §13.5). */
   obtenirHistoriqueConversation(dossierId: string): Promise<MessageConversation[]>

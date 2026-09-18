@@ -120,11 +120,17 @@ export async function POST(
   }
 
   await depot.transitionnerDossier(dossierId, versEtat)
-  await depot.journaliserEvenement(dossierId, 'audit_qualite_enregistre', { generationId, verdictHuman }, user.id)
+  await depot.journaliserEvenement(dossierId, 'audit_qualite_enregistre', { verdictHuman }, user.id, {
+    generationId,
+    renderTargetId: generation.renderTargetId ?? undefined,
+  })
 
   if (VERDICTS_CANONIQUES.includes(verdictHuman as VerdictControle)) {
     await depot.definirGenerationCanonique(dossierId, generationId, generation.resultFileId)
-    await depot.journaliserEvenement(dossierId, 'version_canonique_definie', { generationId }, user.id)
+    await depot.journaliserEvenement(dossierId, 'version_canonique_definie', {}, user.id, {
+      generationId,
+      renderTargetId: generation.renderTargetId ?? undefined,
+    })
   }
 
   return repondreOperation({ success: true })

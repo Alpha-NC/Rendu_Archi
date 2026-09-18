@@ -109,6 +109,9 @@ function depotMemoire(dossierInitial: DossierActuel) {
       return null
     },
     async supprimerAssetTemporaire() {},
+    async listerEvenements() {
+      return { events: [], nextCursor: null }
+    },
   }
 
   return { depot, evenements, messages, obtenirDossierCourant: () => dossier }

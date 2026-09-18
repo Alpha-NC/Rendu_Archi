@@ -37,7 +37,7 @@ export async function POST(
   if (refusCible) return refusCible
 
   await depot.mettreAJourProjectState(dossierId, { ...dossier.projectState, active_render_target_id: renderTargetId })
-  await depot.journaliserEvenement(dossierId, 'cible_rendu_activee', { renderTargetId }, user.id)
+  await depot.journaliserEvenement(dossierId, 'cible_rendu_activee', {}, user.id, { renderTargetId })
 
   return repondreOperation({ success: true })
 }

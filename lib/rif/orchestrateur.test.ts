@@ -3,10 +3,11 @@ import { creerProjectStateVide } from './project-state'
 import type { DepotDossiers, DossierActuel, GenerationDetail, ParametresNouvelleGeneration, PatchGeneration } from './depot'
 import { executerGenerationOuCorrection, executerReprise } from './orchestrateur'
 import type { RenderTarget } from './render-targets'
+import type { ReferencesEvenement } from './events'
 
 /** Dépôt en mémoire — aucune base réelle requise pour tester la logique métier. */
 function depotMemoire(dossierInitial: DossierActuel) {
-  const evenements: Array<{ type: string; payload: unknown; actorId?: string }> = []
+  const evenements: Array<{ type: string; payload: unknown; actorId?: string; refs?: ReferencesEvenement }> = []
   const generations = new Map<string, { statut?: string; patch?: PatchGeneration }>()
   const generationsDetail: GenerationDetail[] = []
   const renderTargets = new Map<string, RenderTarget>()
@@ -82,8 +83,8 @@ function depotMemoire(dossierInitial: DossierActuel) {
     async transitionnerDossier(_id, versEtat) {
       dossier = { ...dossier, etat: versEtat }
     },
-    async journaliserEvenement(_id, type, payload, actorId) {
-      evenements.push({ type, payload, actorId })
+    async journaliserEvenement(_id, type, payload, actorId, refs) {
+      evenements.push({ type, payload, actorId, refs })
     },
     async obtenirHistoriqueConversation() {
       return []
@@ -147,6 +148,9 @@ function depotMemoire(dossierInitial: DossierActuel) {
       return null
     },
     async supprimerAssetTemporaire() {},
+    async listerEvenements() {
+      return { events: [], nextCursor: null }
+    },
   }
 
   return { depot, evenements, generations, generationsDetail, renderTargets, obtenirEtatCourant: () => dossier.etat }
@@ -478,5 +482,56 @@ describe('executerReprise', () => {
     const resultat = await executerReprise(depot, { dossierId: 'd-1', actorId: 'user-1', motif: 'x' })
     expect(resultat.success).toBe(false)
     expect(resultat.error?.code).toBe('transition_refusee')
+  })
+})
+
+describe('journaliserEvenement — enrichissement Lot 3 Project History (D-24)', () => {
+  it('une génération réussie journalise le type, la cible et parentGenerationId=null (initiale)', async () => {
+    mockerFetchImageSucces()
+    const { depot, evenements } = depotMemoire(dossierPretAGenerer)
+    const cible = await depot.creerRenderTarget({ dossierId: 'd-1', name: 'Perspective entrée', outputType: 'PHOTOREALISTIC_PERSPECTIVE' })
+
+    await executerGenerationOuCorrection(depot, falSucces, {
+      dossierId: 'd-1',
+      type: 'initial',
+      promptText: 'p',
+      sourceFileIds: [],
+      actorId: 'user-1',
+      renderTargetId: cible.id,
+    })
+
+    const evenement = evenements.find((e) => e.type === 'generation_reussie')
+    expect(evenement?.refs).toMatchObject({ renderTargetId: cible.id })
+    expect(evenement?.refs?.generationId).toBeDefined()
+    expect(evenement?.payload).toMatchObject({ type: 'initial', parentGenerationId: null })
+  })
+
+  it('une correction réussie journalise parentGenerationId et hérite la cible dans les refs', async () => {
+    mockerFetchImageSucces()
+    const { depot: depotACorriger, evenements, generationsDetail } = depotMemoire({ ...dossierPretAGenerer, etat: 'A_CORRIGER' })
+    const cible = await depotACorriger.creerRenderTarget({ dossierId: 'd-1', name: 'Perspective jardin', outputType: 'PHOTOREALISTIC_PERSPECTIVE' })
+    generationsDetail.push({
+      id: 'gen-parent', dossierId: 'd-1', type: 'initial', status: 'succeeded', batchId: 'gen-parent',
+      variantIndex: 0, isCanonical: false, projectStateRevision: 1, promptText: 'p', sourceFileIds: [],
+      resultFileId: 'file-1', providerRequestId: null, costActual: null, startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(), renderTargetId: cible.id, parentGenerationId: null,
+    })
+
+    await executerGenerationOuCorrection(depotACorriger, falSucces, {
+      dossierId: 'd-1', type: 'correction', promptText: 'corrige', sourceFileIds: [], actorId: 'user-1',
+    })
+
+    const evenement = evenements.find((e) => e.type === 'generation_reussie')
+    expect(evenement?.refs).toMatchObject({ renderTargetId: cible.id })
+    expect(evenement?.payload).toMatchObject({ type: 'correction', parentGenerationId: 'gen-parent' })
+  })
+
+  it("n'émet qu'un seul événement de succès par génération — jamais de doublon", async () => {
+    mockerFetchImageSucces()
+    const { depot, evenements } = depotMemoire(dossierPretAGenerer)
+    await executerGenerationOuCorrection(depot, falSucces, {
+      dossierId: 'd-1', type: 'initial', promptText: 'p', sourceFileIds: [], actorId: 'user-1',
+    })
+    expect(evenements.filter((e) => e.type === 'generation_reussie')).toHaveLength(1)
   })
 })

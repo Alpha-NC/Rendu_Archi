@@ -241,7 +241,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
     dossierId,
     sourceActive ? 'source_remplacee' : 'source_deposee',
     {
-      fileId: resultat.id,
       ancienFileId: sourceActive?.id,
       roleDetecte: role_detected,
       roleIndice,
@@ -250,6 +249,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
       directivesExtraites: directivesExtraites.length,
     },
     user.id,
+    { sourceId: resultat.id },
   )
 
   return NextResponse.json(

@@ -67,8 +67,9 @@ export async function PATCH(
   await depot.journaliserEvenement(
     dossierId,
     'role_source_confirme',
-    { fileId, roleConfirme: role, roleDetecte: source.role_detected },
+    { roleConfirme: role, roleDetecte: source.role_detected },
     user.id,
+    { sourceId: fileId },
   )
 
   return NextResponse.json({ success: true }, { status: 200 })

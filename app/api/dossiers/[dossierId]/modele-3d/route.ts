@@ -98,7 +98,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
   // repart toujours à UPLOADED).
   const source3D = creerSourceModele3D(fileId, format)
   await depot.mettreAJourProjectState(dossierId, { ...dossier.projectState, modele3D: source3D })
-  await depot.journaliserEvenement(dossierId, evenement, { fileId, format, ancienFileId: actif?.id }, user.id)
+  await depot.journaliserEvenement(dossierId, evenement, { format, ancienFileId: actif?.id }, user.id, { sourceId: fileId })
 
   return NextResponse.json({ success: true, fileId, source: source3D, remplace: Boolean(actif) })
 }

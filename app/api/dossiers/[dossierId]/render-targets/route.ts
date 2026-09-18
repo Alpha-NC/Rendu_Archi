@@ -62,7 +62,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ dos
   }
 
   const renderTarget = await depot.creerRenderTarget({ dossierId, name: name.trim(), outputType })
-  await depot.journaliserEvenement(dossierId, 'cible_rendu_creee', { renderTargetId: renderTarget.id, name: renderTarget.name, outputType }, user.id)
+  await depot.journaliserEvenement(
+    dossierId,
+    'cible_rendu_creee',
+    { name: renderTarget.name, outputType },
+    user.id,
+    { renderTargetId: renderTarget.id },
+  )
 
   return NextResponse.json({ success: true, renderTarget }, { status: 201 })
 }

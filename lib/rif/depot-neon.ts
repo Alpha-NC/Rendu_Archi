@@ -25,6 +25,14 @@ import type {
   TemporaryAssetDetail,
 } from './sources'
 import type { RoleSource } from './project-state'
+import {
+  LIMITE_EVENEMENTS_DEFAUT,
+  LIMITE_EVENEMENTS_MAX,
+  paginerResultats,
+  type EvenementProjet,
+  type ParametresListeEvenements,
+  type ReferencesEvenement,
+} from './events'
 
 /**
  * Sentinelle utilisée pour normaliser `render_target_id is null` dans les
@@ -84,6 +92,20 @@ function mapTemporaryAsset(d: Record<string, unknown>): TemporaryAssetDetail {
     sizeBytes: d.size_bytes != null ? Number(d.size_bytes) : null,
     createdAt: (d.created_at as Date).toISOString(),
     expiresAt: d.expires_at ? (d.expires_at as Date).toISOString() : null,
+  }
+}
+
+function mapEvenement(d: Record<string, unknown>): EvenementProjet {
+  return {
+    id: d.id as string,
+    dossierId: d.dossier_id as string,
+    eventType: d.event_type as string,
+    payload: (d.payload as Record<string, unknown>) ?? {},
+    actorId: (d.actor_id as string | null) ?? null,
+    renderTargetId: (d.render_target_id as string | null) ?? null,
+    generationId: (d.generation_id as string | null) ?? null,
+    sourceId: (d.source_id as string | null) ?? null,
+    createdAt: (d.created_at as Date).toISOString(),
   }
 }
 
@@ -420,11 +442,11 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
       `
     },
 
-    async journaliserEvenement(dossierId, type, payload, actorId) {
+    async journaliserEvenement(dossierId, type, payload, actorId, refs?: ReferencesEvenement) {
       try {
         await sql`
-          insert into events (dossier_id, event_type, payload, actor_id)
-          values (${dossierId}, ${type}, ${JSON.stringify(payload)}::jsonb, ${actorId ?? null})
+          insert into events (dossier_id, event_type, payload, actor_id, render_target_id, generation_id, source_id)
+          values (${dossierId}, ${type}, ${JSON.stringify(payload)}::jsonb, ${actorId ?? null}, ${refs?.renderTargetId ?? null}, ${refs?.generationId ?? null}, ${refs?.sourceId ?? null})
         `
       } catch (erreur) {
         // Un échec de journalisation ne doit pas faire échouer l'opération
@@ -584,6 +606,39 @@ export function creerDepotNeon(sql: Sql): DepotDossiers {
 
     async supprimerAssetTemporaire(assetId) {
       await sql`delete from temporary_assets where id = ${assetId}`
+    },
+
+    async listerEvenements(dossierId, options: ParametresListeEvenements = {}) {
+      const limite = Math.min(options.limite ?? LIMITE_EVENEMENTS_DEFAUT, LIMITE_EVENEMENTS_MAX)
+
+      // Curseur = id du dernier événement déjà vu ; on résout son
+      // (created_at, id) pour comparer par tuple — stable même si plusieurs
+      // événements partagent la même seconde (mission Lot 3 §8 : cursor
+      // basé sur created_at + id, jamais un offset).
+      let curseurCreatedAt: Date | null = null
+      if (options.curseur) {
+        const lignesCurseur = await sql`select created_at from events where id = ${options.curseur}`
+        curseurCreatedAt = (lignesCurseur[0]?.created_at as Date | undefined) ?? null
+      }
+
+      // limite + 1 pour savoir s'il reste une page suivante, sans requête séparée.
+      const lignes = await sql`
+        select id, dossier_id, event_type, payload, actor_id, render_target_id, generation_id, source_id, created_at
+        from events
+        where dossier_id = ${dossierId}
+          and (${options.eventType ?? null}::text is null or event_type = ${options.eventType ?? null})
+          and (${options.renderTargetId ?? null}::uuid is null or render_target_id = ${options.renderTargetId ?? null})
+          and (${options.generationId ?? null}::uuid is null or generation_id = ${options.generationId ?? null})
+          and (
+            ${curseurCreatedAt}::timestamptz is null
+            or (created_at, id) < (${curseurCreatedAt}::timestamptz, ${options.curseur ?? null}::uuid)
+          )
+        order by created_at desc, id desc
+        limit ${limite + 1}
+      `
+
+      const { page, nextCursor } = paginerResultats(lignes.map(mapEvenement), limite, (e) => e.id)
+      return { events: page, nextCursor }
     },
   }
 }

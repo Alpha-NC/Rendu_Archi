@@ -147,8 +147,9 @@ export async function executerGenerationOuCorrection(
     await depot.journaliserEvenement(
       dossier.id,
       'generation_echouee',
-      { generationId, code: resultatFal.code, message: resultatFal.message },
+      { type: parametres.type, code: resultatFal.code, message: resultatFal.message, parentGenerationId },
       parametres.actorId,
+      { generationId, renderTargetId: renderTargetId ?? undefined },
     )
     return { success: false, generationId, error: { code: resultatFal.code, message: resultatFal.message } }
   }
@@ -175,8 +176,9 @@ export async function executerGenerationOuCorrection(
     await depot.journaliserEvenement(
       dossier.id,
       'generation_echouee',
-      { generationId, code: 'stockage_echec', message },
+      { type: parametres.type, code: 'stockage_echec', message, parentGenerationId },
       parametres.actorId,
+      { generationId, renderTargetId: renderTargetId ?? undefined },
     )
     return { success: false, generationId, error: { code: 'stockage_echec', message } }
   }
@@ -193,8 +195,9 @@ export async function executerGenerationOuCorrection(
   await depot.journaliserEvenement(
     dossier.id,
     'generation_reussie',
-    { generationId, resultFileId: fichierResultat.id },
+    { type: parametres.type, resultFileId: fichierResultat.id, parentGenerationId },
     parametres.actorId,
+    { generationId, renderTargetId: renderTargetId ?? undefined },
   )
 
   // URL signée pour que l'appelant (interface de contrôle qualité) puisse

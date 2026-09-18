@@ -1,6 +1,6 @@
 # RIF-App — Contrats backend V2 (geometry-first)
 
-**Statut :** Draft — créé le 18 septembre 2026, mis à jour le 18 septembre 2026 (soir, post-RDV Évariste, §17-19), puis (Lot 1 RenderTarget, §9bis, §10, §11, §16-18), puis (Lot 2 Source Lifecycle, §2.3-2.5, §15, §17). Décrit le backend réellement en place : workflow geometry-first (ADR-021/022, D-20/D-21/D-22), modèle `Project → RenderTarget → Generations` (D-22), et cycle de vie des sources — versioning, remplacement, assets temporaires (D-23). Objectif explicite : permettre à Codex de construire/adapter le frontend sans deviner un contrat. **Constat Lot 2 : les 4 sources principales sont désormais versionnées et remplaçables sans perte silencieuse ; les photos terrain temporaires ont un domaine complet (upload, liste, suppression réelle) ; le bug de jeton Blob (« Failed to retrieve the client token ») est diagnostiqué et corrigé côté code — la configuration réelle de `BLOB_READ_WRITE_TOKEN` en local reste une action utilisateur.**
+**Statut :** Draft — créé le 18 septembre 2026, mis à jour successivement (post-RDV Évariste, §17-19 ; Lot 1 RenderTarget, §9bis/§10/§11/§16-18 ; Lot 2 Source Lifecycle, §2.3-2.5/§15/§17 ; Lot 3 Project History, §13bis/§16/§17). Décrit le backend réellement en place : workflow geometry-first (ADR-021/022, D-20/D-21/D-22), modèle `Project → RenderTarget → Generations` (D-22), cycle de vie des sources (D-23), et timeline/audit trail (D-24). Objectif explicite : permettre à Codex de construire/adapter le frontend sans deviner un contrat. **Constat Lot 3 : `GET .../events` expose un audit trail réel, paginé et humanisé, sans dupliquer la donnée métier ni inventer d'historique rétroactif — aucune UI cockpit ne l'exploite encore, seul un composant minimal (`Timeline.tsx`) l'affiche.**
 
 **Format 3D final : À CONFIRMER.** RVT est le candidat principal, IFC une alternative possible. Aucun fournisseur d'extraction géométrique n'est choisi. Rien dans ce contrat ne doit être lu comme un engagement sur l'un ou l'autre.
 
@@ -396,6 +396,75 @@ Affichés aujourd'hui (`ProjectDashboard.tsx`) : `projectInfo.name`/`type`/`loca
 
 ---
 
+## 13bis. Timeline / événements projet (D-24, Lot 3 — implémenté)
+
+`GET /api/dossiers/[dossierId]/events` — lecture paginée de la table `events` (PRD §13.5/§18), append-only, jamais réécrite. Cette route ne fait qu'y **lire** ; les écritures se font toujours via `depot.journaliserEvenement`, appelé par chaque opération métier (§13bis.4).
+
+### 13bis.1 Requête
+
+Query params, tous optionnels :
+
+| Param | Effet |
+|---|---|
+| `type` | Filtre sur `event_type` exact |
+| `renderTargetId` | Filtre sur les événements référençant cette cible |
+| `generationId` | Filtre sur les événements référençant cette génération |
+| `cursor` | Id du dernier événement déjà vu (pagination, voir §13bis.2) |
+| `limit` | 1-50, défaut 30 (`LIMITE_EVENEMENTS_DEFAUT`/`LIMITE_EVENEMENTS_MAX`, `lib/rif/events.ts`) |
+
+### 13bis.2 Pagination — cursor-based, jamais offset
+
+Tri **du plus récent au plus ancien** (`created_at desc, id desc` — cohérent avec `.../generations` et la liste des dossiers). Réponse : `{ success:true, events: [...], nextCursor: string | null }`. `nextCursor: null` signifie qu'il n'y a plus de page ; sinon, rappeler la même route avec `?cursor=<nextCursor>` (et les mêmes filtres) pour la suite. Le curseur encode implicitement `(created_at, id)` de l'événement — stable même si plusieurs événements partagent la même seconde, jamais un offset numérique (qui se désynchroniserait si de nouveaux événements arrivent entre deux pages).
+
+### 13bis.3 Schéma d'un événement
+
+```ts
+EvenementProjet {
+  id, dossierId, eventType: string, payload: Record<string, unknown>,
+  actorId: string | null,
+  renderTargetId: string | null,   // Lot 3 — référence structurée, jamais dans payload
+  generationId: string | null,
+  sourceId: string | null,         // référence `files`, jamais `temporary_assets` (domaine séparé, §2.4)
+  createdAt: string,
+}
+```
+
+La réponse de `GET .../events` enrichit chaque événement, **à la lecture seulement** (jamais stocké) :
+- `label: string` — libellé humain (`lib/rif/events.ts::libelleEvenement`) ; l'API garde toujours `eventType` brut à côté, jamais remplacé.
+- `renderTarget: { id, name, outputType } | null`, `generation: { id, type, status } | null`, `source: { id, role, version } | null` — résolus par lot (pas de N+1), `null` si la référence existe mais que l'entité a disparu (jamais une erreur).
+
+### 13bis.4 Types d'événements réellement produits
+
+Aucun renommage d'un événement déjà en production (mission Lot 3 §5) — la liste ci-dessous est celle qui existe réellement, pas une nomenclature idéale reconstruite après coup.
+
+| `event_type` | Émis par | Références posées |
+|---|---|---|
+| `projet_cree` | `POST /api/dossiers` | — |
+| `source_deposee` / `source_remplacee` | `POST .../sources` | `sourceId` |
+| `modele_3d_depose` / `modele_3d_remplace` | `POST .../modele-3d` | `sourceId` |
+| `role_source_confirme` | `PATCH .../sources/[fileId]` | `sourceId` |
+| `temporary_asset_depose` / `temporary_asset_supprime` | `POST`/`DELETE .../temporary-assets` | — (référence `temporary_assets`, pas `files` — pas de colonne dédiée, domaine séparé, §2.4) |
+| `cible_rendu_creee` / `cible_rendu_activee` | `POST .../render-targets`, `.../activer` | `renderTargetId` |
+| `generation_reussie` / `generation_echouee` | `lib/rif/orchestrateur.ts` | `generationId`, `renderTargetId` (si la génération en a une) |
+| `controle_qualite_multimodal` / `controle_qualite_multimodal_echec` | `POST .../controle-qualite` | `generationId`, `renderTargetId` |
+| `audit_qualite_enregistre` | `POST .../audit` | `generationId`, `renderTargetId` |
+| `version_canonique_definie` | `POST .../audit` (si verdict validant) | `generationId`, `renderTargetId` |
+| `reprise_depuis_sources`, `operation_refusee`, `fiche_projet_mise_a_jour`, `fiche_projet_confirmee`, `parcours_avance`, `directive_confirmee` | orchestrateur conversationnel / routes dédiées | variable, souvent aucune (pas de génération/cible à référencer) |
+
+**Pas de `generation_creee`/`generation_corrigee` distincts** (décision documentée, DECISIONS.md D-24) : `generation_reussie`/`generation_echouee` portent déjà `type: 'initial' | 'correction' | 'restart_from_sources'` dans leur payload — ajouter deux `event_type` séparés aurait dupliqué la même information sous une autre forme. La distinction « Nouvelle génération créée » / « Correction générée » se fait à l'humanisation (`libelleEvenement`), pas dans le schéma.
+
+**Pas de suppression d'événement, jamais de UPDATE** (mission §18) — la seule écriture exposée reste `journaliserEvenement` (insert).
+
+### 13bis.5 Legacy
+
+Un dossier créé avant ce lot n'a pas d'événement `projet_cree`, et ses événements plus anciens n'ont ni `renderTargetId`, ni `generationId`, ni `sourceId` posés (colonnes ajoutées par la migration 0004, toutes `NULL` sur l'historique existant) — **jamais reconstruit rétroactivement**. Un dossier sans aucun événement affiche un état vide honnête (« Aucune activité enregistrée pour ce projet »), jamais une activité inventée.
+
+### 13bis.6 Frontend minimal
+
+`app/dossiers/[dossierId]/Timeline.tsx` (server component, comme `FicheProjet.tsx`) — une seule page (30 événements, pas de pagination dans cette passe), affiche date/heure, libellé humain, et les références brutes (id tronqué) si présentes. Pas d'appel à `GET .../events` depuis ce composant : il lit directement `depot.listerEvenements` côté serveur, comme le reste de la page dossier. La route HTTP reste disponible pour un futur usage client (scroll infini, filtres) — non construit dans cette passe.
+
+---
+
 ## 14. Ownership — récapitulatif
 
 Toutes les routes sous `/api/dossiers/[dossierId]/**` vérifient `verifierProprietaire`. Les routes avec un `generationId`/`directiveId`/`fileId`/`renderTargetId` supplémentaire vérifient en plus son appartenance au dossier (`verifierGenerationDuDossier`/`verifierRenderTargetDuDossier` ou équivalent) — y compris quand un `renderTargetId` est fourni en corps de requête (`.../generer`, résolu et revalidé dans `orchestrateur.ts`, jamais fait confiance tel quel). `POST /api/dossiers` (création) et `GET /api/dossiers` (liste) n'ont pas de `dossierId` à ce stade — seule l'authentification s'applique, filtrée par `ownerId`.
@@ -442,10 +511,11 @@ Ce que le frontend peut/doit brancher sans appel supplémentaire, une fois le `P
 - **Absence de provider configuré :** message statique tant qu'aucune route d'extraction n'existe (§4) — pas un état à interroger dynamiquement.
 - **Erreurs :** toujours `error.code`/`error.message`/`requestId` (§0, §15) — jamais parser un message brut.
 - **Cibles de rendu (Lot 1, D-22) :** `GET .../render-targets` pour lister ; une génération sans cible (`renderTargetId: null`) est un dossier legacy, jamais une erreur. Une action « Nouvelle cible » minimale (nom + `OutputType`) et un sélecteur de cible active suffisent pour le premier passage frontend (§9bis) — pas de refonte du cockpit existant.
+- **Timeline (Lot 3, D-24) :** `GET .../events` — toujours trié plus récent → plus ancien, toujours paginé (`nextCursor`). Afficher `label` (humain) en priorité, `eventType` seulement en mode debug/technique. Un dossier sans événement affiche un état vide honnête, jamais une activité reconstruite.
 
 ---
 
-## 17. Gaps connus — mis à jour le 18.09.2026 (Lot 2 Source Lifecycle)
+## 17. Gaps connus — mis à jour le 18.09.2026 (Lot 3 Project History)
 
 **Résolu depuis la version précédente de ce document** par le chantier frontend desktop (`ProjectCockpit.tsx`, `ProjectDashboard.tsx` et les composants associés) — ne plus présumer ces gaps ouverts :
 
@@ -459,6 +529,7 @@ Ce que le frontend peut/doit brancher sans appel supplémentaire, une fois le `P
 - ~~Aucune route de remplacement/suppression d'une source déjà déposée~~ (Lot 2, D-23) → remplacement versionné automatique pour les 4 rôles principaux (§2.3), historique consultable (`.../sources/[fileId]/versions`). Suppression toujours volontairement absente pour ces rôles (décision documentée, §2.3) — ce n'est pas un oubli.
 - ~~`TEMPORARY_PROJECT_ASSETS` non implémenté~~ (Lot 2, D-23) → domaine complet (§2.4) : upload, liste, suppression réelle. Rétention `expiresAt` reste informative, aucune purge automatique.
 - ~~Bug « Failed to retrieve the client token » non diagnostiqué~~ (Lot 2, D-23) → diagnostiqué et corrigé côté code (§2.5). Cause locale : `BLOB_READ_WRITE_TOKEN` absent/vide — configuration réelle toujours une action utilisateur.
+- ~~Pas de timeline/audit trail exploitable~~ (Lot 3, D-24) → `GET .../events` paginé, filtré, humanisé (§13bis). Aucun événement rétroactif inventé pour l'historique déjà journalisé.
 
 **Gaps réellement encore ouverts :**
 
@@ -466,11 +537,12 @@ Ce que le frontend peut/doit brancher sans appel supplémentaire, une fois le `P
 2. **Une seule variante par génération** (D-10 non tranchée).
 3. **`sourceControlePourCritere` pas encore consommée par `controle-multimodal.ts`** — le pack de contraintes n'influence pas encore réellement le rapport multimodal, seulement le prompt de génération (§5, §11.1).
 4. **Aucun système de quota/crédits** — besoin confirmé par Évariste, aucune implémentation ni schéma.
-5. **Aucune UI pour les cibles de rendu, ni pour le remplacement/versioning/photos temporaires** — le contrat existe (§9bis, §2.3-2.4) mais `ProjectCockpit.tsx`/`ProjectDashboard.tsx` (chantier `feat/rif-ux-ui-desktop`, non touché par les Lots 1-2) n'exploitent aucun des deux. `DepotSources.tsx` (frontend minimal, hors chantier UX) expose lui le remplacement et le multi-upload temporaire, mais reste une interface simple, non le cockpit.
-6. **`neon/migrations/0002_render_targets.sql` et `0003_source_lifecycle.sql` non appliquées en production** — toutes deux testées en lecture seule (`db:migrate:status`, détectées en attente), volontairement pas appliquées sans validation explicite.
+5. **Aucune UI pour les cibles de rendu, le remplacement/versioning/photos temporaires, ni pour la timeline paginée** — le contrat existe (§9bis, §2.3-2.4, §13bis) mais `ProjectCockpit.tsx`/`ProjectDashboard.tsx` (chantier `feat/rif-ux-ui-desktop`, non touché par les Lots 1-3) n'exploitent aucun des trois. `DepotSources.tsx`/`Timeline.tsx` (frontend minimal, hors chantier UX) les exposent de façon simple, non le cockpit.
+6. **`neon/migrations/0002_render_targets.sql`, `0003_source_lifecycle.sql` et `0004_project_history.sql` non appliquées en production** — toutes testées en lecture seule (`db:migrate:status`, détectées en attente), volontairement pas appliquées sans validation explicite.
 7. **Test Blob réel non exécuté** (Lot 2) — `BLOB_READ_WRITE_TOKEN` local absent/vide (la cause même du bug corrigé, §2.5), aucun test d'upload réel possible depuis cet environnement sans que l'utilisateur configure un jeton réel.
+8. **Timeline sans pagination côté UI** (Lot 3) — `Timeline.tsx` affiche une seule page de 30 événements ; le scroll infini/bouton « voir plus » reste à construire quand un vrai besoin apparaît (contrat déjà prêt, `nextCursor`).
 
-Ces points sont soit hors du contrôle du frontend (fournisseur d'extraction, D-10, priorisation du rapport multimodal, migrations, jeton Blob), soit des besoins produit confirmés et volontairement non construits (quotas, cockpit render-targets/sources) — voir DECISIONS.md D-21/D-22/D-23 pour les arbitrages explicites.
+Ces points sont soit hors du contrôle du frontend (fournisseur d'extraction, D-10, priorisation du rapport multimodal, migrations, jeton Blob), soit des besoins produit confirmés et volontairement non construits (quotas, cockpit render-targets/sources/timeline) — voir DECISIONS.md D-21/D-22/D-23/D-24 pour les arbitrages explicites.
 
 ## 19. Prochain cycle de test — rappel
 
