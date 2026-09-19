@@ -102,6 +102,79 @@ const LIBELLES_EVENEMENT: Record<string, string> = {
  * redondants avec ceux-ci (voir DECISIONS.md D-24 point 1 — décision
  * documentée, pas un oubli).
  */
+/**
+ * Un événement enrichi de références lisibles (nom de cible, type/statut de
+ * génération, rôle/version de source) plutôt que des UUID bruts — condition
+ * nécessaire pour qu'une timeline reste lisible (Lot 5, VISUAL ALIGNMENT §21 :
+ * « éviter les UUID dominants »). `null` si la référence existe mais que
+ * l'entité a depuis disparu — jamais une erreur, jamais une donnée inventée.
+ */
+export interface EvenementEnrichi extends EvenementProjet {
+  label: string
+  renderTarget: { id: string; name: string; outputType: string } | null
+  generation: { id: string; type: string; status: string } | null
+  source: { id: string; role: string; version: number } | null
+}
+
+/**
+ * Résolveur minimal (juste les trois lectures nécessaires) — typage
+ * structurel volontaire pour ne jamais importer `DepotDossiers` ici (celui-ci
+ * importe déjà ce module, un import inverse créerait un cycle).
+ */
+export interface ResolveurReferencesEvenement {
+  obtenirRenderTarget(id: string): Promise<{ id: string; name: string; outputType: string } | null>
+  obtenirGeneration(id: string): Promise<{ id: string; type: string; status: string } | null>
+  obtenirFichierSource(id: string): Promise<{ id: string; roleDetected: string; roleConfirmed: string | null; version: number } | null>
+}
+
+/**
+ * Enrichit une page d'événements à la lecture — jamais en dupliquant la
+ * donnée dans `events` elle-même (même principe que le Lot 3). Partagée par
+ * `GET .../events` (pagination) et par la page serveur du dossier (première
+ * page) : avant ce lot, seule la route l'appliquait, ce qui laissait la
+ * première page de la timeline afficher des UUID tronqués.
+ */
+export async function enrichirEvenements(
+  depot: ResolveurReferencesEvenement,
+  evenements: EvenementProjet[],
+): Promise<EvenementEnrichi[]> {
+  const renderTargetIds = [...new Set(evenements.map((e) => e.renderTargetId).filter((id): id is string => !!id))]
+  const generationIds = [...new Set(evenements.map((e) => e.generationId).filter((id): id is string => !!id))]
+  const sourceIds = [...new Set(evenements.map((e) => e.sourceId).filter((id): id is string => !!id))]
+
+  const [renderTargets, generations, sources] = await Promise.all([
+    Promise.all(renderTargetIds.map((id) => depot.obtenirRenderTarget(id))),
+    Promise.all(generationIds.map((id) => depot.obtenirGeneration(id))),
+    Promise.all(sourceIds.map((id) => depot.obtenirFichierSource(id))),
+  ])
+  const renderTargetParId = new Map(renderTargets.filter((r): r is NonNullable<typeof r> => !!r).map((r) => [r.id, r]))
+  const generationParId = new Map(generations.filter((g): g is NonNullable<typeof g> => !!g).map((g) => [g.id, g]))
+  const sourceParId = new Map(sources.filter((s): s is NonNullable<typeof s> => !!s).map((s) => [s.id, s]))
+
+  return evenements.map((evenement) => ({
+    ...evenement,
+    label: libelleEvenement(evenement),
+    renderTarget: evenement.renderTargetId
+      ? (() => {
+          const cible = renderTargetParId.get(evenement.renderTargetId!)
+          return cible ? { id: cible.id, name: cible.name, outputType: cible.outputType } : null
+        })()
+      : null,
+    generation: evenement.generationId
+      ? (() => {
+          const generation = generationParId.get(evenement.generationId!)
+          return generation ? { id: generation.id, type: generation.type, status: generation.status } : null
+        })()
+      : null,
+    source: evenement.sourceId
+      ? (() => {
+          const source = sourceParId.get(evenement.sourceId!)
+          return source ? { id: source.id, role: source.roleConfirmed ?? source.roleDetected, version: source.version } : null
+        })()
+      : null,
+  }))
+}
+
 export function libelleEvenement(evenement: Pick<EvenementProjet, 'eventType' | 'payload'>): string {
   if (evenement.eventType === 'generation_reussie' || evenement.eventType === 'generation_echouee') {
     const type = evenement.payload?.type

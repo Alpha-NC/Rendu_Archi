@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/lib/auth/server'
 import { sql } from '@/lib/neon/client'
 import { creerDepotNeon } from '@/lib/rif/depot-neon'
+import { enrichirEvenements } from '@/lib/rif/events'
 import AppShell from '@/app/ui/AppShell'
 import ProjectCockpit from './ProjectCockpit'
 
@@ -23,7 +24,11 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
   const assetsTemporaires = await depot.listerAssetsTemporaires(dossier.id)
   // Lot 3 Project History (D-24) — première page ; le curseur permet au
   // cockpit (client) de charger la suite à la demande (Lot 4 §20).
-  const { events: evenementsRecents, nextCursor: eventsNextCursor } = await depot.listerEvenements(dossier.id, { limite: 30 })
+  // Enrichie comme la route GET .../events (Lot 5 §21) : sans ça, la
+  // première page affichait des UUID bruts alors que les pages suivantes
+  // affichaient déjà des noms lisibles.
+  const { events: evenementsPage, nextCursor: eventsNextCursor } = await depot.listerEvenements(dossier.id, { limite: 30 })
+  const evenementsRecents = await enrichirEvenements(depot, evenementsPage)
 
   return (
     <AppShell email={session.user.email} flush>

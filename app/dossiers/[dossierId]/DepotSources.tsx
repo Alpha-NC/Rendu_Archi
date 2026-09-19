@@ -2,7 +2,7 @@
 
 import { upload } from '@vercel/blob/client'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { ACTIONS_DIRECTIVE, type DirectiveLocalisee, type RoleSource, type SourceDossier } from '@/lib/rif/project-state'
 import type { SourceModele3D } from '@/lib/rif/geometrie-3d'
 import type { FichierSourceDetail, TemporaryAssetDetail } from '@/lib/rif/sources'
@@ -10,6 +10,19 @@ import { lireReponseApi } from '@/lib/rif/reponse-client'
 import { TAILLE_SOURCE_MAX_OCTETS } from '@/lib/storage/contraintes-source'
 import { TAILLE_MODELE_3D_MAX_OCTETS } from '@/lib/storage/contraintes-modele-3d'
 import { TAILLE_TEMPORARY_ASSET_MAX_OCTETS } from '@/lib/storage/contraintes-temporary-assets'
+import { Icon, type IconName } from '@/app/ui/Icons'
+import { ErrorState, formatBytes } from '@/app/ui/Primitives'
+
+// Lot 5 (VISUAL ALIGNMENT §14) : reprend telles quelles les cartes source du
+// wizard (`.source-choice`, déjà alignées sur la maquette) au lieu de blocs
+// Tailwind ad hoc — une même carte (icône, autorité, dépôt/remplacement,
+// fichier actif) sert donc au wizard ET au cockpit.
+const SOURCE_META: Record<'model_3d' | 'revit_view' | 'site_photo' | 'axonometry', { label: string; authority: string; icon: IconName }> = {
+  model_3d: { label: 'Modèle 3D', authority: 'Autorité géométrique', icon: 'model' },
+  revit_view: { label: 'Vue projet', authority: 'Autorité de cadrage', icon: 'view' },
+  site_photo: { label: 'Photo réelle', authority: 'Autorité environnementale', icon: 'photo' },
+  axonometry: { label: 'Axonométrie', authority: 'Contrôle spatial', icon: 'axonometry' },
+}
 
 /**
  * Lot 2 Source Lifecycle (D-23) — humanise toute erreur issue directement
@@ -32,7 +45,7 @@ const CONCURRENCE_MULTI_UPLOAD = 3
 // Libellés alignés sur RIF V2 (geometry-first, DECISIONS.md ADR-021) — le
 // rôle technique (revit_view/site_photo) est inchangé, seul l'intitulé
 // affiché change pour refléter les 4 blocs du nouveau workflow.
-const SLOTS: Array<{ role: RoleSource; label: string; obligatoire: boolean }> = [
+const SLOTS: Array<{ role: 'revit_view' | 'site_photo' | 'axonometry'; label: string; obligatoire: boolean }> = [
   { role: 'revit_view', label: 'Vue projet', obligatoire: true },
   { role: 'site_photo', label: 'Photo réelle', obligatoire: false },
   { role: 'axonometry', label: 'Axonométrie', obligatoire: false },
@@ -290,204 +303,233 @@ export default function DepotSources({
   }
 
   return (
-    <aside className="flex flex-col gap-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-encre-douce">Sources</p>
-
+    <div className="flex flex-col gap-4">
       {/* RIF V2, geometry-first (DECISIONS.md ADR-021) : la source géométrique
           3D fait autorité sur l'architecture — format non figé, pas de fausse
           progression d'extraction tant qu'aucun fournisseur n'est configuré. */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm text-encre">Modèle 3D</label>
-        {modele3D ? (
-          <div className="rounded border border-encre-douce/30 px-3 py-2 text-xs text-encre-douce">
-            <p>Déposé — format déclaré : {modele3D.format || 'non précisé'}</p>
-            <p className="mt-1">
-              {modele3D.extractionStatus === 'UPLOADED'
+      <div className="source-choice-grid">
+        <SourceCard
+          meta={SOURCE_META.model_3d}
+          present={Boolean(modele3D)}
+          originalName={modele3D?.originalName}
+          sizeBytes={modele3D?.sizeBytes}
+          extra={
+            modele3D
+              ? modele3D.extractionStatus === 'UPLOADED'
                 ? 'Extraction non disponible (aucun fournisseur configuré).'
-                : `Statut : ${modele3D.extractionStatus}`}
-            </p>
-            {/* Lot 2 Source Lifecycle (D-23) : remplacement versionné, jamais un doublon silencieux — l'ancienne version reste dans l'historique. */}
-            <label className="mt-2 block">
-              <span className="text-encre-douce">Remplacer :</span>{' '}
-              <input
-                type="file"
-                disabled={enCoursModele3D}
-                onChange={(e) => {
-                  const fichier = e.target.files?.[0]
-                  if (fichier) deposerModele3D(fichier)
-                }}
-                className="text-xs"
-              />
-            </label>
-            <HistoriqueVersions fileId={modele3D.fileId} versions={versions} basculer={basculerHistorique} />
-          </div>
-        ) : (
-          <>
-            <input
-              type="file"
-              disabled={enCoursModele3D}
-              onChange={(e) => {
-                const fichier = e.target.files?.[0]
-                if (fichier) deposerModele3D(fichier)
-              }}
-              className="text-xs"
-            />
-            <p className="text-xs text-encre-douce">Format ouvert — RVT candidat principal, IFC possible.</p>
-          </>
-        )}
+                : `Statut : ${modele3D.extractionStatus}`
+              : 'Format ouvert — RVT candidat principal, IFC possible.'
+          }
+          busy={enCoursModele3D}
+          onFichier={deposerModele3D}
+        >
+          {modele3D && <HistoriqueVersions fileId={modele3D.fileId} versions={versions} basculer={basculerHistorique} />}
+        </SourceCard>
+        {SLOTS.map(({ role, label, obligatoire }) => {
+          const deposee = sources.find((s) => (s.role_confirmed ?? s.role_detected) === role)
+          const meta = SOURCE_META[role]
+          return (
+            <SourceCard
+              key={role}
+              meta={{ ...meta, label: obligatoire ? `${label} *` : label }}
+              present={Boolean(deposee)}
+              originalName={deposee?.originalName}
+              sizeBytes={deposee?.sizeBytes}
+              busy={enCours === role}
+              accept="image/*"
+              onFichier={(fichier) => deposer(role, fichier)}
+            >
+              {deposee && <HistoriqueVersions fileId={deposee.id} versions={versions} basculer={basculerHistorique} />}
+            </SourceCard>
+          )
+        })}
       </div>
 
-      {SLOTS.map(({ role, label, obligatoire }) => {
-        const deposee = sources.find((s) => (s.role_confirmed ?? s.role_detected) === role)
-        return (
-          <div key={role} className="flex flex-col gap-1">
-            <label className="text-sm text-encre">
-              {label} {obligatoire && <span className="text-red-600">*</span>}
-            </label>
-            {deposee ? (
-              <div className="rounded border border-encre-douce/30 px-3 py-2 text-xs text-encre-douce">
-                <p>Déposée</p>
-                {/* Lot 2 Source Lifecycle (D-23) : remplacement versionné (jamais un doublon silencieux) — l'ancienne version reste consultable via GET .../sources/[fileId]/versions. */}
-                <label className="mt-1 block">
-                  <span>Remplacer :</span>{' '}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={enCours === role}
-                    onChange={(e) => {
-                      const fichier = e.target.files?.[0]
-                      if (fichier) deposer(role, fichier)
-                    }}
-                    className="text-xs"
-                  />
-                </label>
-                <HistoriqueVersions fileId={deposee.id} versions={versions} basculer={basculerHistorique} />
-              </div>
-            ) : (
-              <input
-                type="file"
-                accept="image/*"
-                disabled={enCours === role}
-                onChange={(e) => {
-                  const fichier = e.target.files?.[0]
-                  if (fichier) deposer(role, fichier)
-                }}
-                className="text-xs"
-              />
-            )}
-          </div>
-        )
-      })}
       {aConfirmer.length > 0 && (
-        <div className="flex flex-col gap-2 border-t border-encre-douce/30 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Rôle à confirmer</p>
-          {aConfirmer.map((s) => (
-            <div key={s.id} className="flex items-center gap-2 text-xs">
-              <span className="text-encre-douce">détecté : {s.role_detected}</span>
-              <select
-                defaultValue={s.role_detected}
-                disabled={confirmationEnCours === s.id}
-                onChange={(e) => confirmerRole(s.id, e.target.value as RoleSource)}
-                className="rounded border border-encre-douce/30 px-1 py-0.5"
-              >
-                {ROLES_CONFIRMABLES.map(({ role, label }) => (
-                  <option key={role} value={role}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
+        <div className="panel-section">
+          <p className="eyebrow" style={{ marginBottom: 8 }}>Rôle à confirmer</p>
+          <div className="flex flex-col gap-2">
+            {aConfirmer.map((s) => (
+              <label key={s.id} className="field">
+                <span>Détecté : {s.role_detected}</span>
+                <select
+                  defaultValue={s.role_detected}
+                  disabled={confirmationEnCours === s.id}
+                  onChange={(e) => confirmerRole(s.id, e.target.value as RoleSource)}
+                >
+                  {ROLES_CONFIRMABLES.map(({ role, label }) => (
+                    <option key={role} value={role}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
         </div>
       )}
       {directivesAConfirmer.length > 0 && (
-        <div className="flex flex-col gap-2 border-t border-encre-douce/30 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Directive à confirmer</p>
-          {directivesAConfirmer.map((d) => {
-            const brouillon = brouillonDirective(d)
-            return (
-              <div key={d.id} className="flex flex-col gap-1 text-xs">
-                <span className="text-encre-douce">
-                  détecté : {d.action} — {d.target}
-                  {d.consigne ? ` (« ${d.consigne} »)` : ''}
-                </span>
-                <div className="flex items-center gap-1">
-                  <select
-                    value={brouillon.action}
-                    disabled={confirmationEnCours === d.id}
-                    onChange={(e) =>
-                      setBrouillonsDirectives((prev) => ({ ...prev, [d.id]: { ...brouillon, action: e.target.value } }))
-                    }
-                    className="rounded border border-encre-douce/30 px-1 py-0.5"
-                  >
-                    {ACTIONS_DIRECTIVE.map((action) => (
-                      <option key={action} value={action}>
-                        {action}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={brouillon.target}
-                    disabled={confirmationEnCours === d.id}
-                    onChange={(e) =>
-                      setBrouillonsDirectives((prev) => ({ ...prev, [d.id]: { ...brouillon, target: e.target.value } }))
-                    }
-                    className="min-w-0 flex-1 rounded border border-encre-douce/30 px-1 py-0.5"
-                  />
-                  <button
-                    type="button"
-                    disabled={confirmationEnCours === d.id}
-                    onClick={() => confirmerDirective(d.id, brouillon.action, brouillon.target)}
-                    className="rounded bg-encre px-2 py-0.5 text-white disabled:opacity-50"
-                  >
-                    Confirmer
-                  </button>
+        <div className="panel-section">
+          <p className="eyebrow" style={{ marginBottom: 8 }}>Directive à confirmer</p>
+          <div className="flex flex-col gap-3">
+            {directivesAConfirmer.map((d) => {
+              const brouillon = brouillonDirective(d)
+              return (
+                <div key={d.id} className="flex flex-col gap-2">
+                  <p className="page-lede" style={{ margin: 0, fontSize: 10 }}>
+                    Détecté : {d.action} — {d.target}
+                    {d.consigne ? ` (« ${d.consigne} »)` : ''}
+                  </p>
+                  <div className="field-grid" style={{ gridTemplateColumns: '1fr 1fr auto', alignItems: 'end', gap: 8 }}>
+                    <label className="field">
+                      <span>Action</span>
+                      <select
+                        value={brouillon.action}
+                        disabled={confirmationEnCours === d.id}
+                        onChange={(e) => setBrouillonsDirectives((prev) => ({ ...prev, [d.id]: { ...brouillon, action: e.target.value } }))}
+                      >
+                        {ACTIONS_DIRECTIVE.map((action) => (
+                          <option key={action} value={action}>
+                            {action}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Cible</span>
+                      <input
+                        type="text"
+                        value={brouillon.target}
+                        disabled={confirmationEnCours === d.id}
+                        onChange={(e) => setBrouillonsDirectives((prev) => ({ ...prev, [d.id]: { ...brouillon, target: e.target.value } }))}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={confirmationEnCours === d.id}
+                      onClick={() => confirmerDirective(d.id, brouillon.action, brouillon.target)}
+                      className="button button--primary button--small"
+                    >
+                      Confirmer
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       )}
-      {/* Lot 2 Source Lifecycle (D-23), PRD Geometry-First §15 : photos
-          terrain en volume, jamais une autorité géométrique/environnement,
-          jamais une entrée project_state.sources — domaine séparé. */}
-      <div className="flex flex-col gap-2 border-t border-encre-douce/30 pt-3">
-        <label className="text-sm text-encre">Photos terrain (temporaire)</label>
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          disabled={enCoursAssets}
-          onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) deposerAssetsTemporaires(e.target.files)
-            e.target.value = ''
-          }}
-          className="text-xs"
-        />
-        <p className="text-xs text-encre-douce">
-          Aide à la compréhension du projet — pas une source faisant autorité. {enCoursAssets && 'Envoi en cours…'}
+
+      {/* Lot 2 Source Lifecycle (D-23), PRD Geometry-First §15 : les photos
+          terrain restent visuellement secondaires (Lot 5 §15) — jamais une
+          autorité géométrique/environnement, jamais une entrée
+          project_state.sources, domaine séparé des quatre cartes ci-dessus. */}
+      <div className="panel-section">
+        <div className="panel-heading">
+          <h2>Photos terrain complémentaires</h2>
+          <label className="icon-button" style={{ position: 'relative', overflow: 'hidden' }} aria-label="Ajouter des photos terrain">
+            <Icon name="upload" />
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={enCoursAssets}
+              style={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) deposerAssetsTemporaires(e.target.files)
+                e.target.value = ''
+              }}
+            />
+          </label>
+        </div>
+        <p className="authority-note" style={{ margin: 0 }}>
+          Aident à comprendre le site mais ne remplacent pas les sources de référence.
+          {enCoursAssets && ' Envoi en cours…'}
         </p>
         {assetsTemporaires.length > 0 && (
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col gap-1" style={{ marginTop: 8 }}>
             {assetsTemporaires.map((asset) => (
-              <li key={asset.id} className="flex items-center justify-between rounded border border-encre-douce/30 px-2 py-1 text-xs">
-                <span className="truncate">{asset.originalName}</span>
+              <li key={asset.id} className="source-mini">
+                <span className="source-mini__icon"><Icon name="photo" /></span>
+                <span>
+                  <strong>{asset.originalName}</strong>
+                  <small>{formatBytes(asset.sizeBytes ?? undefined) ?? 'Taille inconnue'}</small>
+                </span>
                 <button
                   type="button"
                   disabled={suppressionEnCours === asset.id}
                   onClick={() => supprimerAssetTemporaire(asset.id)}
-                  className="ml-2 shrink-0 text-red-600 disabled:opacity-50"
+                  className="icon-button"
+                  aria-label={`Supprimer ${asset.originalName}`}
                 >
-                  Supprimer
+                  <Icon name="close" />
                 </button>
               </li>
             ))}
           </ul>
         )}
       </div>
-      {erreur && <p className="text-xs text-red-600">{erreur}</p>}
-    </aside>
+      {erreur && <ErrorState message={erreur} />}
+    </div>
+  )
+}
+
+function SourceCard({
+  meta,
+  present,
+  originalName,
+  sizeBytes,
+  extra,
+  busy,
+  accept,
+  onFichier,
+  children,
+}: {
+  meta: { label: string; authority: string; icon: IconName }
+  present: boolean
+  originalName?: string
+  sizeBytes?: number
+  extra?: string
+  busy: boolean
+  accept?: string
+  onFichier: (fichier: File) => void
+  children?: ReactNode
+}) {
+  return (
+    <article className={`source-choice${present ? '' : ' source-choice--empty'}`}>
+      <span className="source-choice__icon"><Icon name={meta.icon} /></span>
+      <div>
+        <h3>{meta.label}</h3>
+        <p>
+          <strong>{meta.authority}</strong>
+          {extra && (
+            <>
+              <br />
+              {extra}
+            </>
+          )}
+        </p>
+        <label>
+          <Icon name="upload" /> {busy ? 'Envoi…' : present ? 'Remplacer' : 'Choisir un fichier'}
+          <input
+            type="file"
+            accept={accept}
+            disabled={busy}
+            onChange={(e) => {
+              const fichier = e.target.files?.[0]
+              if (fichier) onFichier(fichier)
+            }}
+          />
+        </label>
+        {present && originalName && (
+          <span className="source-choice__file">
+            <Icon name="check" /> {originalName}
+            {sizeBytes !== undefined ? ` · ${formatBytes(sizeBytes) ?? ''}` : ''}
+          </span>
+        )}
+        {children}
+      </div>
+    </article>
   )
 }
 

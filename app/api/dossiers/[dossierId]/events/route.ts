@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { libelleEvenement } from '@/lib/rif/events'
+import { enrichirEvenements } from '@/lib/rif/events'
 import {
   authentifierRequete,
   obtenirDepot,
@@ -48,44 +48,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ doss
     limite,
   })
 
-  // Références distinctes présentes sur cette seule page — jamais toutes
-  // les cibles/générations/sources du dossier, pour rester une lecture
-  // légère (mission §11 : « sans duplication excessive »).
-  const renderTargetIds = [...new Set(events.map((e) => e.renderTargetId).filter((id): id is string => !!id))]
-  const generationIds = [...new Set(events.map((e) => e.generationId).filter((id): id is string => !!id))]
-  const sourceIds = [...new Set(events.map((e) => e.sourceId).filter((id): id is string => !!id))]
-
-  const [renderTargets, generations, sources] = await Promise.all([
-    Promise.all(renderTargetIds.map((id) => depot.obtenirRenderTarget(id))),
-    Promise.all(generationIds.map((id) => depot.obtenirGeneration(id))),
-    Promise.all(sourceIds.map((id) => depot.obtenirFichierSource(id))),
-  ])
-  const renderTargetParId = new Map(renderTargets.filter((r) => r).map((r) => [r!.id, r!]))
-  const generationParId = new Map(generations.filter((g) => g).map((g) => [g!.id, g!]))
-  const sourceParId = new Map(sources.filter((s) => s).map((s) => [s!.id, s!]))
-
-  const evenementsEnrichis = events.map((evenement) => ({
-    ...evenement,
-    label: libelleEvenement(evenement),
-    renderTarget: evenement.renderTargetId
-      ? (() => {
-          const cible = renderTargetParId.get(evenement.renderTargetId)
-          return cible ? { id: cible.id, name: cible.name, outputType: cible.outputType } : null
-        })()
-      : null,
-    generation: evenement.generationId
-      ? (() => {
-          const generation = generationParId.get(evenement.generationId)
-          return generation ? { id: generation.id, type: generation.type, status: generation.status } : null
-        })()
-      : null,
-    source: evenement.sourceId
-      ? (() => {
-          const source = sourceParId.get(evenement.sourceId)
-          return source ? { id: source.id, role: source.roleConfirmed ?? source.roleDetected, version: source.version } : null
-        })()
-      : null,
-  }))
+  // Enrichissement partagé avec la première page (page.tsx) — Lot 5 : une
+  // seule implémentation pour ne jamais laisser une page de la timeline
+  // afficher des UUID bruts pendant qu'une autre affiche des noms lisibles.
+  const evenementsEnrichis = await enrichirEvenements(depot, events)
 
   return NextResponse.json({ success: true, events: evenementsEnrichis, nextCursor })
 }

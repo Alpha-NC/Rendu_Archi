@@ -157,7 +157,9 @@ describe('ProjectCockpit — RenderTarget UX (Lot 4)', () => {
     expect(conteneur.textContent).toContain('Perspective photoréaliste')
     expect(conteneur.textContent).not.toContain('PHOTOREALISTIC_PERSPECTIVE')
 
-    const ongletGenerations = [...conteneur.querySelectorAll('button.cockpit-tab')].find((b) => b.textContent?.includes('Générations'))!
+    // La navigation en onglets horizontale a été retirée au Lot 5 (doublon
+    // avec la liste verticale du panneau latéral) — seule celle-ci subsiste.
+    const ongletGenerations = [...conteneur.querySelectorAll('nav.project-nav button')].find((b) => b.textContent?.includes('Générations'))!
     await act(async () => {
       ongletGenerations.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
