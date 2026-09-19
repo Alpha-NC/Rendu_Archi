@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ACTIONS_DIRECTIVE, type DirectiveLocalisee, type RoleSource, type SourceDossier } from '@/lib/rif/project-state'
 import type { SourceModele3D } from '@/lib/rif/geometrie-3d'
-import type { TemporaryAssetDetail } from '@/lib/rif/sources'
+import type { FichierSourceDetail, TemporaryAssetDetail } from '@/lib/rif/sources'
 import { lireReponseApi } from '@/lib/rif/reponse-client'
 import { TAILLE_SOURCE_MAX_OCTETS } from '@/lib/storage/contraintes-source'
 import { TAILLE_MODELE_3D_MAX_OCTETS } from '@/lib/storage/contraintes-modele-3d'
@@ -71,6 +71,9 @@ export default function DepotSources({
   const [suppressionEnCours, setSuppressionEnCours] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
   const [confirmationEnCours, setConfirmationEnCours] = useState<string | null>(null)
+  // Lot 4 §17 — historique de versions par fileId, chargé à la demande
+  // (GET .../sources/[fileId]/versions), jamais préchargé pour tous les rôles.
+  const [versions, setVersions] = useState<Record<string, FichierSourceDetail[] | 'chargement'>>({})
   const [brouillonsDirectives, setBrouillonsDirectives] = useState<Record<string, { action: string; target: string }>>({})
   const aConfirmer = sources.filter((s) => !s.role_confirmed)
   // ADR-015, PRD §9.2 : une directive au statut unknown n'est utilisable
@@ -249,6 +252,29 @@ export default function DepotSources({
     setEnCoursAssets(false)
   }
 
+  async function basculerHistorique(fileId: string) {
+    const dejaOuvert = versions[fileId] !== undefined
+    setVersions((prev) => {
+      if (!(fileId in prev)) return { ...prev, [fileId]: 'chargement' }
+      const copie = { ...prev }
+      delete copie[fileId]
+      return copie
+    })
+    if (dejaOuvert) return
+    try {
+      const reponse = await fetch(`/api/dossiers/${dossierId}/sources/${fileId}/versions`)
+      const corps = await lireReponseApi<{ success: true; versions: FichierSourceDetail[] }>(reponse)
+      setVersions((prev) => (fileId in prev ? { ...prev, [fileId]: corps.versions } : prev))
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Historique indisponible.')
+      setVersions((prev) => {
+        const copie = { ...prev }
+        delete copie[fileId]
+        return copie
+      })
+    }
+  }
+
   async function supprimerAssetTemporaire(assetId: string) {
     setSuppressionEnCours(assetId)
     setErreur(null)
@@ -293,6 +319,7 @@ export default function DepotSources({
                 className="text-xs"
               />
             </label>
+            <HistoriqueVersions fileId={modele3D.fileId} versions={versions} basculer={basculerHistorique} />
           </div>
         ) : (
           <>
@@ -334,6 +361,7 @@ export default function DepotSources({
                     className="text-xs"
                   />
                 </label>
+                <HistoriqueVersions fileId={deposee.id} versions={versions} basculer={basculerHistorique} />
               </div>
             ) : (
               <input
@@ -460,5 +488,39 @@ export default function DepotSources({
       </div>
       {erreur && <p className="text-xs text-red-600">{erreur}</p>}
     </aside>
+  )
+}
+
+/**
+ * Lot 4 §17 — historique sobre d'un rôle principal (GET .../sources/[fileId]/versions).
+ * `fileId` accepte n'importe quelle version (active ou remplacée) du rôle :
+ * la route résout elle-même le rôle effectif et renvoie tout l'historique.
+ */
+function HistoriqueVersions({
+  fileId,
+  versions,
+  basculer,
+}: {
+  fileId: string
+  versions: Record<string, FichierSourceDetail[] | 'chargement'>
+  basculer: (fileId: string) => void
+}) {
+  const etat = versions[fileId]
+  return (
+    <div className="mt-1">
+      <button type="button" onClick={() => basculer(fileId)} className="text-encre-douce underline">
+        {etat === undefined ? 'Voir l’historique' : 'Masquer l’historique'}
+      </button>
+      {etat === 'chargement' && <p className="mt-1 text-encre-douce">Chargement…</p>}
+      {Array.isArray(etat) && (
+        <ul className="mt-1 flex flex-col gap-0.5">
+          {etat.map((v) => (
+            <li key={v.id}>
+              Version {v.version} — {v.sourceStatus === 'active' ? 'actuelle' : 'remplacée'}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }

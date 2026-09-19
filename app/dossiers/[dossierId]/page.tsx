@@ -21,13 +21,18 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
 
   // Lot 2 Source Lifecycle (D-23) — domaine séparé de project_state.sources.
   const assetsTemporaires = await depot.listerAssetsTemporaires(dossier.id)
-  // Lot 3 Project History (D-24) — timeline minimale, page unique (pas de
-  // pagination dans cette passe, mission §21 : pas de refonte cockpit).
-  const { events: evenementsRecents } = await depot.listerEvenements(dossier.id, { limite: 30 })
+  // Lot 3 Project History (D-24) — première page ; le curseur permet au
+  // cockpit (client) de charger la suite à la demande (Lot 4 §20).
+  const { events: evenementsRecents, nextCursor: eventsNextCursor } = await depot.listerEvenements(dossier.id, { limite: 30 })
 
   return (
     <AppShell email={session.user.email} flush>
-      <ProjectCockpit dossier={dossier} assetsTemporaires={assetsTemporaires} evenementsRecents={evenementsRecents} />
+      <ProjectCockpit
+        dossier={dossier}
+        assetsTemporaires={assetsTemporaires}
+        evenementsRecents={evenementsRecents}
+        eventsNextCursor={eventsNextCursor}
+      />
     </AppShell>
   )
 }
