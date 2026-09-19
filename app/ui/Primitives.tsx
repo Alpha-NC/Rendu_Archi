@@ -12,8 +12,8 @@ export function EmptyState({ icon = 'image', title, description, action }: { ico
   return <div className="empty-state"><span className="empty-icon"><Icon name={icon} className="size-6"/></span><h3>{title}</h3><p>{description}</p>{action}</div>
 }
 
-export function ErrorState({ message }: { message: string }) {
-  return <div className="error-state" role="alert"><Icon name="warning"/><div><strong>Une erreur est survenue</strong><p>{message}</p></div></div>
+export function ErrorState({ message, title = 'Action impossible' }: { message: string; title?: string }) {
+  return <div className="error-state" role="alert"><Icon name="warning"/><div><strong>{title}</strong><p>{message}</p></div></div>
 }
 
 export function formatDate(value?: string | null) {

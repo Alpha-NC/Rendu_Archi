@@ -496,10 +496,13 @@ function SourceCard({
   children?: ReactNode
 }) {
   return (
-    <article className={`source-choice${present ? '' : ' source-choice--empty'}`}>
+    <article className={`source-choice${present ? ' source-choice--present' : ' source-choice--empty'}${busy ? ' is-busy' : ''}`} aria-busy={busy}>
       <span className="source-choice__icon"><Icon name={meta.icon} /></span>
-      <div>
-        <h3>{meta.label}</h3>
+      <div className="source-choice__body">
+        <div className="source-choice__heading">
+          <h3>{meta.label}</h3>
+          <span className={`source-choice__status ${present ? 'is-present' : ''}`}>{busy ? 'Envoi' : present ? 'Actif' : 'Manquant'}</span>
+        </div>
         <p>
           <strong>{meta.authority}</strong>
           {extra && (

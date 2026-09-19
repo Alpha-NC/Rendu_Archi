@@ -156,6 +156,9 @@ describe('ProjectCockpit — RenderTarget UX (Lot 4)', () => {
     // Libellé humain de l'OutputType affiché dans l'en-tête, jamais la constante brute.
     expect(conteneur.textContent).toContain('Perspective photoréaliste')
     expect(conteneur.textContent).not.toContain('PHOTOREALISTIC_PERSPECTIVE')
+    const cibleActive = conteneur.querySelector('.render-target-nav [aria-current="true"]')
+    expect(cibleActive?.textContent).toContain('Perspective entrée · Réf.')
+    expect(conteneur.querySelector('.generation-card[aria-pressed="true"]')?.textContent).toContain('Version 1 · Réf.')
 
     // La navigation en onglets horizontale a été retirée au Lot 5 (doublon
     // avec la liste verticale du panneau latéral) — seule celle-ci subsiste.
