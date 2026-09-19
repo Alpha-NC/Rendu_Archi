@@ -21,5 +21,5 @@ export default async function PageDossiers() {
   const depot = creerDepotNeon(sql)
   const dossiers = await depot.listerDossiers(session.user.id)
 
-  return <AppShell email={session.user.email}><ProjectDashboard dossiers={dossiers} /></AppShell>
+  return <AppShell email={session.user.email} name={session.user.name}><ProjectDashboard dossiers={dossiers} /></AppShell>
 }

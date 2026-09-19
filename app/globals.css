@@ -157,7 +157,7 @@ html{scroll-behavior:smooth}
  .app-content{padding:36px clamp(24px,3vw,42px)}
  .app-content--flush{padding:0}
  .cockpit-body{grid-template-columns:var(--project-panel-width) minmax(430px,1fr) var(--chat-width)}
- .cockpit-actions>.status-badge{max-width:210px}
+ .cockpit-actions>.status-badge{max-width:260px}
 }
 @media(max-width:1366px){
  :root{--sidebar-width:188px;--project-panel-width:222px;--chat-width:300px}
@@ -167,7 +167,7 @@ html{scroll-behavior:smooth}
  .cockpit-header{padding-inline:15px}
  .cockpit-title h1{font-size:18px}
  .cockpit-actions{gap:6px}
- .cockpit-actions>.status-badge{max-width:175px}
+ .cockpit-actions>.status-badge{max-width:240px}
  .cockpit-actions .button{padding-inline:12px}
  .project-panel{padding:14px 12px}
  .workspace{padding:10px}

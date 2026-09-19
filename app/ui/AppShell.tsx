@@ -13,9 +13,17 @@ const NAV: Array<{ href: string; label: string; icon: IconName }> = [
   { href: '/parametres', label: 'Paramètres', icon: 'settings' },
 ]
 
-export default function AppShell({ children, email, flush = false }: { children: React.ReactNode; email?: string | null; flush?: boolean }) {
+function accountInitials(name?: string | null, email?: string | null) {
+  const source = name?.trim() || email?.split('@')[0] || 'RIF'
+  const parts = source.split(/[^a-z0-9À-ÿ]+/i).filter(Boolean)
+  const initials = parts.length > 1 ? parts.slice(0, 2).map((part) => part[0]).join('') : source.slice(0, 2)
+  return initials.toUpperCase()
+}
+
+export default function AppShell({ children, email, name, flush = false }: { children: React.ReactNode; email?: string | null; name?: string | null; flush?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
+  const displayName = name?.trim() || 'Compte RIF'
 
   async function deconnexion() {
     await authClient.signOut()
@@ -38,7 +46,7 @@ export default function AppShell({ children, email, flush = false }: { children:
           })}
         </nav>
         <div className="sidebar-foot">
-          <div className="user-chip"><span className="user-avatar">EB</span><span className="min-w-0"><strong>Évariste Blasco</strong><small>{email ?? 'Compte RIF'}</small></span></div>
+          <div className="user-chip"><span className="user-avatar">{accountInitials(name, email)}</span><span className="min-w-0"><strong>{displayName}</strong><small>{email ?? 'Compte RIF'}</small></span></div>
           <button type="button" onClick={deconnexion} className="sidebar-logout"><Icon name="logout"/>Déconnexion</button>
         </div>
       </aside>

@@ -31,7 +31,7 @@ export default async function PageDossier({ params }: { params: Promise<{ dossie
   const evenementsRecents = await enrichirEvenements(depot, evenementsPage)
 
   return (
-    <AppShell email={session.user.email} flush>
+    <AppShell email={session.user.email} name={session.user.name} flush>
       <ProjectCockpit
         dossier={dossier}
         assetsTemporaires={assetsTemporaires}
